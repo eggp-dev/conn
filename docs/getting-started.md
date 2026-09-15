@@ -12,6 +12,17 @@ Use the files attached to a [published release](https://github.com/eggplantiny/c
 
 Early macOS previews use ad-hoc signing without notarization; Windows installers are not certificate-signed. These packages do not establish a verified publisher identity. Read the release's platform notes before installing. Checksums detect a corrupted or mismatched download; they do not replace publisher signing. Native macOS and Windows behavior is still being validated.
 
+Choose the asset for your OS and CPU architecture:
+
+| Platform | Desktop installation |
+|---|---|
+| Debian/Ubuntu x64 | Download the `.deb`, then run `sudo apt install ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.deb` in its directory. |
+| Linux x64 AppImage | Run `chmod +x ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage`, then launch that file. Your system needs the runtime libraries required by the AppImage. |
+| macOS | Choose Apple Silicon (`aarch64`) or Intel (`x86_64`), open the `.dmg`, and drag Conn into Applications. This preview is not notarized; read its platform notes if macOS blocks it. |
+| Windows x64 | Run the `-setup.exe` installer and launch Conn from the Start menu. The preview has no verified publisher certificate. |
+
+For another version, replace `v0.3.0` with the version you downloaded. Keep the checksum file from the same release. The desktop contains its matching CLI, while the separate CLI archive is useful for configuring an agent client on `PATH`.
+
 For a CLI archive, extract `conn` (`conn.exe` on Windows) to a directory on your user `PATH`. Reopen your terminal and verify:
 
 ```sh

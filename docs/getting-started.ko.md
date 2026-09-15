@@ -12,6 +12,17 @@
 
 초기 macOS 프리뷰는 임시 서명(ad-hoc)만 적용하고 공증하지 않으며, Windows 설치 파일에는 인증서 서명이 없습니다. 이 패키지로 검증된 배포자 신원을 확인할 수는 없습니다. 설치 전 해당 릴리스의 플랫폼 안내를 확인하세요. 체크섬은 다운로드의 손상이나 불일치를 확인하는 수단이며 배포자 서명을 대신하지 않습니다. macOS·Windows의 실제 동작은 추가 검증 중입니다.
 
+OS와 CPU 아키텍처에 맞는 파일을 선택하세요.
+
+| 플랫폼 | 데스크톱 설치 |
+|---|---|
+| Debian/Ubuntu x64 | `.deb`를 받은 폴더에서 `sudo apt install ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.deb`를 실행합니다. |
+| Linux x64 AppImage | `chmod +x ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage`로 실행 권한을 준 뒤 해당 파일을 실행합니다. 시스템에 AppImage가 요구하는 런타임 라이브러리가 있어야 합니다. |
+| macOS | Apple Silicon(`aarch64`) 또는 Intel(`x86_64`)용 `.dmg`를 열고 Conn을 Applications로 옮깁니다. 공증되지 않은 프리뷰이므로 차단되면 릴리스의 플랫폼 안내를 확인하세요. |
+| Windows x64 | `-setup.exe` 설치 파일을 실행한 뒤 시작 메뉴에서 Conn을 엽니다. 프리뷰에는 검증된 배포자 인증서가 없습니다. |
+
+다른 버전은 명령의 `v0.3.0`을 받은 버전으로 바꾸고, 체크섬도 같은 릴리스에서 받으세요. 데스크톱에는 같은 버전의 CLI가 포함됩니다. 에이전트 클라이언트의 `PATH`를 구성할 때는 별도 CLI 압축 파일도 사용할 수 있습니다.
+
 CLI 압축 파일을 사용한다면 `conn`(Windows는 `conn.exe`)을 사용자 `PATH`에 포함된 폴더에 풀어 넣으세요. 터미널을 다시 열고 확인합니다.
 
 ```sh

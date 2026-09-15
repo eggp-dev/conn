@@ -168,7 +168,7 @@ def package(target: str, out: Path, root: Path = ROOT) -> list[Path]:
     out.mkdir(parents=True, exist_ok=True)
     write_cli_archive(out / names[0], executable, license_path, cli_readme(version, target))
     for source, name in zip(bundles, names[1:]):
-        shutil.copyfile(source, out / name)
+        shutil.copy2(source, out / name)
     return [out / name for name in names]
 
 

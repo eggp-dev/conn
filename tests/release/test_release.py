@@ -1,6 +1,7 @@
 """Release contract tests; no network or platform toolchain required."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import tarfile
@@ -123,6 +124,17 @@ class ReleaseTests(unittest.TestCase):
         self.assertTrue(files[1].name.endswith("-setup.exe"))
         with zipfile.ZipFile(files[0]) as archive:
             self.assertEqual(archive.namelist(), ["conn.exe", "LICENSE", "README.txt"])
+
+    @unittest.skipUnless(os.name == "posix", "POSIX executable permissions unavailable")
+    def test_linux_appimage_retains_executable_permissions(self):
+        target = "x86_64-unknown-linux-gnu"
+        _, bundle = self.platform_build(target)
+        source = next(bundle.rglob("*.AppImage"))
+        source.chmod(0o755)
+        packaged = release.package(target, self.out, self.root)
+        appimage = next(path for path in packaged if path.suffix == ".AppImage")
+        self.assertEqual(appimage.stat().st_mode & 0o777, 0o755)
+        self.assertTrue(os.access(appimage, os.X_OK))
 
     def test_refuses_symlink_input(self):
         target = "x86_64-unknown-linux-gnu"
