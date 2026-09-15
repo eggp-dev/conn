@@ -19,7 +19,7 @@ Conn lets you and an AI agent work in **the same live shell**. Watch its command
 
 It runs as a **desktop terminal** or inside your existing terminal, and connects to agents through **MCP or a CLI**. Bring your own agent; Conn does not run a model.
 
-> **v0.3.0 preview.** Linux development flows have been exercised locally. macOS and Windows have implementation and CI build targets; native behavior and installers still need platform validation. Release downloads become available after a successful release build and maintainer publication. macOS builds use ad-hoc signing without notarization; Windows installers are not certificate-signed.
+> **v0.3.0 preview.** Native desktop debug builds have passed CI on Linux, macOS ARM and Windows; installation and interactive checks remain separate. The first binary release targets Ubuntu 24.04/26.04 x64, Windows x64 without certificate signing, and both Mac architectures with Developer ID signing/notarization after Apple enrollment. Current Mac builds are ad-hoc test artifacts. Downloads appear after maintainer publication. See [platform policy and checks](docs/platform-support.md).
 
 ## The moment Conn is for
 
@@ -102,12 +102,12 @@ The [release workflow](docs/releasing.md) targets these packages:
 
 | Platform | Desktop | CLI |
 |---|---|---|
-| Linux x86-64 | `.deb`, `.AppImage` | `.tar.gz` |
+| Ubuntu 24.04 / 26.04 x86-64 | `.deb`, `.AppImage` | `.tar.gz` |
 | macOS Apple Silicon | `.dmg` | `.tar.gz` |
 | macOS Intel | `.dmg` | `.tar.gz` |
 | Windows x86-64 | NSIS `.exe` installer | `.zip` |
 
-Use the artifacts actually attached to a release and read its known limitations. A successful build alone is not a native runtime test. [Verification notes](docs/backend-verification.md) track the earlier local evidence and remaining checks.
+Use the artifacts actually attached to a release and read its known limitations. A successful build alone is not a native runtime test. [Platform policy](docs/platform-support.md) defines the release baseline; [verification notes](docs/backend-verification.md) separate dated build evidence from remaining runtime checks.
 
 ## Boundaries worth understanding
 

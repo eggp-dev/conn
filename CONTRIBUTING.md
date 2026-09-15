@@ -99,6 +99,8 @@ npm run tauri build -- --debug --no-bundle
 
 For a UI change, verify the real flow in the native app or the shared browser harness. Capture a screenshot when layout or motion is relevant. Cover approval, denial, and cancellation when touching those controls. Add meaningful regression tests for changed behavior rather than tests that repeat the implementation.
 
+Use the [platform checklist](docs/platform-support.md#release-verification-checklist) for installer/runtime reports. Include the exact asset and checksum, OS version, CPU architecture, shell and Linux display session where applicable. Preview targets are Ubuntu 24.04/26.04 x64, Windows x64, and both Mac architectures; Windows signing credentials are not required to contribute or test.
+
 State **which platform you tested** and **what you observed**. Compilation, automated tests, installer creation, and native interaction are separate evidence. Do not call a platform supported based only on a cross-compile check.
 
 Before submitting:

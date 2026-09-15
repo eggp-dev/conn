@@ -23,6 +23,9 @@ use crate::config::Pacing;
 use crate::policy::PolicyStore;
 use crate::session::{EventSink, Session, SessionConfig, SharedSession};
 
+mod child_killer;
+use child_killer::ChildKiller;
+
 pub struct EngineConfig {
     /// Resolved execution profile. None preserves the embedders' default shell.
     pub profile: Option<crate::backend::Profile>,
@@ -66,7 +69,7 @@ impl Default for EngineConfig {
 }
 
 pub struct Engine {
-    killer: parking_lot::Mutex<Box<dyn portable_pty::ChildKiller + Send + Sync>>,
+    killer: parking_lot::Mutex<ChildKiller>,
     session: SharedSession,
     exit_rx: parking_lot::Mutex<Option<mpsc::Receiver<Option<u32>>>>,
     exited: Arc<AtomicBool>,
@@ -143,7 +146,7 @@ impl Engine {
         let mut pty_reader = pair.master.try_clone_reader()?;
         let pty_writer = pair.master.take_writer()?;
         let pid = child.process_id();
-        let killer = parking_lot::Mutex::new(child.clone_killer());
+        let killer = parking_lot::Mutex::new(ChildKiller::new(child.as_ref())?);
 
         audit.record(
             "system",

@@ -16,6 +16,10 @@ The versioned [main ruleset](../.github/main-ruleset.json) requires pull request
 
 Actions are pinned to commit SHAs. Dependabot proposes weekly grouped updates. Pull requests receive no release credentials. The release publisher alone has `contents: write`.
 
+## Distribution policy
+
+Follow [platform support](platform-support.md): Ubuntu 24.04 builds with 24.04/26.04 runtime checks; intentionally unsigned Windows previews; Developer ID signing and notarization for public Mac downloads after enrollment. Windows certificate acquisition does not block this preview. Current Mac ad-hoc builds are testing artifacts.
+
 ## Version a release
 
 1. Update the workspace version, the `conn-core` workspace dependency version, standalone desktop Cargo version, Tauri config, frontend package/lock, plugin manifests and marketplace version. Refresh both Cargo lockfiles.
@@ -41,7 +45,7 @@ A `v*` tag or manual dispatch with an existing tag starts `release.yml`. It veri
 
 | Target | Assets |
 |---|---|
-| Linux x64 | CLI `.tar.gz`, desktop `.deb`, desktop `.AppImage` |
+| Ubuntu 24.04 / 26.04 x64 (built on 24.04) | CLI `.tar.gz`, desktop `.deb`, desktop `.AppImage` |
 | macOS Apple Silicon | CLI `.tar.gz`, desktop `.dmg` |
 | macOS Intel | CLI `.tar.gz`, desktop `.dmg` |
 | Windows x64 | CLI `.zip`, desktop NSIS `.exe` |
@@ -58,7 +62,11 @@ On each advertised OS/architecture, install and launch the app, install/extract 
 
 ### Signing
 
-macOS builds use ad-hoc signing (`APPLE_SIGNING_IDENTITY=-`) and are **not notarized**. Windows installers are **not certificate-signed**. Users may see OS security prompts. Do not describe these artifacts as signed by a verified publisher. Before wider distribution, obtain the appropriate certificates, add secrets only to the protected release environment, and configure Tauri signing/notarization. Never commit certificates, passwords or keys.
+macOS builds currently use ad-hoc signing (`APPLE_SIGNING_IDENTITY=-`) and are **not notarized**. Keep these in testing/draft status until the [Apple signing handoff](macos-signing.md) is complete. That checklist covers enrollment, Developer ID certificates, protected CI credentials, the separate CLI, and verification before checksums/publication.
+
+Windows installers are intentionally **not certificate-signed** for the preview. Record possible SmartScreen/unknown-publisher prompts and any managed-device restrictions. A Windows signing certificate is a later improvement, not a release prerequisite. Do not describe an unsigned artifact as publisher-verified or ask users to disable system protection. Never commit certificates, passwords or keys.
+
+Use the [release verification checklist](platform-support.md#release-verification-checklist) for every advertised platform. Local Ubuntu 26.04 packages cannot substitute for the Ubuntu 24.04 CI assets in compatibility checks.
 
 See the official [Tauri GitHub pipeline guide](https://v2.tauri.app/distribute/pipelines/github/), [distribution overview](https://v2.tauri.app/distribute/) and [Windows installer guide](https://v2.tauri.app/distribute/windows-installer/). Signing and native installation must be verified on the target platform; a Linux check cannot substitute for them.
 

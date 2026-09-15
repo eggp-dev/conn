@@ -236,6 +236,10 @@ fn native_profile_launches_with_environment_and_cleans_up_on_termination() {
         std::thread::sleep(std::time::Duration::from_millis(30));
     }
     engine.terminate().unwrap();
+    // Windows can report access denied once termination has completed, before
+    // the engine's wait thread has published the exit. Closing twice is safe.
+    #[cfg(windows)]
+    engine.terminate().unwrap();
     assert!(
         seen,
         "Configured environment did not reach the native shell"
@@ -245,6 +249,7 @@ fn native_profile_launches_with_environment_and_cleans_up_on_termination() {
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     assert!(engine.has_exited());
+    engine.terminate().unwrap();
 }
 
 #[cfg(unix)]

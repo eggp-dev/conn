@@ -31,4 +31,4 @@ base64.workspace = true
 tempfile.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Security_Authorization", "Win32_Foundation"] }
+windows-sys = { version = "0.59", features = ["Win32_Security_Authorization", "Win32_Foundation", "Win32_System_Threading"] }
