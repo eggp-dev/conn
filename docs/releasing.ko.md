@@ -16,6 +16,10 @@ About 문구 제안: **A shared terminal for humans and AI agents. Review, hand 
 
 Actions는 커밋 SHA로 고정하고 Dependabot이 주간 업데이트를 제안합니다. PR에는 릴리스 자격 증명을 제공하지 않습니다. Draft Release를 만드는 작업만 `contents: write`를 가집니다.
 
+## 배포 방침
+
+[플랫폼 지원 안내](platform-support.ko.md)를 기준으로 합니다. Ubuntu 24.04에서 빌드해 24.04·26.04에서 검증하고, Windows 프리뷰는 무서명으로 배포하며, Mac 공개 다운로드는 가입 후 Developer ID 서명·공증을 적용합니다. Windows 인증서 확보는 이번 프리뷰의 필수 조건이 아닙니다. 현재 Mac ad-hoc 빌드는 테스트 산출물입니다.
+
 ## 버전 올리기
 
 1. 워크스페이스·conn-core 의존성·독립 Tauri Cargo·Tauri 설정·프런트엔드 package/lock·플러그인 manifest·marketplace 버전을 맞춥니다. 두 Cargo lockfile도 갱신합니다.
@@ -41,7 +45,7 @@ Actions는 커밋 SHA로 고정하고 Dependabot이 주간 업데이트를 제�
 
 | 대상 | 산출물 |
 |---|---|
-| Linux x64 | CLI `.tar.gz`, 데스크톱 `.deb`와 `.AppImage` |
+| Ubuntu 24.04·26.04 x64 (24.04에서 빌드) | CLI `.tar.gz`, 데스크톱 `.deb`와 `.AppImage` |
 | macOS Apple Silicon | CLI `.tar.gz`, 데스크톱 `.dmg` |
 | macOS Intel | CLI `.tar.gz`, 데스크톱 `.dmg` |
 | Windows x64 | CLI `.zip`, NSIS 설치 `.exe` |
@@ -58,7 +62,11 @@ Actions는 커밋 SHA로 고정하고 Dependabot이 주간 업데이트를 제�
 
 ### 서명
 
-macOS는 ad-hoc 서명(`APPLE_SIGNING_IDENTITY=-`)을 사용하며 **공증되지 않습니다**. Windows 설치 파일도 **인증서 서명이 없습니다**. OS 경고가 나타날 수 있으므로 검증된 배포자 서명이라고 설명하지 마세요. 넓게 배포하기 전 인증서를 확보하고 보호된 릴리스 환경의 secrets에만 설정해 Tauri 서명·공증을 구성해야 합니다. 인증서·비밀번호·키를 저장소에 넣지 마세요.
+macOS는 현재 ad-hoc 서명(`APPLE_SIGNING_IDENTITY=-`)을 사용하며 **공증되지 않습니다**. [Apple 서명 준비표](macos-signing.ko.md)를 완료할 때까지 테스트·초안으로 유지합니다. 가입, Developer ID 인증서, 보호된 CI 자격 증명, 독립 CLI 서명, 체크섬 생성·공개 전 검증 절차가 포함됩니다.
+
+Windows 프리뷰는 **인증서 서명 없이** 배포합니다. SmartScreen·알 수 없는 배포자 경고와 관리되는 PC의 제한 가능성을 안내합니다. Windows 인증서는 추후 개선 사항이며 이번 배포의 필수 조건이 아닙니다. 무서명 파일을 배포자 검증 완료로 설명하거나 시스템 보호를 끄도록 안내하지 않습니다. 인증서·비밀번호·키를 저장소에 넣지 마세요.
+
+광고하는 플랫폼마다 [릴리스 검증표](platform-support.ko.md#릴리스-검증표)를 진행합니다. 로컬 Ubuntu 26.04 패키지를 Ubuntu 24.04 CI 산출물의 호환성 검증에 대신 사용하지 않습니다.
 
 공식 [Tauri GitHub 파이프라인](https://v2.tauri.app/distribute/pipelines/github/), [배포 안내](https://v2.tauri.app/distribute/), [Windows 설치 파일 안내](https://v2.tauri.app/distribute/windows-installer/)를 참고하세요. 실제 설치와 서명 검증은 대상 플랫폼에서 수행해야 합니다.
 

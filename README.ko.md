@@ -19,7 +19,7 @@ Conn은 사람과 AI 에이전트가 **같은 셸에서 함께 작업**하게 �
 
 **데스크톱 터미널**로도, 쓰던 터미널 안에서도 실행할 수 있습니다. 에이전트는 **MCP 또는 CLI**로 연결합니다. Conn은 모델을 실행하지 않으므로 원하는 에이전트를 연결해 사용하세요.
 
-> **v0.3.0 프리뷰.** Linux 개발 환경의 동작을 로컬에서 검증했습니다. macOS·Windows 구현과 CI 빌드 대상은 준비되어 있으며, 실제 플랫폼 동작과 설치 패키지는 추가 검증이 필요합니다. 다운로드는 릴리스 빌드 성공 후 관리자가 공개하면 제공됩니다. macOS는 임시 서명(ad-hoc)만 적용하고 공증하지 않으며, Windows 설치 파일에는 인증서 서명이 없습니다.
+> **v0.3.0 프리뷰.** Linux·macOS ARM·Windows 네이티브 데스크톱 디버그 빌드는 CI를 통과했으며 실제 설치·조작은 별도로 검증합니다. 첫 바이너리 배포는 Ubuntu 24.04·26.04 x64, 인증서 서명 없는 Windows x64, Apple 가입 후 Developer ID 서명·공증을 적용한 Mac 두 아키텍처를 목표로 합니다. 현재 Mac 빌드는 ad-hoc 테스트 산출물입니다. 다운로드는 관리자가 공개한 뒤 제공됩니다. [플랫폼 방침과 검증표](docs/platform-support.ko.md)를 확인하세요.
 
 ## 이런 순간을 위한 도구입니다
 
@@ -102,12 +102,12 @@ POSIX 셸과 PowerShell용 예시입니다. cmd.exe에서는 `pwd` 대신 `cd`�
 
 | 플랫폼 | 데스크톱 | CLI |
 |---|---|---|
-| Linux x86-64 | `.deb`, `.AppImage` | `.tar.gz` |
+| Ubuntu 24.04·26.04 x86-64 | `.deb`, `.AppImage` | `.tar.gz` |
 | macOS Apple Silicon | `.dmg` | `.tar.gz` |
 | macOS Intel | `.dmg` | `.tar.gz` |
 | Windows x86-64 | NSIS `.exe` 설치 파일 | `.zip` |
 
-릴리스에 실제 첨부된 파일과 알려진 제한을 확인하세요. 빌드 성공만으로 실제 플랫폼 동작을 검증했다고 볼 수는 없습니다. [검증 기록](docs/backend-verification.md)에 기존 로컬 검증과 남은 확인 사항이 정리되어 있습니다.
+릴리스에 실제 첨부된 파일과 알려진 제한을 확인하세요. 빌드 성공만으로 실제 플랫폼 동작을 검증했다고 볼 수는 없습니다. [플랫폼 방침](docs/platform-support.ko.md)에 배포 기준을, [검증 기록](docs/backend-verification.md)에 날짜별 빌드 근거와 남은 실행 검증을 정리했습니다.
 
 ## 알아둘 범위
 

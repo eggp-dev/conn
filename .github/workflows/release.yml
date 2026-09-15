@@ -51,6 +51,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Keep the oldest intended Ubuntu baseline; do not use the 26.04 dev host.
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             bundles: deb,appimage
@@ -67,6 +68,7 @@ jobs:
     timeout-minutes: 60
     env:
       CARGO_INCREMENTAL: '0'
+      # Test/draft only until docs/macos-signing.md is completed.
       APPLE_SIGNING_IDENTITY: '-'
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6

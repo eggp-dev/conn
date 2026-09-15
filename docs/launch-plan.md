@@ -23,7 +23,7 @@ Use matching English and Korean captions. The icon motion should be visible with
 ## Readiness and distribution / 준비와 알리기
 
 1. Land CI and bilingual onboarding; get fresh-install feedback from a small number of real users.
-2. Publish a preview only after native installation smoke tests and clear signing notes.
+2. Follow the [platform policy](platform-support.md) / [플랫폼 방침](platform-support.ko.md): Ubuntu 24.04 builds tested on 24.04/26.04, unsigned Windows previews, and Mac signing/notarization after Apple enrollment. Publish only after native installation checks; Windows certificates are not a prerequisite.
 3. Ask testers whether they connected their agent, completed the demo, and understood denied requests. Fix the largest onboarding obstacle before broad promotion.
 4. Prepare English and Korean launch copy below. Post only after maintainer approval, following each community's rules.
 5. Track stars alongside meaningful adoption: successful first runs, repeat use reports, actionable issues and contributions. **100 stars is the goal, not a forecast or a quality guarantee.** Do not buy stars or send unsolicited bulk promotion.

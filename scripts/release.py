@@ -117,6 +117,7 @@ conn --help. The MCP server uses `conn mcp` and needs a running Conn session.
 
 Getting started: {REPOSITORY}/blob/v{version}/docs/getting-started.md
 Korean guide: {REPOSITORY}/blob/v{version}/docs/getting-started.ko.md
+Platform policy: {REPOSITORY}/blob/v{version}/docs/platform-support.md
 Security: {REPOSITORY}/blob/v{version}/SECURITY.md
 
 Conn is preview software. A shell command runs with your account's permissions;
@@ -211,9 +212,14 @@ validation on every operating system.
 
 Choose the desktop installer for your platform, or the `-cli` archive for a CLI
 and MCP workflow. Apple Silicon uses `aarch64-apple-darwin`; Intel Macs use
-`x86_64-apple-darwin`. Linux assets target x86-64 with glibc; Windows targets x64.
-macOS packages are ad-hoc signed, not notarized; Windows installers are not
-certificate-signed. These packages do not carry verified publisher signatures.
+`x86_64-apple-darwin`. Linux x64 assets are built on Ubuntu 24.04 and target
+Ubuntu 24.04/26.04; verify these exact assets on both systems before publishing.
+Windows targets x64 and is intentionally unsigned for this preview; a certificate
+is not a release prerequisite. SmartScreen or unknown-publisher prompts may appear.
+macOS packages are currently ad-hoc signed, not notarized: keep this draft
+unpublished until the Apple signing handoff and native checks are complete.
+Update these notes to match the resulting signatures before public distribution.
+See the [platform policy]({REPOSITORY}/blob/{tag}/docs/platform-support.md).
 Follow the installation guide for platform trust prompts; never disable system
 protection globally.
 
@@ -236,7 +242,9 @@ Read the [security model]({REPOSITORY}/blob/{tag}/docs/security.md) and
 한국어: 이 릴리스는 프리뷰입니다. 명령은 사용자 계정 권한으로 실행되며, 승인 기능은
 운영체제 샌드박스가 아닙니다. 실행 기록은 입력 전달을 뜻하며 명령의 성공을 보장하지
 않습니다. macOS 패키지는 임시 서명(ad-hoc)을 사용하며 공증되지 않았습니다.
-Windows 설치 파일은 인증서로 서명되지 않았습니다.
+Windows 프리뷰는 무서명으로 배포하며 인증서가 필수 조건은 아닙니다. Linux는
+Ubuntu 24.04 빌드를 24.04·26.04에서 검증합니다. Mac 공개 전 서명·공증과 네이티브
+검증을 완료하고 실제 서명 상태에 맞게 이 초안 안내를 수정하세요.
 """
     (artifacts / "release-notes.md").write_text(notes, encoding="utf-8", newline="\n")
     return paths + [artifacts / "SHA256SUMS"]

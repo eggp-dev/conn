@@ -10,16 +10,18 @@ The first goal is simple: open a terminal, let an agent request one read-only co
 
 Use the files attached to a [published release](https://github.com/eggplantiny/conn/releases). The release workflow targets Linux `.deb`/`.AppImage`, macOS `.dmg`, Windows NSIS `.exe`, and separate CLI archives. If no release has been published yet, build from source below.
 
-Early macOS previews use ad-hoc signing without notarization; Windows installers are not certificate-signed. These packages do not establish a verified publisher identity. Read the release's platform notes before installing. Checksums detect a corrupted or mismatched download; they do not replace publisher signing. Native macOS and Windows behavior is still being validated.
+Windows previews are intentionally unsigned: SmartScreen or unknown-publisher prompts may appear, and managed PCs may block installation. Public Mac downloads are planned after Developer ID signing and notarization; current ad-hoc Mac artifacts are for testing. Check each release's actual signing and validation notes. Checksums detect download corruption, not publisher identity. See [platform support](platform-support.md); no published release means no completed installer validation claim.
 
 Choose the asset for your OS and CPU architecture:
 
 | Platform | Desktop installation |
 |---|---|
-| Debian/Ubuntu x64 | Download the `.deb`, then run `sudo apt install ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.deb` in its directory. |
-| Linux x64 AppImage | Run `chmod +x ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage`, then launch that file. Your system needs the runtime libraries required by the AppImage. |
-| macOS | Choose Apple Silicon (`aarch64`) or Intel (`x86_64`), open the `.dmg`, and drag Conn into Applications. This preview is not notarized; read its platform notes if macOS blocks it. |
+| Ubuntu 24.04 / 26.04 x64 | Download the `.deb`, then run `sudo apt install ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.deb` in its directory. |
+| Ubuntu x64 AppImage | Run `chmod +x ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage`, then launch that file. Your system needs the runtime libraries required by the AppImage. |
+| macOS | Choose Apple Silicon (`aarch64`) or Intel (`x86_64`), open the `.dmg`, and drag Conn into Applications. Check the release notes for the signed/notarized package; ad-hoc draft builds remain test-only. |
 | Windows x64 | Run the `-setup.exe` installer and launch Conn from the Start menu. The preview has no verified publisher certificate. |
+
+Linux release files are built on Ubuntu 24.04 and must be tested on both 24.04 and 26.04. Other distributions and older Ubuntu releases are not yet validated; an AppImage is not universal Linux compatibility.
 
 For another version, replace `v0.3.0` with the version you downloaded. Keep the checksum file from the same release. The desktop contains its matching CLI, while the separate CLI archive is useful for configuring an agent client on `PATH`.
 

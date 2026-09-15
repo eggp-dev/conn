@@ -1,6 +1,49 @@
-# Backend verification — 2026-09-15
+# Backend verification
 
-## Evidence on the Linux development host
+Distribution targets and the manual release checklist live in
+[platform support](platform-support.md) ([한국어](platform-support.ko.md)).
+Results below are dated evidence, not a blanket compatibility claim.
+
+## Public CI baseline — 2026-09-16
+
+At commit `c1d78531a5025881922c05d77ab56cabe7124747`,
+[GitHub Actions run 35023575383](https://github.com/eggplantiny/conn/actions/runs/35023575383)
+reported:
+
+| Check | Result |
+|---|---|
+| Docs, release tooling, frontend tests/build | Passed |
+| Rust tests on Ubuntu 24.04 and macOS ARM | Passed |
+| Desktop debug build on Ubuntu 24.04, macOS ARM and Windows | Passed |
+| Rust tests on Windows Server 2022 | Failed at native shell termination |
+| Aggregate Required checks | Failed |
+
+The Windows PTY test received the configured environment output, then
+`Engine::terminate()` returned an error saying “The operation completed
+successfully.” `portable-pty` 0.8.1 reverses the success check for
+`TerminateProcess` in its cloned killer; released 0.9.0 has the same issue.
+Conn now duplicates the Windows child handle and checks the native return value
+directly. It accepts an already-exited child while preserving real errors. The
+native regression remains enabled and also checks repeated termination. Follow
+the [current CI runs](https://github.com/eggplantiny/conn/actions/workflows/ci.yml)
+for verification of later revisions.
+
+Local release preparation also passed 112 Rust tests, 17 frontend tests and 23
+release/hygiene tests, with 0 Svelte errors and 8 existing warnings. Optimized
+Linux builds produced `.deb`, `.AppImage` and a CLI archive; package contents,
+CLI versions and checksums were checked. These were built on Ubuntu 26.04.1
+(glibc 2.43), so they do **not** establish Ubuntu 24.04 compatibility. Release
+packages must come from the pinned Ubuntu 24.04 runner and be tested on both
+Ubuntu versions.
+
+No public binary release or completed cross-platform installer/GUI validation
+is claimed by this record. Mac Intel release packaging, Apple signing and
+notarization, clean native installation, and interactive desktop checks remain
+release work.
+
+## Earlier local evidence — 2026-09-15
+
+### Evidence on the Linux development host
 
 - Core and CLI regression tests: **103 passed, 0 failed, 0 ignored**. Actual PTY command execution, profile environment
   propagation, child termination, IPC leases/disconnect, atomic profile save,
@@ -20,7 +63,7 @@
   cross-compilation checks. The Tauri code-only check excludes the sidecar bundle;
   it is not a Windows installer or a Windows runtime test.
 
-## Browser flow
+### Browser flow
 
 `frontends/tauri/tests/ui/` mounts the real App, settings and tab components with
 Tauri's official `mockIPC`/`mockWindows` APIs. The test fixture is not the production
@@ -42,7 +85,7 @@ This verifies the real frontend against a simulated Tauri bridge. Backend
 execution is separately covered by Rust integration tests; it is not proof of a
 native WebKit/WebView2 interaction or a real SSH/WSL/container connection.
 
-## Remaining validation
+### Remaining validation from that run
 
 - Windows native ConPTY input/output, Named Pipe ownership/lifetime, PowerShell,
   cmd, Git Bash, WSL and WebView2 behavior on a Windows machine.
@@ -51,7 +94,7 @@ native WebKit/WebView2 interaction or a real SSH/WSL/container connection.
   intended user targets. No remote credentials or target services were created.
 - Native desktop mouse/keyboard and graphical behavior. Native UI control was not
   available in this environment; browser fixture behavior is recorded separately.
-- GitHub Actions native platform matrix and signed/distributed installers.
+- GitHub Actions native platform matrix (see the newer record above) and signed/distributed installers.
 
 The source changes include that CI matrix and explicit platform-specific code;
 these pending checks must not be presented as passing tests.

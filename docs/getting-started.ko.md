@@ -10,16 +10,18 @@
 
 [공개된 릴리스](https://github.com/eggplantiny/conn/releases)에 첨부된 파일을 사용하세요. 릴리스 워크플로는 Linux `.deb`·`.AppImage`, macOS `.dmg`, Windows NSIS `.exe`, 별도 CLI 압축 파일을 대상으로 합니다. 아직 공개된 릴리스가 없다면 아래 소스 빌드 방법을 사용하세요.
 
-초기 macOS 프리뷰는 임시 서명(ad-hoc)만 적용하고 공증하지 않으며, Windows 설치 파일에는 인증서 서명이 없습니다. 이 패키지로 검증된 배포자 신원을 확인할 수는 없습니다. 설치 전 해당 릴리스의 플랫폼 안내를 확인하세요. 체크섬은 다운로드의 손상이나 불일치를 확인하는 수단이며 배포자 서명을 대신하지 않습니다. macOS·Windows의 실제 동작은 추가 검증 중입니다.
+Windows 프리뷰는 무서명으로 배포합니다. SmartScreen·알 수 없는 배포자 경고가 나타날 수 있고 관리되는 PC에서는 설치가 차단될 수 있습니다. Mac 공개 다운로드는 Developer ID 서명·공증 후 제공할 계획이며 현재 ad-hoc 산출물은 테스트용입니다. 각 릴리스의 실제 서명·검증 상태를 확인하세요. 체크섬은 다운로드 손상을 확인하며 배포자 신원을 보증하지 않습니다. [플랫폼 지원 안내](platform-support.ko.md)를 참고하세요. 아직 릴리스를 공개하지 않았다면 설치 검증 완료를 의미하지 않습니다.
 
 OS와 CPU 아키텍처에 맞는 파일을 선택하세요.
 
 | 플랫폼 | 데스크톱 설치 |
 |---|---|
-| Debian/Ubuntu x64 | `.deb`를 받은 폴더에서 `sudo apt install ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.deb`를 실행합니다. |
-| Linux x64 AppImage | `chmod +x ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage`로 실행 권한을 준 뒤 해당 파일을 실행합니다. 시스템에 AppImage가 요구하는 런타임 라이브러리가 있어야 합니다. |
-| macOS | Apple Silicon(`aarch64`) 또는 Intel(`x86_64`)용 `.dmg`를 열고 Conn을 Applications로 옮깁니다. 공증되지 않은 프리뷰이므로 차단되면 릴리스의 플랫폼 안내를 확인하세요. |
+| Ubuntu 24.04·26.04 x64 | `.deb`를 받은 폴더에서 `sudo apt install ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.deb`를 실행합니다. |
+| Ubuntu x64 AppImage | `chmod +x ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage`로 실행 권한을 준 뒤 해당 파일을 실행합니다. 시스템에 AppImage가 요구하는 런타임 라이브러리가 있어야 합니다. |
+| macOS | Apple Silicon(`aarch64`) 또는 Intel(`x86_64`)용 `.dmg`를 열고 Conn을 Applications로 옮깁니다. 릴리스 안내에서 서명·공증된 패키지를 확인하세요. ad-hoc 초안은 테스트용입니다. |
 | Windows x64 | `-setup.exe` 설치 파일을 실행한 뒤 시작 메뉴에서 Conn을 엽니다. 프리뷰에는 검증된 배포자 인증서가 없습니다. |
+
+Linux 릴리스는 Ubuntu 24.04에서 빌드하고 24.04·26.04에서 검증합니다. 다른 배포판·이전 Ubuntu는 아직 검증하지 않았으며 AppImage가 모든 Linux 호환을 보장하지 않습니다.
 
 다른 버전은 명령의 `v0.3.0`을 받은 버전으로 바꾸고, 체크섬도 같은 릴리스에서 받으세요. 데스크톱에는 같은 버전의 CLI가 포함됩니다. 에이전트 클라이언트의 `PATH`를 구성할 때는 별도 CLI 압축 파일도 사용할 수 있습니다.
 

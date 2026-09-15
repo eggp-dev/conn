@@ -19,6 +19,9 @@ First public preview of Conn, a shared terminal for humans and AI agents.
 
 ### Correctness and distribution
 
+- Correct Windows shell termination reporting and tolerate a concurrent shell exit when closing a tab.
+- Document Ubuntu 24.04 release builds and 24.04/26.04 validation, unsigned Windows previews, and the Apple signing/notarization handoff in English and Korean.
+
 - Refuse to start a new shell when policy loading fails; preserve the last good rules on reload failure.
 - Preserve complete clean input for policy checks and audit even when long commands wrap across terminal rows.
 - English and Korean onboarding and contributor guides.
@@ -27,4 +30,4 @@ First public preview of Conn, a shared terminal for humans and AI agents.
 ### Preview limitations
 
 - Policy is a cooperative guard, not a sandbox. Completion/history edits still have reconstruction limits; see [the trust model](docs/security.md).
-- No detach/reattach or automatic updater. Release installers require platform smoke testing; macOS notarization and Windows certificate signing are not configured.
+- No detach/reattach or automatic updater. Release installers require platform smoke testing. Public macOS downloads await Developer ID signing/notarization; current ad-hoc builds are test artifacts. Windows previews intentionally ship without certificate signing. See [platform policy](docs/platform-support.md).
