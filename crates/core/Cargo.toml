@@ -1,0 +1,34 @@
+[package]
+name = "conn-core"
+description = "Embeddable engine for conn: PTY, lease-based authority, policy gate, approvals, audit, headless VT model, and a socket control plane."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tempfile.workspace = true
+tokio.workspace = true
+portable-pty.workspace = true
+vt100.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+regex.workspace = true
+libc.workspace = true
+chrono.workspace = true
+dirs.workspace = true
+parking_lot.workspace = true
+unicode-width.workspace = true
+base64.workspace = true
+globset.workspace = true
+
+[dev-dependencies]
+base64.workspace = true
+tempfile.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Security_Authorization", "Win32_Foundation"] }

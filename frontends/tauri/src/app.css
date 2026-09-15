@@ -1,0 +1,37 @@
+@import "@xterm/xterm/css/xterm.css";
+
+:root {
+  /* filled by themes.ts */
+  --bg: #0b0d12; --surface: #12151c; --surface2: #1a1e28; --fg: #d7dae0; --muted: #7d8590; --line: #232833;
+  --warn: #f59e0b; --ok: #22c55e; --danger: #ef4444; --agent: #8b7cff; --selection: rgba(124, 92, 255, .25);
+  --font-ui: -apple-system, "SF Pro Text", "Inter", "Noto Sans KR", system-ui, sans-serif;
+  --font-mono: "SF Mono", "JetBrains Mono", Menlo, monospace;
+  --radius: 10px;
+  --shadow: 0 12px 40px rgba(0, 0, 0, .45), 0 1px 0 rgba(255, 255, 255, .04) inset;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 13px/1.45 var(--font-ui); -webkit-font-smoothing: antialiased; transition: background .4s var(--ease), color .4s var(--ease); }
+body { overflow: hidden; }
+code, kbd { font-family: var(--font-mono); }
+kbd { font-size: 10.5px; padding: 1px 5px; border-radius: 5px; background: var(--surface2); border: 1px solid var(--line); color: var(--muted); }
+button { font: inherit; color: inherit; }
+.btn { background: var(--surface2); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 5px 12px; cursor: pointer; font-size: 12px; transition: border-color .15s, background .15s, transform .1s; }
+.btn:hover { border-color: color-mix(in srgb, var(--fg) 30%, var(--line)); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--agent); border-color: transparent; color: #fff; }
+.btn.ok { background: color-mix(in srgb, var(--ok) 18%, var(--surface2)); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.btn.danger { background: color-mix(in srgb, var(--danger) 18%, var(--surface2)); border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--fg); background: var(--surface2); }
+.muted { color: var(--muted); }
+.xterm .xterm-viewport { background: transparent !important; }
+.xterm .xterm-viewport::-webkit-scrollbar { width: 6px; }
+.xterm .xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+.xterm .xterm-viewport::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--fg) 22%, transparent); border-radius: 3px; }
+.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--fg) 40%, transparent); }
+.xterm { padding: 0; }
+input[type=range] { accent-color: var(--agent); }
+input[type=checkbox] { accent-color: var(--agent); }
+::selection { background: var(--selection); }

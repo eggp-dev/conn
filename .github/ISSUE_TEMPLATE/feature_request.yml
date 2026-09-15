@@ -1,0 +1,14 @@
+name: Feature request / 기능 제안
+description: Describe a workflow you want to improve / 개선하고 싶은 작업 흐름을 알려주세요
+body:
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Your workflow / 사용 시나리오
+      description: What are you trying to do, and where does Conn get in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Suggested behavior / 제안하는 동작

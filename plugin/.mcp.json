@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "conn": {
+      "command": "conn",
+      "args": ["mcp"]
+    }
+  }
+}

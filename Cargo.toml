@@ -1,0 +1,35 @@
+[workspace]
+resolver = "2"
+members = ["crates/core", "crates/cli", "crates/frontend", "crates/browser-harness"]
+
+[workspace.package]
+version = "0.3.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/eggplantiny/conn"
+
+[workspace.dependencies]
+conn-core = { path = "crates/core", version = "0.3.0" }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "time", "macros", "signal"] }
+portable-pty = "0.8"
+vt100 = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+thiserror = "1"
+regex = "1"
+clap = { version = "4", features = ["derive"] }
+libc = "0.2"
+chrono = { version = "0.4", features = ["serde", "clock"] }
+dirs = "5"
+parking_lot = "0.12"
+unicode-width = "0.2"
+base64 = "0.22"
+globset = "0.4"
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"

@@ -1,0 +1,83 @@
+<script lang="ts">
+  import { t, tabName } from "../lib/i18n.svelte";
+  import { fly } from "svelte/transition";
+  import { st, cur } from "../lib/store.svelte";
+  import { cmd } from "../lib/bridge";
+  const a = $derived(cur().approval!);
+  const c = $derived(cur().cursor);
+  const targets = $derived(a.analysis?.segments.flatMap((s) => s.targets) ?? []);
+  const multi = $derived((a.analysis?.segments.length ?? 0) > 1);
+  let innerHeight = $state(700);
+  let holdH = $state(0);
+  // Under the cursor line when it fits above the timeline strip; otherwise above it.
+  const below = $derived(c.y + c.h + 8 + holdH + 30 <= innerHeight);
+  const top = $derived(below ? c.y + c.h + 8 : Math.max(48, c.y - holdH - 8));
+</script>
+
+<svelte:window bind:innerHeight />
+
+{#if cur().approval}
+  <div class="rowglow" style:top="{c.y - 2}px" style:height="{c.h + 4}px"></div>
+  <div class="hold" style:top="{top}px" bind:clientHeight={holdH} transition:fly={{ y: below ? -6 : 6, duration: 160 }} role="dialog" aria-label={a.label}>
+    <div class="top">
+      <span class="label">⚠ {a.label}</span>
+      {#if a.intent}<span class="intent">{a.intent}</span>{:else}<span class="intent muted">{t("hold.no_intent")}</span>{/if}
+      <span class="who muted">{a.agentId} · {a.id}</span>
+    </div>
+    {#if targets.length}
+      <ul class="targets">
+        {#each targets as tg}
+          <li class:protected={tg.protected} class:missing={!tg.exists}>
+            <span class="k">{t("hold.target")}</span><code>{tg.path}</code>
+            {#if !tg.exists}<span class="tag">{t("hold.missing")}</span>{/if}
+            {#if tg.gitRepo}<span class="tag git">{t("hold.git")}</span>{/if}
+            {#if tg.entries != null}<span class="tag">{t("hold.entries", { n: tg.entries >= 2000 ? "2000+" : tg.entries })}</span>{/if}
+            {#if tg.protected}<span class="tag danger">{t("hold.protected")}</span>{/if}
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    {#if multi}
+      <ul class="segs">
+        {#each a.analysis!.segments as s}
+          <li class={s.policy}><span class="dot"></span><code>{s.text}</code>{#if s.label}<span class="tag">{s.label}</span>{/if}</li>
+        {/each}
+      </ul>
+    {:else}
+      <code class="raw">{a.cmd}</code>
+    {/if}
+    <div class="keys">
+      {#if a.analysis?.cwd}<span class="muted cwd">cwd {a.analysis.cwd}</span>{/if}
+      <span class="spacer"></span>
+      <button class="btn ok" onclick={() => cmd("approve", { approvalId: a.id, decision: "grant" })}><kbd>a</kbd> {t("hold.approve")}</button>
+      <button class="btn danger" onclick={() => cmd("approve", { approvalId: a.id, decision: "deny" })}><kbd>d</kbd> {t("hold.deny")}</button>
+      <button class="btn" disabled={cur().reviewRequired} onclick={() => cmd("approve", { approvalId: a.id, decision: "allow_session" })}><kbd>A</kbd> {t("hold.allow_session")}</button>
+    </div>
+  </div>
+{/if}
+
+<style>
+  .rowglow { position: absolute; left: 8px; right: 8px; z-index: 7; pointer-events: none; border-radius: 6px; background: color-mix(in srgb, var(--warn) 10%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--warn) 35%, transparent), 0 0 24px color-mix(in srgb, var(--warn) 25%, transparent); }
+  .hold { position: absolute; left: 16px; right: 16px; z-index: 9; display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(12px); border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line)); box-shadow: var(--shadow); font-size: 12.5px; }
+  .top { display: flex; gap: 12px; align-items: baseline; }
+  .label { color: var(--warn); font-weight: 700; white-space: nowrap; }
+  .intent { flex: 1; font-size: 13.5px; font-weight: 600; }
+  .who { white-space: nowrap; font-size: 11px; }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+  .targets li { display: flex; gap: 8px; align-items: center; }
+  .targets .k { color: var(--muted); font-size: 11px; width: 28px; }
+  .targets code { font-size: 12.5px; }
+  .targets li.protected code { color: var(--danger); }
+  .tag { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: var(--surface2); color: var(--muted); white-space: nowrap; }
+  .tag.git { color: var(--agent); }
+  .tag.danger { background: color-mix(in srgb, var(--danger) 20%, transparent); color: var(--danger); }
+  .segs li { display: flex; gap: 8px; align-items: center; }
+  .segs .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .segs li.confirm .dot { background: var(--warn); } .segs li.deny .dot { background: var(--danger); }
+  .segs li.allow code { color: var(--muted); }
+  .raw { color: var(--muted); white-space: pre-wrap; word-break: break-all; }
+  .keys { display: flex; gap: 6px; align-items: center; }
+  .keys .btn { padding: 3px 9px; font-size: 11.5px; display: flex; gap: 5px; align-items: center; }
+  .spacer { flex: 1; }
+  .cwd { font-size: 11px; }
+</style>

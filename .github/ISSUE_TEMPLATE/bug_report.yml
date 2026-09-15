@@ -1,0 +1,23 @@
+name: Bug report / 버그 제보
+description: Something did not work as expected / 예상과 다르게 동작합니다
+title: '[Bug] '
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened? / 어떤 문제가 있나요?
+      description: Include expected behavior and steps to reproduce. Please remove secrets from logs and screenshots.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment / 실행 환경
+      placeholder: 'Conn version, OS and architecture, shell/profile, desktop or browser harness, agent client'
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs or screenshot / 로그 또는 화면
+      description: Timeline request details can contain commands and file content. Redact private data.

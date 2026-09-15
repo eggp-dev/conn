@@ -1,0 +1,12 @@
+{
+  "name": "conn",
+  "interface": { "displayName": "Conn" },
+  "plugins": [
+    {
+      "name": "conn",
+      "source": { "source": "local", "path": "./plugin" },
+      "policy": { "installation": "AVAILABLE" },
+      "category": "Developer Tools"
+    }
+  ]
+}

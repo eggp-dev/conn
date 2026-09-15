@@ -1,0 +1,28 @@
+[package]
+name = "conn"
+description = "Conn — one shell, one hand on it. You have the conn."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "conn"
+path = "src/main.rs"
+
+[dependencies]
+conn-core.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+clap.workspace = true
+libc.workspace = true
+parking_lot.workspace = true
+base64.workspace = true
+
+[dev-dependencies]
+portable-pty.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+crossterm = "0.29"

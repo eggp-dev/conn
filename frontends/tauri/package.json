@@ -1,0 +1,31 @@
+{
+  "name": "conn-desktop",
+  "private": true,
+  "version": "0.3.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "svelte-check --threshold error && vite build",
+    "preview": "vite preview",
+    "tauri": "node scripts/tauri.mjs",
+    "test:browser": "node scripts/browser-test.mjs",
+    "test": "node tests/timeline/events.test.ts && node ../../tests/icon/state.test.ts"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.1.1",
+    "@tauri-apps/cli": "^2",
+    "@tsconfig/svelte": "^5.0.8",
+    "svelte": "^5.57.0",
+    "svelte-check": "^4.7.6",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
