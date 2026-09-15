@@ -23,7 +23,8 @@ The Windows PTY test received the configured environment output, then
 successfully.” `portable-pty` 0.8.1 reverses the success check for
 `TerminateProcess` in its cloned killer; released 0.9.0 has the same issue.
 Conn now duplicates the Windows child handle and checks the native return value
-directly. It accepts an already-exited child while preserving real errors. The
+directly. It remembers a successful asynchronous termination request and accepts
+an already-exited child while preserving real errors. The
 native regression remains enabled and also checks repeated termination. Follow
 the [current CI runs](https://github.com/eggplantiny/conn/actions/workflows/ci.yml)
 for verification of later revisions.
