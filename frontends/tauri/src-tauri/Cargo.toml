@@ -2,7 +2,9 @@
 name = "conn-desktop"
 version = "0.3.0"
 edition = "2021"
-description = "Reference Tauri frontend for conn: embeds the engine, renders with xterm.js."
+description = "A shared terminal for humans and AI agents."
+repository = "https://github.com/eggplantiny/conn"
+homepage = "https://github.com/eggplantiny/conn"
 license = "MIT"
 
 # Standalone: not a member of the repo workspace so `cargo test` at the root stays light.
