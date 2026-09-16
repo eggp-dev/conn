@@ -1,0 +1,245 @@
+import { AbsoluteFill } from "remotion";
+import { fontFamily } from "./fonts";
+
+export const Stage: React.FC<React.PropsWithChildren> = ({ children }) => <AbsoluteFill style={{
+  background: "#080a10", color: "#f2f2f7", fontFamily,
+}}>
+  {children}
+</AbsoluteFill>;
+import "./index.css";
+import { Composition, Still } from "remotion";
+import { Demo } from "./Demo";
+import { Poster } from "./Poster";
+import { durationInFrames, fps } from "./footage";
+
+export const RemotionRoot: React.FC = () => {
+  return (
+    <>
+      <Composition id="ConnDemoEN" component={Demo} durationInFrames={durationInFrames} fps={fps} width={1920} height={1080} defaultProps={{ language: "en" }} />
+      <Composition id="ConnDemoKO" component={Demo} durationInFrames={durationInFrames} fps={fps} width={1920} height={1080} defaultProps={{ language: "ko" }} />
+      <Still id="ConnPoster" component={Poster} width={1920} height={1080} />
+    </>
+  );
+};
+* { box-sizing: border-box; }
+body { margin: 0; }
+import type { ClipId } from "./footage";
+
+export type Language = "en" | "ko";
+export type SceneCopy = { title: string; caption: string };
+export const copy: Record<Language, Record<ClipId, SceneCopy>> = {
+  en: {
+    intro: { title: "Your agent. One shared terminal.",
+      caption: "Ask Codex to help with the failing test already on your screen." },
+    request: { title: "Start from the same context.",
+      caption: "Codex reads the shared terminal and asks to work in it." },
+    fix: { title: "Follow the work as it happens.",
+      caption: "The agent fixes the discount calculation and runs the tests." },
+    reclaim: { title: "Add what the agent missed.",
+      caption: "Take back input control. Add a test: a discount must never make the price negative." },
+    resume: { title: "Pick up where each other leaves off.",
+      caption: "Codex reads your new test, updates the fix, and checks all three cases." },
+    timeline: { title: "Keep the collaboration in view.",
+      caption: "Revisit commands, handoffs, and the requests behind them." },
+  },
+  ko: {
+    intro: { title: "쓰던 에이전트와, 하나의 터미널에서.",
+      caption: "지금 화면에서 실패한 테스트를 Codex에게 함께 고치자고 합니다." },
+    request: { title: "같은 상황에서 시작합니다.",
+      caption: "Codex가 공유 터미널을 읽고, 작업을 이어갈 제어권을 요청합니다." },
+    fix: { title: "작업 과정을 함께 봅니다.",
+      caption: "에이전트가 할인 계산을 수정한 뒤 테스트를 실행합니다." },
+    reclaim: { title: "빠진 조건은 내가 더합니다.",
+      caption: "직접 이어받아 테스트를 더합니다. 할인해도 가격은 음수가 되면 안 됩니다." },
+    resume: { title: "서로의 작업을 이어갑니다.",
+      caption: "Codex가 내가 추가한 테스트를 읽고, 수정한 뒤 세 조건을 모두 검증합니다." },
+    timeline: { title: "함께한 과정까지 남습니다.",
+      caption: "명령과 제어권 전환, 그때의 요청을 타임라인에서 다시 살펴봅니다." },
+  },
+};
+
+export const closingCopy: Record<Language, { title: string; disclosure: string }> = {
+  en: { title: "Your agent. One shared terminal.", disclosure: "Real Codex CLI + Conn · Human role automated · Pauses shortened" },
+  ko: { title: "쓰던 에이전트와, 하나의 터미널에서.", disclosure: "실제 Codex CLI + Conn · 사람 역할은 자동 조작 · 대기 시간 단축" },
+};
+/**
+ * Actual Codex CLI + Conn recordings. The recording operator supplies the split
+ * view; this edit never draws terminal output, tool requests, or approval UI.
+ *
+ * Capture contract: 1920×1080 (or larger 16:9), Codex CLI left, Conn right.
+ * Reserve the top 72px and bottom 80px as neutral #090c12 gutters. The edit puts
+ * its heading/caption in those gutters and shows every captured pixel at a
+ * constant size. New paths deliberately prevent reuse of the old scripted demo.
+ */
+export const fps = 30;
+export const clipOrder = ["intro", "request", "fix", "reclaim", "resume", "timeline"] as const;
+export type ClipId = typeof clipOrder[number];
+export type FootageClip = {
+  file: string;
+  durationInFrames: number;
+  trimBeforeSeconds: number;
+  playbackRate: number;
+};
+
+export const clips: Record<ClipId, FootageClip> = {
+  intro: { file: "footage/collaboration/intro.mp4", durationInFrames: 8 * fps, trimBeforeSeconds: 0, playbackRate: 1 },
+  request: { file: "footage/collaboration/request.mp4", durationInFrames: 9 * fps, trimBeforeSeconds: 0, playbackRate: 1 },
+  fix: { file: "footage/collaboration/fix.mp4", durationInFrames: 11 * fps, trimBeforeSeconds: 0, playbackRate: 1 },
+  reclaim: { file: "footage/collaboration/reclaim.mp4", durationInFrames: 11 * fps, trimBeforeSeconds: 0, playbackRate: 1 },
+  resume: { file: "footage/collaboration/resume.mp4", durationInFrames: 13 * fps, trimBeforeSeconds: 0, playbackRate: 1 },
+  timeline: { file: "footage/collaboration/timeline.mp4", durationInFrames: 6 * fps, trimBeforeSeconds: 0, playbackRate: 1 },
+};
+
+export const closingDurationInFrames = 4 * fps;
+export const durationInFrames = clipOrder.reduce((total, id) => total + clips[id].durationInFrames, closingDurationInFrames);
+import { loadFont } from "@remotion/fonts";
+import { staticFile } from "remotion";
+
+export const fontFamily = "Conn Noto, sans-serif";
+loadFont({ family: "Conn Noto", url: staticFile("fonts/ConnNoto-Regular.woff2"), weight: "400" });
+loadFont({ family: "Conn Noto", url: staticFile("fonts/ConnNoto-Bold.woff2"), weight: "700" });
+import { TransitionSeries } from "@remotion/transitions";
+import type { Language } from "./copy";
+import { clips, closingDurationInFrames } from "./footage";
+import { Intro } from "./scenes/Intro";
+import { Request } from "./scenes/Request";
+import { Fix } from "./scenes/Fix";
+import { Reclaim } from "./scenes/Reclaim";
+import { Resume } from "./scenes/Resume";
+import { Timeline } from "./scenes/Timeline";
+import { Closing } from "./scenes/Closing";
+
+// Clean cuts preserve the fixed geometry and avoid dissolving terminal text.
+export const Demo: React.FC<{ language: Language }> = ({ language }) => <TransitionSeries>
+  <TransitionSeries.Sequence durationInFrames={clips.intro.durationInFrames} name="Ask your agent"><Intro language={language} /></TransitionSeries.Sequence>
+  <TransitionSeries.Sequence durationInFrames={clips.request.durationInFrames} name="Read shared context"><Request language={language} /></TransitionSeries.Sequence>
+  <TransitionSeries.Sequence durationInFrames={clips.fix.durationInFrames} name="Agent works"><Fix language={language} /></TransitionSeries.Sequence>
+  <TransitionSeries.Sequence durationInFrames={clips.reclaim.durationInFrames} name="Human adds a case"><Reclaim language={language} /></TransitionSeries.Sequence>
+  <TransitionSeries.Sequence durationInFrames={clips.resume.durationInFrames} name="Agent reads the change and continues"><Resume language={language} /></TransitionSeries.Sequence>
+  <TransitionSeries.Sequence durationInFrames={clips.timeline.durationInFrames} name="Review the collaboration"><Timeline language={language} /></TransitionSeries.Sequence>
+  <TransitionSeries.Sequence durationInFrames={closingDurationInFrames} name="Conn"><Closing language={language} /></TransitionSeries.Sequence>
+</TransitionSeries>;
+import { Video } from "@remotion/media";
+import { Interactive, staticFile, useVideoConfig } from "remotion";
+import { BrandMark } from "./BrandMark";
+import { copy, type Language } from "./copy";
+import { clips, type ClipId } from "./footage";
+import { Stage } from "./Stage";
+
+/** A fixed frame: motion belongs to the two real apps, not an editorial camera. */
+export const FootageStage: React.FC<{ id: ClipId; language: Language; accent: string }> = ({ id, language, accent }) => {
+  const { fps } = useVideoConfig();
+  const clip = clips[id];
+  const text = copy[language][id];
+
+  return <Stage>
+    <Interactive.Div name="Actual Codex CLI and Conn recording" style={{
+      position: "absolute", left: 48, top: 27, width: 1824, height: 1026,
+      overflow: "hidden", background: "#090c12", borderRadius: 14,
+      border: "1px solid #ffffff15",
+    }}>
+      <Video name={`${id}: actual split-view screencast`} src={staticFile(clip.file)} muted objectFit="contain"
+        trimBefore={Math.round(clip.trimBeforeSeconds * fps)} playbackRate={clip.playbackRate}
+        style={{ width: "100%", height: "100%" }} />
+    </Interactive.Div>
+    <div style={{ position: "absolute", left: 76, top: 45, height: 36, display: "flex", alignItems: "center", gap: 16 }}>
+      <BrandMark size={30} color={accent} animated={false} />
+      <Interactive.Div name="Scene headline" style={{ fontSize: 31, fontWeight: 700, lineHeight: 1.15, letterSpacing: -0.65 }}>
+        {text.title}
+      </Interactive.Div>
+    </div>
+    <Interactive.Div name="Scene caption" style={{
+      position: "absolute", left: 84, right: 84, top: 996,
+      textAlign: "center", fontSize: language === "ko" ? 29 : 28,
+      color: "#c2c6d2", lineHeight: 1.3, fontWeight: 400,
+    }}>
+      {text.caption}
+    </Interactive.Div>
+  </Stage>;
+};
+import { CanvasImage, staticFile } from "remotion";
+import { Stage } from "./Stage";
+
+export const Poster: React.FC = () => <Stage>
+  <div style={{ position: "absolute", width: 880, height: 880, left: 900, top: 30, borderRadius: "50%",
+    background: "radial-gradient(circle, #9a89ef1c, transparent 66%)" }} />
+  <CanvasImage src={staticFile("conn-icon.svg")} style={{ position: "absolute", width: 270, height: 270, right: 225, top: 335,
+    borderRadius: 64, boxShadow: "0 30px 90px #00000075" }} />
+  <div style={{ position: "absolute", top: 238, left: 170, fontSize: 27, fontWeight: 700, color: "#b5aaff", letterSpacing: 5 }}>CONN</div>
+  <div style={{ position: "absolute", top: 321, left: 164, fontSize: 94, lineHeight: 1.13, letterSpacing: -4, fontWeight: 700 }}>
+    Your agent.<br />One shared terminal.
+  </div>
+  <div style={{ position: "absolute", top: 607, left: 172, fontSize: 32, color: "#b9bbcc" }}>
+    Take a turn. Keep working together.
+  </div>
+  <div style={{ position: "absolute", top: 760, left: 172, display: "flex", alignItems: "center", gap: 18, color: "#e1dafa", fontSize: 28 }}>
+    <div style={{ width: 55, height: 55, borderRadius: "50%", border: "1px solid #b5aaff55", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <svg width="17" height="19" viewBox="0 0 17 19"><path d="M2 1L16 9.5L2 18Z" fill="#c9bfff" /></svg>
+    </div>
+    Watch Codex + Conn work together
+  </div>
+  <div style={{ position: "absolute", left: 172, bottom: 115, fontSize: 24, color: "#717689" }}>github.com/eggplantiny/conn</div>
+</Stage>;
+import { registerRoot } from "remotion";
+import { RemotionRoot } from "./Root";
+
+registerRoot(RemotionRoot);
+import { Easing, interpolate, useCurrentFrame } from "remotion";
+
+/** Faithful vector path from the product's Conn icon, with frame-driven light. */
+export const BrandMark: React.FC<{ size?: number; color?: string; animated?: boolean }> = ({
+  size = 44, color = "#b5aaff", animated = true,
+}) => {
+  const frame = useCurrentFrame();
+  return <svg width={size} height={size} viewBox="0 0 64 64" aria-label="Conn">
+    <path d="M44 16 A21 21 0 1 0 44 48" fill="none" stroke={color} strokeWidth="8" strokeLinecap="round"
+      style={{ opacity: animated ? interpolate(frame % 160, [0, 80, 160], [0.78, 1, 0.78], { easing: Easing.bezier(0.4, 0, 0.6, 1) }) : 1 }} />
+    <rect x="42" y="26" width="8" height="12" rx="4" fill="#eeeaff" />
+  </svg>;
+};
+import { FootageStage } from "../FootageStage";
+import type { Language } from "../copy";
+export const Timeline: React.FC<{ language: Language }> = ({ language }) => <FootageStage id="timeline" language={language} accent="#b5aaff" />;
+import { FootageStage } from "../FootageStage";
+import type { Language } from "../copy";
+export const Fix: React.FC<{ language: Language }> = ({ language }) => <FootageStage id="fix" language={language} accent="#b5aaff" />;
+import { FootageStage } from "../FootageStage";
+import type { Language } from "../copy";
+export const Request: React.FC<{ language: Language }> = ({ language }) => <FootageStage id="request" language={language} accent="#e9ad6b" />;
+import { CanvasImage, Interactive, interpolate, staticFile, useCurrentFrame } from "remotion";
+import { closingCopy, type Language } from "../copy";
+import { Stage } from "../Stage";
+
+export const Closing: React.FC<{ language: Language }> = ({ language }) => {
+  const frame = useCurrentFrame();
+  return <Stage>
+    <div style={{ position: "absolute", width: 550, height: 550, borderRadius: "50%", left: 685, top: 175,
+      background: "radial-gradient(circle, #8774df20, #080a1000 67%)" }} />
+    <CanvasImage src={staticFile("conn-icon.svg")} style={{ position: "absolute", width: 122, height: 122,
+      left: 899, top: 227, borderRadius: 28,
+      opacity: interpolate(frame, [0, 12], [0, 1], { extrapolateRight: "clamp" }) }} />
+    <Interactive.Div name="Closing message" style={{ position: "absolute", top: 401, left: 120, right: 120, textAlign: "center",
+      fontSize: language === "ko" ? 84 : 90, fontWeight: 700, letterSpacing: -3.2, lineHeight: 1.18,
+      opacity: interpolate(frame, [6, 22], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) }}>
+      {language === "ko" ? <>쓰던 에이전트와,<br />하나의 터미널에서.</> : <>Your agent.<br />One shared terminal.</>}
+    </Interactive.Div>
+    <Interactive.Div name="Repository" style={{ position: "absolute", top: 683, left: 100, right: 100, textAlign: "center",
+      fontSize: 32, color: "#beb4f7", letterSpacing: 0.5 }}>
+      github.com/eggplantiny/conn
+    </Interactive.Div>
+    <Interactive.Div name="Recording disclosure" style={{ position: "absolute", bottom: 93, left: 100, right: 100, textAlign: "center",
+      fontSize: 22, color: "#9699aa" }}>
+      {closingCopy[language].disclosure}
+    </Interactive.Div>
+  </Stage>;
+};
+import { FootageStage } from "../FootageStage";
+import type { Language } from "../copy";
+export const Resume: React.FC<{ language: Language }> = ({ language }) => <FootageStage id="resume" language={language} accent="#b5aaff" />;
+import { FootageStage } from "../FootageStage";
+import type { Language } from "../copy";
+export const Reclaim: React.FC<{ language: Language }> = ({ language }) => <FootageStage id="reclaim" language={language} accent="#71d9be" />;
+import { FootageStage } from "../FootageStage";
+import type { Language } from "../copy";
+export const Intro: React.FC<{ language: Language }> = ({ language }) => <FootageStage id="intro" language={language} accent="#b5aaff" />;
+ !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~

@@ -33,3 +33,32 @@ Ctrl-C. Never share the connection token or expose these ports publicly.
 
 Native desktop builds use the same shared commands through the thin Tauri
 adapter. Changes to shared UI therefore apply to both execution paths.
+
+## Separate recording session
+
+Use another state directory and pair of ports to record the same UI without
+restarting an existing test session. Build from the repository root:
+
+```sh
+cargo build -p conn-browser-harness --locked
+CONN_TEST_PORT=1433 CONN_TEST_ORIGIN=http://127.0.0.1:1431 \
+  target/debug/conn-browser-harness /tmp/conn-film
+```
+
+In a second terminal, from `frontends/tauri`:
+
+```sh
+CONN_TEST_STATE=/tmp/conn-film \
+  node node_modules/vite/bin/vite.js --mode browser-test --host 127.0.0.1 --port 1431
+```
+
+Open http://127.0.0.1:1431/. `CONN_TEST_PORT` defaults to `1423`;
+`CONN_TEST_ORIGIN` defaults to `http://127.0.0.1:1421` and accepts only an exact
+`http://127.0.0.1:<port>` origin. The backend always binds to loopback and retains
+its per-run token check. These overrides apply to the manual launch above; the
+`npm run test:browser` launcher continues to use its default ports.
+
+Prepare `profiles.json` and `app.json` in the new state directory before opening
+the page to select a demo working directory, clean shell prompt and pacing.
+The new browser origin and state directory keep its timeline separate. Use a
+disposable demo project; state separation still does not sandbox shell access.

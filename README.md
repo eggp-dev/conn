@@ -3,11 +3,8 @@
 </p>
 
 <h1 align="center">Conn</h1>
-<p align="center"><strong>One terminal. You and your agent. You have the conn.</strong></p>
+<p align="center"><strong>Keep your agent. Share your terminal.</strong></p>
 <p align="center">English · <a href="README.ko.md">한국어</a></p>
-<p align="center">
-  <a href="https://github.com/eggplantiny/conn/actions/workflows/ci.yml"><img src="https://github.com/eggplantiny/conn/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
-</p>
 <p align="center">
   <a href="docs/getting-started.md">Get started</a> ·
   <a href="https://github.com/eggplantiny/conn/releases">Releases</a> ·
@@ -15,34 +12,27 @@
   <a href="LICENSE">MIT license</a>
 </p>
 
-Conn lets you and an AI agent work in **the same live shell**. Watch its commands appear, inspect a request before allowing it, and take back control by typing. Your commands and the agent's actions stay together in one timeline.
+Conn connects your AI agent to a terminal you can both use. Keep the conversation in your agent client, let it work in the shared shell, and step in by typing. When you are ready, ask it to read the current screen and continue from your changes.
 
-It runs as a **desktop terminal** or inside your existing terminal, and connects to agents through **MCP or a CLI**. Bring your own agent; Conn does not run a model.
+Use Conn as a desktop app or inside your existing terminal. Agents connect through **MCP or CLI**; Conn does not run a model.
 
-> **v0.3.0 preview.** Native desktop debug builds have passed CI on Linux, macOS ARM and Windows; installation and interactive checks remain separate. The first binary release targets Ubuntu 24.04/26.04 x64, Windows x64 without certificate signing, and both Mac architectures with Developer ID signing/notarization after Apple enrollment. Current Mac builds are ad-hoc test artifacts. Downloads appear after maintainer publication. See [platform policy and checks](docs/platform-support.md).
+[![Watch Codex CLI and Conn: an agent fixes a test, a person adds a case, and the agent continues from the changed terminal.](docs/assets/conn-demo-poster.webp)](docs/assets/conn-demo-en.mp4)
 
-## The moment Conn is for
+**[Watch the demo](docs/assets/conn-demo-en.mp4)** · [한국어 영상](docs/assets/conn-demo-ko.mp4) · [How it was recorded](docs/demo.md)
 
-You're investigating a project with an agent. It reads a file in your terminal, proposes an edit, then asks to remove something. You inspect the **exact requested command**, deny it, and keep working. Later, the timeline tells you what was requested, what was blocked by policy, and what actually reached the shell.
+*An actual Codex CLI session connected through Conn MCP. The demo project is prepared, user-role input is automated, and waiting time is edited.*
 
-<p align="center">
-  <img src="docs/assets/collaboration.svg" width="640" alt="Conn workflow: request control, inspect the exact request, allow or deny, reclaim control by typing, and review the timeline.">
-</p>
+## Work together, take turns
 
-## What you get
+- **Start with your agent.** Connect an MCP client such as Codex CLI. It can read the shared screen and request commands in the same live shell you use.
+- **Step in when you need to.** Review a request, or type directly to reclaim control and stop further agent input. Taking control does not cancel a command already running.
+- **Continue from what changed.** After your turn, ask the agent to read the screen again and continue. Commands and control changes share a timeline, with the original request available to inspect.
 
-- **Human-first control.** Human terminal input revokes the agent's lease before that input reaches the shell. Use the separate take-control action when you want to reclaim control without typing.
-- **Review at the right moment.** Choose observation, human-accepted proposals, or agent execution governed by policy. Control approval and command approval are separate decisions.
-- **A timeline for both of you.** Commands, requests, approvals, denials, policy blocks, and handovers share one view. Expand a request to inspect its original method and arguments, including the planned command when supplied.
-- **Motion with meaning.** The open-C icon responds to control, pending requests, execution grace, pauses, policy blocks, and disconnection. It also opens the app menu. Reduced-motion preferences are respected.
-- **Your environments, in settings.** Profiles cover local shells, WSL, SSH, and Docker. Configure them once and choose the default for new tabs.
-- **English and Korean.** Switch under Settings → Appearance → Language. The same Svelte UI runs in the desktop and the local browser test harness.
+## Get started
 
-## Try it
+### 1. Open Conn
 
-### Build from source
-
-Install Rust using rustup, Node.js 24, and the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your operating system. The repository pins its Rust toolchain.
+Install Rust through rustup, Node.js 24, and your platform's [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/). The repository pins its Rust toolchain.
 
 ```sh
 git clone https://github.com/eggplantiny/conn.git
@@ -53,11 +43,17 @@ npm ci
 npm run tauri dev
 ```
 
-The desktop wrapper builds the matching CLI sidecar automatically. For a CLI-only session, install the CLI with the command above and run `conn` in an existing terminal; Node.js and Tauri are not needed for that path.
+Prefer your existing terminal? After installing the CLI, run `conn` there. That path needs Rust and a native compiler/linker, without Node.js or Tauri. Keep the session open while connecting your agent.
 
-### Connect an agent
+### 2. Connect your agent
 
-With a Conn session open, register an MCP **stdio server** with your agent client:
+For Codex CLI, register Conn and start a new Codex session:
+
+```sh
+codex mcp add conn -- conn mcp
+```
+
+Keep Conn open while your agent connects. Other clients can register `conn mcp` as an MCP **stdio server**. For clients using JSON configuration:
 
 ```json
 {
@@ -70,66 +66,31 @@ With a Conn session open, register an MCP **stdio server** with your agent clien
 }
 ```
 
-This is the common JSON configuration shape; your client may use a different file or format. Use an absolute executable path if its environment cannot find `conn`. See the [agent setup guide](docs/getting-started.md#connect-your-agent) and [plugin instructions](plugin/README.md).
+Configuration format and location depend on the client. Use an absolute executable path if it cannot find `conn`. See [agent setup](docs/getting-started.md#connect-your-agent) for endpoints and client options.
 
-Then ask your agent:
+### 3. Try one request
 
-> Use Conn for all shell work. Read the current screen, request control with a reason and the exact planned command, then show me the current directory. Stop if I deny the request or take control back.
+In the desktop's top-right controls, select **Autopilot**, turn on **Ask before granting**, and set **Grace** to 2 seconds. Then ask your agent:
 
-Without MCP, try this from **a second terminal** while Conn is open:
+> Use Conn for all shell work. Read the current screen, then request control to show the current directory. Include the exact command. Do not change files. Stop if I deny the request or take control back.
 
-```sh
-conn agent --agent-id demo run "pwd" --reason "Show the current directory without changing files"
-```
+Inspect the request and choose **Allow** or **Deny**. After allowing it, type a command yourself to take control. Ask the agent to read the screen again before proposing its next step. Open **Timeline** to review who did what.
 
-That example targets a POSIX shell or PowerShell; use `cd` instead of `pwd` for cmd.exe. The request follows the active tab's mode and policy. **`executed` means input reached the shell, not that a command succeeded or finished.** Read the result before continuing.
+Follow the [first collaboration walkthrough](docs/getting-started.md#3-try-the-handover) for command approvals, Co-pilot mode, and CLI-only use.
 
-## Choose how to collaborate
+## Explore
 
-| Mode | Agent behavior | Your role |
-|---|---|---|
-| **Observe** | Reads the visible terminal | Run the commands yourself |
-| **Co-pilot** | Proposes a command as ghost text | Enter accepts; Esc rejects |
-| **Autopilot** | Types and runs commands within policy | Review flagged actions; reclaim control whenever needed |
-
-The top-right control indicator opens the current tab's controls. Settings holds profiles, agent tools, policy, pacing, and appearance. Enable **Ask before granting** to review every control request, and add **execution grace** for time to cancel before a command runs.
-
-When you switch tabs, the agent cannot read or write an unattended tab unless you explicitly entrust it. Entrusted work remains capped by policy. A new agent-created tab does not switch your view.
-
-## Downloads and platform status
-
-The [release workflow](docs/releasing.md) targets these packages:
-
-| Platform | Desktop | CLI |
-|---|---|---|
-| Ubuntu 24.04 / 26.04 x86-64 | `.deb`, `.AppImage` | `.tar.gz` |
-| macOS Apple Silicon | `.dmg` | `.tar.gz` |
-| macOS Intel | `.dmg` | `.tar.gz` |
-| Windows x86-64 | NSIS `.exe` installer | `.zip` |
-
-Use the artifacts actually attached to a release and read its known limitations. A successful build alone is not a native runtime test. [Platform policy](docs/platform-support.md) defines the release baseline; [verification notes](docs/backend-verification.md) separate dated build evidence from remaining runtime checks.
-
-## Boundaries worth understanding
-
-Conn is a collaboration and mistake-prevention layer, **not a security sandbox**. Policy analyzes agent command input; it cannot prove the behavior of arbitrary shell scripts. Other tools can bypass Conn, and the audit only covers actions routed through it.
-
-The agent can receive the current screen through MCP. Audit records can contain commands, reasons, and original request arguments; keep secrets out of them. Conn has no model API or telemetry, but your agent client and configured SSH/Docker clients may communicate over the network. Sessions end with their frontend; detach/reattach is not implemented.
-
-[Trust model](docs/security.md) · [Report a vulnerability](SECURITY.md) · [Policy reference](docs/policy.md)
-
-## Explore and contribute
-
-| I want to… | Start here |
+| Task | Guide |
 |---|---|
-| Run the first collaboration scenario | [Getting started](docs/getting-started.md) |
-| Configure shells and remote environments | [Backends and profiles](docs/backends.md) |
-| Integrate another agent or frontend | [Protocol](docs/protocol.md) · [Architecture](docs/architecture.md) |
-| Test the shared UI in a browser | [Browser testing](docs/browser-testing.md) |
-| Improve Conn | [Contributing](CONTRIBUTING.md) |
-| Build and publish a version | [Release guide](docs/releasing.md) |
+| Install, connect, and troubleshoot | [Getting started](docs/getting-started.md) |
+| Configure local shells, WSL, SSH, or Docker | [Backends and profiles](docs/backends.md) |
+| Choose approval and execution rules | [Policy](docs/policy.md) |
+| Integrate an agent or frontend | [Protocol](docs/protocol.md) · [Architecture](docs/architecture.md) |
+| Test or contribute | [Browser testing](docs/browser-testing.md) · [Contributing](CONTRIBUTING.md) |
+| Check packages and release requirements | [Platform support](docs/platform-support.md) · [Releasing](docs/releasing.md) |
 
-Useful early contributions include native macOS/Windows testing, reproducible shell compatibility reports, accessible UI improvements, and clearer English/Korean copy. [Open an issue](https://github.com/eggplantiny/conn/issues/new/choose) with your environment and a minimal scenario.
+## Preview status
 
-If this is how you want to work with an agent, **star the repository** and share a workflow you'd like to try.
+**v0.3.0 preview.** Start with the source setup above. Linux, macOS, and Windows packaging targets and validation status are tracked in [platform support](docs/platform-support.md); a passing build does not establish installer or interactive compatibility.
 
-*“You have the conn” hands over the controls. Typing takes them back.*
+Conn is a collaboration and mistake-prevention layer, **not a security sandbox**. Its timeline covers actions routed through Conn; an `executed` record means input reached the shell, not that a command succeeded. Requests and screen snapshots can contain sensitive text. See the [trust model](docs/security.md) and [security reporting policy](SECURITY.md).

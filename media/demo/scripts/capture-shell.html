@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Conn · Live collaboration capture</title>
+  <link rel="stylesheet" href="/xterm.css">
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body { background: #080b12; color: #d7dae0; }
+    main { height: 100%; padding: 72px 24px 80px; display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 16px; }
+    .pane { min-width: 0; min-height: 0; display: flex; flex-direction: column;
+      background: #0b0e15; border: 1px solid #252b37; border-radius: 12px; overflow: hidden; }
+    .label { height: 40px; flex: 0 0 40px; padding: 0 18px; display: flex;
+      align-items: center; justify-content: space-between; border-bottom: 1px solid #202632;
+      font-size: 14px; font-weight: 500; letter-spacing: .02em; background: #10141d; }
+    #connection { color: #9098a7; font-size: 12px; font-weight: 400; }
+    #terminal { flex: 1; min-height: 0; padding: 14px 8px 12px 16px; }
+    #terminal .xterm { height: 100%; }
+    #terminal .xterm-viewport { scrollbar-width: thin; scrollbar-color: #343c4c #0b0e15; }
+    iframe { display: block; flex: 1; width: 100%; min-height: 0; border: 0; background: #0b0e15; }
+  </style>
+</head>
+<body>
+  <main aria-label="Live collaboration recording">
+    <section class="pane" aria-label="Actual Codex CLI session">
+      <header class="label"><span>Codex CLI</span><span id="connection">Connecting…</span></header>
+      <div id="terminal"></div>
+    </section>
+    <section class="pane" aria-label="Actual Conn session">
+      <header class="label"><span>Conn</span></header>
+      <iframe src="__CONN_URL__" title="Conn live terminal" allow="clipboard-read; clipboard-write"></iframe>
+    </section>
+  </main>
+  <script src="/xterm.js"></script>
+  <script src="/addon-fit.js"></script>
+  <script>
+    const terminal = new Terminal({
+      fontSize: 22,
+      fontFamily: '"SF Mono", "JetBrains Mono", "DejaVu Sans Mono", monospace',
+      lineHeight: 1.13,
+      cursorBlink: false,
+      cursorStyle: 'bar',
+      scrollback: 10000,
+      convertEol: false,
+      allowProposedApi: false,
+      theme: {
+        background: '#0b0e15', foreground: '#d7dae0', cursor: '#e0e6ee',
+        selectionBackground: '#33415c', black: '#171d28', brightBlack: '#8992a3',
+        red: '#ee7f86', green: '#86d3aa', yellow: '#eac182', blue: '#92b4eb',
+        magenta: '#ba9feb', cyan: '#87ced0', white: '#d7dae0',
+        brightRed: '#ff9ba3', brightGreen: '#a9e5bd', brightYellow: '#f0d9a6',
+        brightBlue: '#bed2f5', brightMagenta: '#d9bff6', brightCyan: '#a5e2e3',
+        brightWhite: '#f3f5f8'
+      }
+    });
+    const fit = new FitAddon.FitAddon();
+    terminal.loadAddon(fit);
+    terminal.open(document.getElementById('terminal'));
+    const indicator = document.getElementById('connection');
+    let socket;
+    let retry;
+    let ended = false;
+    const send = value => {
+      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(value));
+    };
+    const resize = () => {
+      fit.fit();
+      send({type: 'resize', cols: terminal.cols, rows: terminal.rows});
+    };
+    terminal.onData(data => send({type: 'input', data}));
+    terminal.onBinary(data => send({type: 'input', data}));
+    new ResizeObserver(resize).observe(document.getElementById('terminal'));
+    document.fonts.ready.then(resize);
+    function connect() {
+      clearTimeout(retry);
+      socket = new WebSocket(`ws://${location.host}/terminal`);
+      socket.binaryType = 'arraybuffer';
+      socket.onopen = () => {
+        terminal.reset();
+        ended = false;
+        indicator.textContent = 'Connected';
+        resize();
+      };
+      socket.onmessage = event => {
+        if (event.data instanceof ArrayBuffer) {
+          terminal.write(new Uint8Array(event.data));
+          return;
+        }
+        const message = JSON.parse(event.data);
+        if (message.type === 'exit' || (message.type === 'session' && !message.alive)) {
+          ended = true;
+          const code = message.code ?? message.exitCode;
+          indicator.textContent = `Exited · ${code}`;
+        }
+      };
+      socket.onclose = () => {
+        if (!ended) indicator.textContent = 'Reconnecting…';
+        retry = setTimeout(connect, 1500);
+      };
+      socket.onerror = () => socket.close();
+    }
+    connect();
+    window.addEventListener('beforeunload', () => {
+      clearTimeout(retry);
+      socket?.close();
+    });
+  </script>
+</body>
+</html>
