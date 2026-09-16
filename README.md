@@ -47,7 +47,7 @@ Taking control stops further agent input; it does not cancel a command already r
 
 ## Use the tools you already have
 
-Conn is a desktop app or a session inside your existing terminal. Agents connect through **MCP or CLI**; Conn does not run a model. The demo uses Codex CLI. Other MCP clients can use the copied server configuration.
+Conn is a desktop app or a session inside your existing terminal. Agents connect through **MCP or CLI**; Conn does not run a model. The demo uses Codex CLI. Other local clients supporting MCP stdio can use the copied server configuration.
 
 For CLI-only use, download a `-cli` archive from the release, put `conn` on your `PATH`, and run `conn` in your terminal. [CLI setup and source builds](docs/getting-started.md)
 
