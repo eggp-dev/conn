@@ -1,6 +1,6 @@
 [package]
 name = "conn-desktop"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 description = "A shared terminal for humans and AI agents."
 repository = "https://github.com/eggplantiny/conn"

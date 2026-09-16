@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1 — Preview · 2026-09-16
+
+- Add Check for Updates to the app menu, with preview selection, release notes, platform downloads, retry and English/Korean UI.
+- Query public GitHub releases only on request; preserve the running shell and open downloads in the system browser. Installation remains manual.
+
+한국어: 앱 메뉴에 업데이트 확인을 추가했습니다. 프리뷰 포함 여부와 변경 사항을 확인하고 운영체제에 맞는 파일을 받을 수 있습니다. 설치는 직접 진행합니다.
+
 ## 0.4.0 — Preview · 2026-09-16
 
 - Set up MCP and the bundled collaboration skill from Settings for Codex / local ChatGPT tasks, Claude Code, Cursor, GitHub Copilot in VS Code and Copilot CLI.

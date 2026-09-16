@@ -26,6 +26,25 @@ export function setLang(l: Lang) {
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  "update.title": "Check for Updates",
+  "update.current": "Current version: {version}",
+  "update.previews": "Include preview releases",
+  "update.loading": "Checking for updates…",
+  "update.failed": "Could not check for updates",
+  "update.network": "Check your internet connection and try again.",
+  "update.rate": "GitHub’s request limit was reached. Please try again later.",
+  "update.available": "Conn {version} is available",
+  "update.preview": "Preview",
+  "update.notes": "Release notes",
+  "update.noNotes": "No release notes provided.",
+  "update.install": "Download opens in your browser. Finish your shell work and quit Conn before installing the new version.",
+  "update.latest": "You’re up to date",
+  "update.channel": "No newer release was found for the selected channel.",
+  "update.openFailed": "Could not open your browser. Copy this link:",
+  "update.retry": "Check again",
+  "update.download": "Download update",
+  "update.releases": "View releases",
+
   "agents.title": "Connect your agent",
   "agents.intro": "Choose the client you use on this computer. Set up adds the Conn MCP server and collaboration skill for your user account. Keep Conn open while you work.",
   "agents.refresh": "Refresh",
@@ -497,6 +516,25 @@ const en: Dict = {
 };
 
 const ko: Dict = {
+  "update.title": "업데이트 확인",
+  "update.current": "현재 버전: {version}",
+  "update.previews": "프리뷰 버전 포함",
+  "update.loading": "업데이트 확인 중…",
+  "update.failed": "업데이트를 확인하지 못했습니다",
+  "update.network": "인터넷 연결을 확인한 뒤 다시 시도해 주세요.",
+  "update.rate": "GitHub 요청 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.",
+  "update.available": "Conn {version} 업데이트가 있습니다",
+  "update.preview": "프리뷰",
+  "update.notes": "변경 사항",
+  "update.noNotes": "등록된 변경 사항이 없습니다.",
+  "update.install": "브라우저에서 다운로드를 엽니다. 셸 작업을 마치고 Conn을 종료한 뒤 새 버전을 설치해 주세요.",
+  "update.latest": "최신 버전입니다",
+  "update.channel": "선택한 채널에 더 새로운 릴리스가 없습니다.",
+  "update.openFailed": "브라우저를 열지 못했습니다. 아래 링크를 복사해 주세요:",
+  "update.retry": "다시 확인",
+  "update.download": "업데이트 다운로드",
+  "update.releases": "릴리스 보기",
+
   "agents.title": "에이전트 연결",
   "agents.intro": "이 컴퓨터에서 사용하는 클라이언트를 선택하세요. 설정하기를 누르면 사용자 계정에 Conn MCP 서버와 협업 스킬을 등록합니다. 작업 중에는 Conn을 켜 두세요.",
   "agents.refresh": "새로고침",

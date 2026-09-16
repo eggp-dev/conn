@@ -357,7 +357,7 @@ dependencies = [
 
 [[package]]
 name = "conn-core"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -382,7 +382,7 @@ dependencies = [
 
 [[package]]
 name = "conn-desktop"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "base64 0.22.1",
  "conn-core",
@@ -396,7 +396,7 @@ dependencies = [
 
 [[package]]
 name = "conn-frontend"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "conn-core",
  "jsonc-parser",

@@ -4,6 +4,7 @@
 mod agent_setup;
 mod integrations;
 
+mod updates;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -344,6 +345,8 @@ fn arg<T: serde::de::DeserializeOwned>(args: &Value, key: &str) -> Result<T,Stri
 }
 fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Result<Value,String> {
     match name {
+        "update_info" => Ok(json!({"version": env!("CARGO_PKG_VERSION"), "os": std::env::consts::OS, "arch": std::env::consts::ARCH})),
+        "open_release" => updates::open(&arg::<String>(&args, "url")?).map(|_| Value::Null),
         "get_defaults" => serde_json::to_value(get_defaults(state)).map_err(|e|e.to_string()),
         "set_defaults" => serde_json::to_value(set_defaults(state, arg::<Value>(&args, "defaults")?)?).map_err(|e|e.to_string()),
         "agents" => serde_json::to_value(agents(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
