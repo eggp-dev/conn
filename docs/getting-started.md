@@ -6,7 +6,7 @@ Install Conn, connect your agent, and take turns in the same terminal. The deskt
 
 ## 1. Install and open a session
 
-Download the [v0.4.0 preview](https://github.com/eggplantiny/conn/releases/tag/v0.4.1) for your OS and CPU. See the release notes for the exact signing and runtime verification results.
+Download the [v0.4.1 preview](https://github.com/eggplantiny/conn/releases/tag/v0.4.1) for your OS and CPU. See the release notes for the exact signing and runtime verification results.
 
 | Platform | Download | Install |
 |---|---|---|
@@ -19,14 +19,14 @@ Download the [v0.4.0 preview](https://github.com/eggplantiny/conn/releases/tag/v
 For Ubuntu, run the matching command in your download directory:
 
 ```sh
-sudo apt install ./conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.deb
+sudo apt install ./conn-v0.4.1-x86_64-unknown-linux-gnu-desktop.deb
 ```
 
 Or, for AppImage:
 
 ```sh
-chmod +x ./conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.AppImage
-./conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.AppImage
+chmod +x ./conn-v0.4.1-x86_64-unknown-linux-gnu-desktop.AppImage
+./conn-v0.4.1-x86_64-unknown-linux-gnu-desktop.AppImage
 ```
 
 The Linux build targets Ubuntu 24.04 and 26.04 x64; AppImage still depends on system libraries. Windows previews are intentionally unsigned, so SmartScreen or an unknown-publisher prompt may appear; managed PCs may block installation. Public Mac assets must pass the release's Developer ID signing and notarization checks. See [platform support](platform-support.md) for the limits of each target.

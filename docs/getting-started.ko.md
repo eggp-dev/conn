@@ -6,7 +6,7 @@ Conn을 설치하고 에이전트를 연결해 같은 터미널에서 번갈아 
 
 ## 1. 설치하고 세션 열기
 
-OS와 CPU에 맞는 [v0.4.0 프리뷰](https://github.com/eggplantiny/conn/releases/tag/v0.4.1)를 받으세요. 실제 서명 상태와 실행 검증 결과는 릴리스 안내에서 확인할 수 있습니다.
+OS와 CPU에 맞는 [v0.4.1 프리뷰](https://github.com/eggplantiny/conn/releases/tag/v0.4.1)를 받으세요. 실제 서명 상태와 실행 검증 결과는 릴리스 안내에서 확인할 수 있습니다.
 
 | 플랫폼 | 다운로드 | 설치 |
 |---|---|---|
@@ -19,14 +19,14 @@ OS와 CPU에 맞는 [v0.4.0 프리뷰](https://github.com/eggplantiny/conn/relea
 Ubuntu에서는 다운로드한 폴더에서 실행합니다.
 
 ```sh
-sudo apt install ./conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.deb
+sudo apt install ./conn-v0.4.1-x86_64-unknown-linux-gnu-desktop.deb
 ```
 
 AppImage를 선택했다면 다음과 같이 실행합니다.
 
 ```sh
-chmod +x ./conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.AppImage
-./conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.AppImage
+chmod +x ./conn-v0.4.1-x86_64-unknown-linux-gnu-desktop.AppImage
+./conn-v0.4.1-x86_64-unknown-linux-gnu-desktop.AppImage
 ```
 
 Linux 빌드 대상은 Ubuntu 24.04·26.04 x64이며 AppImage에도 시스템 라이브러리가 필요합니다. Windows 프리뷰는 의도적으로 무서명 배포하므로 SmartScreen·알 수 없는 배포자 경고가 나올 수 있고 관리되는 PC에서는 설치가 차단될 수 있습니다. Mac 공개 파일은 릴리스의 Developer ID 서명·공증 검사를 통과해야 합니다. 각 대상의 범위는 [플랫폼 지원](platform-support.ko.md)을 참고하세요.

@@ -12,7 +12,7 @@ Conn은 나와 AI 에이전트가 함께 쓰는 터미널입니다. 쓰던 에�
 
 **앱을 내려받아 설치하세요. Rust나 Node.js는 필요하지 않습니다.** 에이전트 연결에 쓰는 Conn CLI도 앱에 포함됩니다.
 
-| 운영체제 | v0.4.0 프리뷰 다운로드 |
+| 운영체제 | v0.4.1 프리뷰 다운로드 |
 |---|---|
 | macOS · Apple Silicon | [Apple Silicon용 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-aarch64-apple-darwin-desktop.dmg) |
 | macOS · Intel | [Intel Mac용 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-apple-darwin-desktop.dmg) |

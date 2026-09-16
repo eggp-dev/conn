@@ -12,7 +12,7 @@ Conn connects your AI agent to a terminal you can both use. Keep the conversatio
 
 **Install the desktop app — no Rust or Node.js required.** It includes the Conn CLI used to connect your agent.
 
-| Platform | Download v0.4.0 preview |
+| Platform | Download v0.4.1 preview |
 |---|---|
 | macOS · Apple Silicon | [Download for Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-aarch64-apple-darwin-desktop.dmg) |
 | macOS · Intel | [Download for Intel Mac](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-apple-darwin-desktop.dmg) |
