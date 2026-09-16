@@ -1,11 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- Replace recorded, agent-based external automation with private, owner-scoped native sessions. A startup command launches the supplied program directly on the PTY and replaces the allowed local profile's executable and arguments.
+- Route external writes through a dedicated input source, without agent control approval, policy review, proposals or Grace. Ordinary AI-agent collaboration keeps its existing rules.
+- Exclude private external activity, raw human input and payload-derived titles from Conn recording; block MCP/public IPC discovery and access. No private-to-agent sharing is implemented.
+- Keep request status metadata-only with generic errors. Accept and discard the legacy `intent` parameter; revoke external writes on human input, cancellation, disable or profile removal.
+- Require one explicit re-enable of previous automation permissions; keep the allowed profile selection. Earlier audit/timeline files and backups are not automatically removed.
+- Rename launcher examples generically and update the scripting dictionary and English/Korean guides. Native Apple Event and external-launcher acceptance testing remains required before release.
+
+한국어: 외부 자동화를 비공유 세션과 전용 입력 경로로 교체하는 **미배포 변경**입니다. 시작 프로그램은 기본 셸에 입력하지 않고 직접 실행하며, 에이전트 승인·정책·Grace를 거치지 않습니다. 비공유 활동과 원시 사람 입력은 Conn 기록에 남기지 않고 MCP·공개 IPC 접근을 차단합니다. 이전 허용은 한 번 다시 켜야 합니다. AI 공유와 일반 세션의 사람 입력 기록 개선은 아직 구현하지 않았으며, 과거 기록도 자동 삭제하지 않습니다. 실제 Mac 검증은 배포 전 별도로 필요합니다.
+
 ## 0.5.1 — Preview · 2026-09-16
 
-- Support `create window with default profile command` for PAM-style AppleScript launch templates, with real native windows, per-window sessions/output, the existing approval/policy path, and automatic control return after input delivery.
-- Compile both session-based and window-launch PAM examples in macOS CI. Native interactive verification remains pending.
+- Support `create window with default profile command` for external-application AppleScript launch templates, with real native windows, per-window sessions/output, the existing approval/policy path, and automatic control return after input delivery.
+- Compile both session-based and window-launch external automation examples in macOS CI. Native interactive verification remains pending.
 
-한국어: PAM의 새 창 생성 문법을 추가했습니다. 창별 탭·출력을 분리하고 시작 명령은 기존 승인·정책을 거쳐 전달한 뒤 제어권을 반환합니다. 실제 Mac 대화형 검증은 남아 있습니다.
+한국어: 외부 앱의 새 창 생성 문법을 추가했습니다. 창별 탭·출력을 분리하고 시작 명령은 기존 승인·정책을 거쳐 전달한 뒤 제어권을 반환합니다. 실제 Mac 대화형 검증은 남아 있습니다.
 
 ## 0.5.0 — Preview · 2026-09-16
 
@@ -14,11 +25,11 @@
 - Expose configured/effective modes to MCP clients and distinguish command approval, proposal acceptance and grace co-signing in the timeline.
 - Show connection counts and idle activity separately from local integration configuration.
 - Explicitly release integration setup locks even when a concurrently launched shell inherits a file descriptor.
-- Add a shared external automation service, macOS AppleScript dictionary, session-scoped input requests, Automation settings, and an example PAM launcher. Native Mac/PAM acceptance testing remains unverified in this preview.
+- Add a shared external automation service, macOS AppleScript dictionary, session-scoped input requests, Automation settings, and an example external launcher. Native Mac/external-launcher acceptance testing remains unverified in this preview.
 - Correct locale/readline-sensitive PTY fixtures and symlinked temporary-path release tests.
 - Limit future macOS builds to Apple Silicon; keep existing Intel release assets available.
 
-한국어: 입력·제어권 관련 버그와 타임라인·연결 진단을 수정했습니다. 외부 앱용 AppleScript 연동과 자동화 설정을 추가했으며 실제 Mac/PAM 연동은 이 프리뷰에서 아직 검증하지 못했습니다. 향후 Mac 배포는 Apple Silicon을 대상으로 합니다.
+한국어: 입력·제어권 관련 버그와 타임라인·연결 진단을 수정했습니다. 외부 앱용 AppleScript 연동과 자동화 설정을 추가했으며 실제 Mac 외부 앱 연동은 이 프리뷰에서 아직 검증하지 못했습니다. 향후 Mac 배포는 Apple Silicon을 대상으로 합니다.
 
 ## 0.4.1 — Preview · 2026-09-16
 

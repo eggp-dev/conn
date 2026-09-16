@@ -318,7 +318,7 @@ in CI; full interactive GUI installation/collaboration checks remain pending.
 
 AppleScript support is experimental and disabled by default. Its macOS bundle
 metadata and example compilation are checked in CI; native permission dialogs
-and real PAM integration have not been manually validated. See the
+and real external-application integration have not been manually validated. See the
 [automation guide]({REPOSITORY}/blob/{tag}/docs/external-automation.md) before enabling it.
 
 ## Getting started
@@ -364,7 +364,7 @@ not that the command completed successfully. Start with a disposable project.
 Read the [security model]({REPOSITORY}/blob/{tag}/docs/security.md) and
 [report security issues privately]({REPOSITORY}/security/advisories/new).
 
-한국어: AppleScript는 기본적으로 꺼진 실험적 기능입니다. macOS 사전·예제 컴파일은 CI에서 검사하지만 실제 권한 대화상자와 PAM 연동은 수동 검증하지 못했습니다.
+한국어: AppleScript는 기본적으로 꺼진 실험적 기능입니다. macOS 사전·예제 컴파일은 CI에서 검사하지만 실제 권한 대화상자와 외부 앱 연동은 수동 검증하지 못했습니다.
 이 릴리스는 프리뷰입니다. 명령은 사용자 계정 권한으로 실행되며, 승인 기능은
 운영체제 샌드박스가 아닙니다. 실행 기록은 입력 전달을 뜻하며 명령의 성공을 보장하지
 않습니다. macOS 앱·내장 CLI·별도 CLI는 Developer ID로 서명하며 hardened runtime과

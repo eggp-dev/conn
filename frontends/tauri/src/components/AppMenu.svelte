@@ -10,7 +10,9 @@
   let { onnew, onpalette, ontimeline, onsettings }: { onnew: () => void; onpalette: () => void; ontimeline: () => void; onsettings: () => void } = $props();
   let now = $state(performance.now());
   const active = $derived(cur());
-  const mark = $derived(connMarkState(active, st.backendOnline, now));
+  const preparing = $derived(active.externalStarting || (!st.active && st.externalPending));
+  const mark = $derived(preparing ? "human" : connMarkState(active, st.backendOnline, now));
+  const markLabel = $derived(preparing ? t("private.preparing") : t(`mark.${mark}`));
   const progress = $derived(graceProgress(active.grace, now));
   $effect(() => {
     const grace = active.grace;
@@ -31,9 +33,9 @@
   let trigger: HTMLButtonElement;
   let menu = $state<HTMLDivElement>();
   const entries = $derived([
-    { label: t("menu.new"), key: "⌘T", action: onnew },
+    { label: t("menu.new"), key: "⌘T", action: onnew, disabled: st.externalPending },
     { label: t("menu.palette"), key: "⌘K", action: onpalette },
-    { label: t("menu.timeline"), key: "⌘J", action: ontimeline },
+    ...(!active.externalPrivate ? [{ label: t("menu.timeline"), key: "⌘J", action: ontimeline, disabled: false }] : []),
     { label: t("center.settings") + "…", key: "⌘,", action: onsettings },
     { label: t("update.title") + "…", key: "", action: () => { updates = true; } },
   ]);
@@ -58,7 +60,7 @@
 
 <svelte:window onpointerdown={(e) => { if (open && !root.contains(e.target as Node)) close(); }} />
 <div class="app-menu" bind:this={root} onfocusout={(e) => { if (open && !root.contains(e.relatedTarget as Node)) close(); }}>
-  <button class="trigger" bind:this={trigger} aria-haspopup="menu" aria-expanded={open} aria-controls="conn-app-menu" aria-label={t("mark.menu", { state: t(`mark.${mark}`) })} title={t(`mark.${mark}`)}
+  <button class="trigger" bind:this={trigger} aria-haspopup="menu" aria-expanded={open} aria-controls="conn-app-menu" aria-label={t("mark.menu", { state: markLabel })} title={markLabel}
     onclick={() => open ? close(true) : show()}
     onkeydown={(e) => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); show(e.key === "ArrowUp"); } }}>
     <ConnMark state={mark} {progress} color={agentColor(active.controller.agentId)} motion={st.effects} />
@@ -67,7 +69,7 @@
     <div class="menu" id="conn-app-menu" role="menu" tabindex="-1" aria-label="Conn" bind:this={menu} onkeydown={keydown}>
       {#each entries as entry, i}
         {#if i === 3}<div class="separator" role="separator"></div>{/if}
-        <button role="menuitem" tabindex="-1" onclick={() => { close(true); entry.action(); }}>
+        <button role="menuitem" tabindex="-1" disabled={entry.disabled} onclick={() => { close(true); entry.action(); }}>
           <span>{entry.label}</span><span class="shortcut" aria-hidden="true">{shortcutLabel(entry.key)}</span>
         </button>
       {/each}
@@ -85,6 +87,7 @@
   .menu { position: absolute; top: calc(100% + 8px); left: 0; width: min(300px, calc(100vw - 32px)); padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); }
   .menu button { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: 100%; min-height: 36px; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--fg); text-align: left; font-size: 13px; cursor: pointer; }
   .menu button:hover, .menu button:focus { outline: none; background: var(--surface2); }
+  .menu button:disabled { opacity: .45; cursor: default; }
   .shortcut { color: var(--muted); font-size: 11px; white-space: nowrap; }
   .separator { height: 1px; margin: 5px 4px; background: var(--line); }
 </style>

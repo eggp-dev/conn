@@ -1,39 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
 <dictionary title="Conn Terminology">
-  <suite name="Conn Automation" code="Conn" description="External applications control their own Conn sessions. Enable profiles in Settings → Automation first.">
-    <command name="create window with default profile" code="Conncwdf" description="Open a native window using the default allowed profile and optionally queue a startup command through approval and policy. Returns a session ID, not an iTerm window object.">
+  <suite name="Conn Automation" code="Conn" description="External applications launch and write to their own private Conn sessions without agent approvals or activity recording. Enable profiles in Settings → Automation first. New contract: UNRELEASED.">
+    <command name="create window with default profile" code="Conncwdf" description="Open a private native window. An optional startup program replaces the allowed local profile's program and arguments. Returns an opaque session handle after spawn, not a window object or completion result.">
       <cocoa class="ConnAutomationCommand"/>
-      <parameter name="command" code="cmnd" type="text" optional="yes" description="One-line startup command, passed unchanged. Control returns to the human after delivery."><cocoa key="command"/></parameter>
+      <parameter name="command" code="cmnd" type="text" optional="yes" description="One-line program and arguments parsed with POSIX quotes and escapes. No expansion or implicit shell; use an explicit shell executable for shell syntax. Local profiles only."><cocoa key="command"/></parameter>
       <result type="text"/>
     </command>
-    <command name="create session" code="Connopns" description="Open a tab from an allowed profile and return its session ID. Control still requires user permission.">
+    <command name="create session" code="Connopns" description="Open a private session from an allowed profile and return its opaque handle. No per-command agent approval, policy or Grace path.">
       <cocoa class="ConnAutomationCommand"/>
       <parameter name="profile" code="prof" type="text" optional="yes" description="Saved profile ID; defaults to the default profile."><cocoa key="profile"/></parameter>
       <result type="text"/>
     </command>
-    <command name="write text" code="Connwrte" description="Queue one line through Conn policy; returns a request ID, not command completion. No embedded control characters or credentials.">
+    <command name="write text" code="Connwrte" description="Queue one UTF-8 line to this caller's private session without agent policy or activity recording. Returns a request ID, not command completion. At most 16 KiB; no embedded NUL or control characters.">
       <cocoa class="ConnAutomationCommand"/>
       <direct-parameter type="text"/>
       <parameter name="to session" code="sess" type="text"><cocoa key="session"/></parameter>
-      <parameter name="newline" code="nlin" type="boolean" optional="yes" description="Append Return through policy (default true)."><cocoa key="newline"/></parameter>
-      <parameter name="intent" code="intn" type="text" optional="yes"><cocoa key="intent"/></parameter>
-      <parameter name="request id" code="rqid" type="text" optional="yes" description="Optional unique ID to safely query or repeat the same request within this app run."><cocoa key="requestId"/></parameter>
+      <parameter name="newline" code="nlin" type="boolean" optional="yes" description="Append Return (default true)."><cocoa key="newline"/></parameter>
+      <parameter name="intent" code="intn" type="text" optional="yes" description="Accepted for compatibility only; ignored and discarded."><cocoa key="intent"/></parameter>
+      <parameter name="request id" code="rqid" type="text" optional="yes" description="Optional unique ID for the same payload and options in this app run. Never automatically retry after an uncertain create result or app restart."><cocoa key="requestId"/></parameter>
       <result type="text"/>
     </command>
-    <command name="request status" code="Connrqst" description="Return JSON state for a request from this sender. Delivered means PTY input delivery, not command completion.">
+    <command name="request status" code="Connrqst" description="Return metadata-only JSON: requestId, opaque session, state and optional generic error code. No text, intent or output. Delivered means PTY input delivery, not command completion.">
       <cocoa class="ConnAutomationCommand"/><direct-parameter type="text"/><result type="text"/>
     </command>
-    <command name="request state" code="Connrqss" description="Return the request state as plain text for simple polling.">
+    <command name="request state" code="Connrqss" description="Return queued, delivering, delivered, cancelled or failed as plain text for polling.">
       <cocoa class="ConnAutomationCommand"/><direct-parameter type="text"/><result type="text"/>
     </command>
     <command name="cancel request" code="Conncncl" description="Cancel pending work and revoke this automation session; already delivered input cannot be undone.">
       <cocoa class="ConnAutomationCommand"/><direct-parameter type="text"/><result type="boolean"/>
     </command>
-    <command name="release session" code="Connrels" description="Revoke automation access and leave the tab for the human.">
+    <command name="release session" code="Connrels" description="Revoke the external writer and its queued writes; leave the private terminal for the human. A new session is required for later external input.">
       <cocoa class="ConnAutomationCommand"/><direct-parameter type="text"/><result type="boolean"/>
     </command>
-    <command name="session status" code="Connssta" description="Return JSON mode and lifecycle state for this sender's session.">
+    <command name="session status" code="Connssta" description="Return metadata-only JSON for this sender: opaque session, processAlive, externalPrivate and inputAvailable. No screen, title, cwd or agent access.">
       <cocoa class="ConnAutomationCommand"/><direct-parameter type="text"/><result type="text"/>
     </command>
   </suite>

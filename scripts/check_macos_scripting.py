@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the built macOS scripting bundle and compile its PAM example.
+"""Check the built macOS scripting bundle and compile its external automation example.
 
 This does not execute AppleScript, launch Conn, change TCC permissions, install
 the app, or use release credentials. The CI app is signed ad-hoc only.
@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 NATIVE = ROOT / "frontends/tauri/src-tauri"
-EXAMPLES = [ROOT / "examples/applescript" / name for name in ("pam-connect.applescript", "pam-window.applescript")]
+EXAMPLES = [ROOT / "examples/applescript" / name for name in ("external-connect.applescript", "external-window.applescript")]
 
 
 class ScriptingError(ValueError):
@@ -85,13 +85,13 @@ def check_bundle(app: Path, examples: Path | list[Path], definition: Path = NATI
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, required=True)
-    parser.add_argument("--example", type=Path, action="append", help="Example to compile; repeatable. Defaults to both shipped PAM templates.")
+    parser.add_argument("--example", type=Path, action="append", help="Example to compile; repeatable. Defaults to both shipped external automation templates.")
     args = parser.parse_args()
     if sys.platform != "darwin":
         parser.error("The bundle smoke check requires macOS")
     validate_adapter()
     check_bundle(args.app, args.example or EXAMPLES)
-    print("macOS scripting metadata, bundle signature, and PAM examples compiled; no script executed.")
+    print("macOS scripting metadata, bundle signature, and external automation examples compiled; no script executed.")
 
 
 if __name__ == "__main__":

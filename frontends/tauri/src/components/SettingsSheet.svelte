@@ -4,7 +4,7 @@
   import DiagnosticConnections from "./DiagnosticConnections.svelte";
   import ProfilesPane from "./ProfilesPane.svelte";
   import { fly } from "svelte/transition";
-  import { st, cur, toast, type Analysis } from "../lib/store.svelte";
+  import { st, cur, tab, toast, type Analysis } from "../lib/store.svelte";
   import { cmd, changeMode, type Mode } from "../lib/bridge";
   import { THEMES, agentColor } from "../lib/themes";
   import { t, fmtMs, i18n, setLang, LANGS } from "../lib/i18n.svelte";
@@ -13,16 +13,20 @@
 
   // ---- scope: this tab or all tabs; plus stored defaults for new tabs ----
   let scope = $state<"tab" | "all">("tab");
+  const sharedTabs = $derived(st.order.filter(id => tab(id)?.statusReady && !tab(id)?.externalPrivate));
+  const privateSection = $derived(cur().externalPrivate && ["agents", "policy", "pacing"].includes(st.settingsTab));
   async function apply(name: string, args: Record<string, unknown>) {
+    if (cur().externalPrivate) return;
     if (name === "set_mode") {
-      for (const id of scope === "all" ? st.order : [st.active]) await changeMode(args.mode as Mode, id);
+      for (const id of scope === "all" ? sharedTabs : [st.active]) await changeMode(args.mode as Mode, id);
       return;
     }
-    if (scope === "all") { await Promise.all(st.order.map((id) => cmd(name, { ...args, session: id }))); }
+    if (scope === "all") { await Promise.all(sharedTabs.map((id) => cmd(name, { ...args, session: id }))); }
     else await cmd(name, args);
   }
   async function saveDefaults() {
     const c = cur();
+    if (c.externalPrivate) return;
     await cmd("set_defaults", { defaults: { mode: c.mode, gate: c.gate, pacing: c.pacing, mask: c.mask } });
     toast(t("s.defaults.saved"), "ok");
   }
@@ -50,7 +54,7 @@
   }
   type Live = { conn: number; agentId: string; affordances: string[] };
   let live = $state<Live[]>([]);
-  async function poll() { if (st.settingsTab !== "agents") return; try { live = await cmd<Live[]>("agents"); } catch { live = []; } }
+  async function poll() { if (st.settingsTab !== "agents" || cur().externalPrivate) { live = []; return; } try { live = await cmd<Live[]>("agents"); } catch { live = []; } }
   $effect(() => { void st.active; void st.settingsTab; poll(); const i = setInterval(poll, 2000); return () => clearInterval(i); });
 
   // ---- policy ----
@@ -71,10 +75,10 @@
     try { await cmd("policy_write", { text: policyText }); policyDirty = false; toast(t("s.policy.saved"), "ok"); setTimeout(loadPolicy, 300); }
     catch (e) { toast(t("s.policy.save_failed", { err: String(e) }), "danger"); }
   }
-  $effect(() => { if (st.settingsTab === "policy" && !rules) loadPolicy(); });
+  $effect(() => { if (!cur().externalPrivate && st.settingsTab === "policy" && !rules) loadPolicy(); });
   $effect(() => {
     const c = testCmd;
-    if (!c.trim()) { verdict = null; return; }
+    if (cur().externalPrivate || !c.trim()) { verdict = null; return; }
     const h = setTimeout(async () => { verdict = await cmd("policy_test", { cmd: c }); }, 120);
     return () => clearTimeout(h);
   });
@@ -135,7 +139,7 @@
     } catch (e) { setupError = t("s.connect.failed", { error: String(e) }); }
     finally { setupBusy = false; }
   }
-  $effect(() => { if (st.settingsTab === "agents") loadSetup(); });
+  $effect(() => { if (!cur().externalPrivate && st.settingsTab === "agents") loadSetup(); });
 
   // ---- diagnostics ----
   let diag = $state<any>(null);
@@ -154,23 +158,25 @@
 <aside class="sheet" transition:fly={{ x: 40, duration: 220 }} onkeydown={key} tabindex="-1">
   <header>
     <span class="title">{t("s.title")}</span>
-    {#if st.settingsTab !== "profiles" && st.settingsTab !== "automation"}<span class="scope">
+    {#if !cur().externalPrivate && st.settingsTab !== "profiles" && st.settingsTab !== "automation"}<span class="scope">
       <button class:on={scope === "tab"} onclick={() => (scope = "tab")}><span class="dot" style:background={cur().controller.type === "agent" ? agentColor(cur().controller.agentId) : "var(--muted)"}></span>{cur().title}</button>
-      <button class:on={scope === "all"} onclick={() => (scope = "all")}>{t("s.scope.all")} · {st.order.length}</button>
+      <button class:on={scope === "all"} onclick={() => (scope = "all")}>{t("s.scope.all")} · {sharedTabs.length}</button>
     </span>{/if}
     <button class="btn ghost" onclick={onclose}>{t("close")} <kbd>esc</kbd></button>
   </header>
   <div class="body">
     <nav>
-      {#each NAV as id}
+      {#each NAV.filter(id => !cur().externalPrivate || !["agents", "policy", "pacing"].includes(id)) as id}
         <button class:on={st.settingsTab === id} onclick={() => (st.settingsTab = id)}>{t(`s.nav.${id}`)}</button>
       {/each}
       <span class="spacer"></span>
-      {#if st.settingsTab !== "profiles" && st.settingsTab !== "automation"}<p class="muted small">{t("s.scope.hint")}</p>
+      {#if !cur().externalPrivate && st.settingsTab !== "profiles" && st.settingsTab !== "automation"}<p class="muted small">{t("s.scope.hint")}</p>
       <button class="link" onclick={saveDefaults}>{t("s.defaults.use")}</button>{/if}
     </nav>
     <section>
-      {#if st.settingsTab === "profiles"}
+      {#if privateSection}
+        <p class="muted">{t("private.settings")}</p>
+      {:else if st.settingsTab === "profiles"}
         <ProfilesPane />
       {:else if st.settingsTab === "automation"}
         <AutomationPane />

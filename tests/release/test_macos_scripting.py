@@ -27,6 +27,31 @@ class ScriptingTests(unittest.TestCase):
         config = json.loads((scripting.NATIVE / "tauri.conf.json").read_text())
         self.assertEqual(config["bundle"]["macOS"]["files"]["Resources/Conn.sdef"], "Conn.sdef")
 
+    def test_packaged_examples_use_private_launch_and_input_contract(self):
+        self.assertEqual({p.name for p in scripting.EXAMPLES}, {
+            "external-connect.applescript", "external-window.applescript",
+        })
+        for example in scripting.EXAMPLES:
+            self.assertTrue(example.is_file())
+        source = (ROOT / "examples/applescript/external-connect.applescript").read_text()
+        self.assertIn('write text inputLine to session sessionID', source)
+        self.assertIn('{"cancelled", "failed"}', source)
+        self.assertNotIn('"denied"', source)
+        self.assertNotIn('detail.proposed', source)
+        window = (ROOT / "examples/applescript/external-window.applescript").read_text()
+        self.assertIn('create window with default profile command "/bin/sh -c', window)
+        self.assertIn('__RUN_COMMAND__', window)
+
+    def test_dictionary_preserves_legacy_intent_only_as_ignored_input(self):
+        definition = scripting.ET.fromstring((scripting.NATIVE / "Conn.sdef").read_text())
+        write = next(c for c in definition.findall('.//command') if c.get('name') == 'write text')
+        intent = next(p for p in write.findall('parameter') if p.get('name') == 'intent')
+        self.assertEqual(intent.get('code'), 'intn')
+        self.assertEqual(intent.get('optional'), 'yes')
+        self.assertIn('ignored and discarded', intent.get('description'))
+        state = next(c for c in definition.findall('.//command') if c.get('name') == 'request state')
+        self.assertIn('queued, delivering, delivered, cancelled or failed', state.get('description'))
+
     def test_dictionary_rejects_duplicate_or_missing_event_codes(self):
         for xml in ('<dictionary/>', '<dictionary><command name="write" code="wrte"/></dictionary>',
                     '<dictionary><command name="one" code="Connwrte"/><command name="two" code="Connwrte"/></dictionary>'):

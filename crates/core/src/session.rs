@@ -325,6 +325,10 @@ pub struct AgentConnection {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Status {
+    #[serde(rename = "externalPrivate")]
+    pub external_private: bool,
+    #[serde(rename = "externalInputAvailable")]
+    pub external_input_available: bool,
     #[serde(rename = "profileId")]
     pub profile_id: Option<String>,
     #[serde(rename = "profileName")]
@@ -409,6 +413,9 @@ pub struct SessionConfig {
 }
 
 pub struct Session {
+    // Immutable origin. No public setter or sharing transition in this increment.
+    external_private: bool,
+    external_writer_active: bool,
     execution_profile: Option<crate::backend::Profile>,
     authority: Authority,
     policy: PolicyStore,
@@ -480,7 +487,20 @@ const LOCAL_CONN_BASE: ConnId = 1 << 40;
 
 impl Session {
     pub fn new(cfg: SessionConfig) -> Self {
+        Self::with_origin(cfg, false)
+    }
+
+    /// Construct a private native session without retaining the supplied audit sink.
+    pub fn new_external_private(mut cfg: SessionConfig) -> Self {
+        cfg.audit = Audit::null();
+        cfg.render_prompt = false;
+        Self::with_origin(cfg, true)
+    }
+
+    fn with_origin(cfg: SessionConfig, external_private: bool) -> Self {
         Self {
+            external_private,
+            external_writer_active: external_private,
             authority: Authority::new(Duration::from_secs(cfg.pacing.lease_ttl_secs)),
             policy: cfg.policy,
             approvals: ApprovalQueue::new(Duration::from_secs(cfg.pacing.approval_ttl_secs)),
@@ -522,9 +542,58 @@ impl Session {
         }
     }
 
+    pub fn is_private(&self) -> bool { self.external_private }
+
+    pub fn external_writer_active(&self) -> bool { self.external_private && self.external_writer_active && self.process_alive }
+
+    /// Revocation is permanent for this session. Native ownership is checked by the caller.
+    pub fn revoke_external(&mut self) { self.external_writer_active = false; }
+
+    /// A bounded native delivery lets human input preempt between chunks.
+    pub fn write_external(&mut self, bytes: &[u8]) -> Result<(), SessionError> {
+        if !self.external_writer_active() { return Err(SessionError::NotAvailable("session unavailable".into())); }
+        self.write_terminal_response(bytes)
+    }
+
+    /// In-process terminal protocol replies are not human keystrokes or external
+    /// automation requests. Native UI ownership must be checked before calling.
+    /// They keep working after human takeover without restoring external access.
+    pub fn write_terminal_response(&mut self, bytes: &[u8]) -> Result<(), SessionError> {
+        if !self.external_private || !self.process_alive { return Err(SessionError::NotAvailable("session unavailable".into())); }
+        if bytes.len() > 1024 { return Err(SessionError::InvalidInput("external input chunk is too large".into())); }
+        if !self.write_external_chunk(bytes) {
+            self.revoke_external();
+            return Err(SessionError::NotAvailable("external input failed".into()));
+        }
+        Ok(())
+    }
+
+    fn write_external_chunk(&mut self, bytes: &[u8]) -> bool {
+        #[cfg(unix)]
+        if let Some(fd) = self.master.as_ref().and_then(|m| m.as_raw_fd()) {
+            // The session lock serializes writers. The reader tolerates the brief
+            // nonblocking flag; backpressure never holds the lock or retries bytes.
+            // SAFETY: master owns fd throughout this call; bytes is valid for len.
+            unsafe {
+                let flags = libc::fcntl(fd, libc::F_GETFL);
+                if flags < 0 || libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) < 0 { return false; }
+                let written = libc::write(fd, bytes.as_ptr().cast(), bytes.len());
+                let restored = libc::fcntl(fd, libc::F_SETFL, flags) == 0;
+                return restored && written == bytes.len() as isize;
+            }
+        }
+        // In-memory embedders may supply a non-PTY writer. Platform adapters
+        // must provide equivalent bounded delivery before exposing this path.
+        self.pty.write_all(bytes).and_then(|_| self.pty.flush()).is_ok()
+    }
+
+    fn require_shared(&self) -> Result<(), SessionError> {
+        if self.external_private { Err(SessionError::NotAvailable("session unavailable".into())) } else { Ok(()) }
+    }
+
     /// Test hook: record the order of internal effects.
     pub fn set_trace(&mut self, trace: Arc<Mutex<Vec<String>>>) {
-        self.trace = Some(trace);
+        if !self.external_private { self.trace = Some(trace); }
     }
 
     /// Test hook / embedder override: the shell's cwd for target resolution.
@@ -572,7 +641,7 @@ impl Session {
     // ----- plumbing -------------------------------------------------------
 
     fn write_pty(&mut self, bytes: &[u8]) {
-        self.trace(format!("pty_write:{}", String::from_utf8_lossy(bytes)));
+        if !self.external_private { self.trace(format!("pty_write:{}", String::from_utf8_lossy(bytes))); }
         let _ = self.pty.write_all(bytes);
         let _ = self.pty.flush();
     }
@@ -628,6 +697,7 @@ impl Session {
     // ----- connections ----------------------------------------------------
 
     pub fn register_conn(&mut self, conn: ConnId, kind: ConnKind, name: &str, sink: Box<dyn EventSink>) {
+        if self.external_private { return; }
         self.conns.insert(conn, ConnInfo { kind, name: name.to_string(), sink, stream_output: false, last_activity: Instant::now() });
         if kind == ConnKind::Agent {
             self.audit.record(name, "connect", json!({ "conn": conn }));
@@ -636,6 +706,7 @@ impl Session {
 
     /// Register a frontend. `stream_output` = also send raw PTY output as `Output` events.
     pub fn register_frontend(&mut self, conn: ConnId, name: &str, sink: Box<dyn EventSink>, stream_output: bool) {
+        if self.external_private && conn < LOCAL_CONN_BASE { return; }
         self.conns.insert(conn, ConnInfo { kind: ConnKind::Frontend, name: name.to_string(), sink, stream_output, last_activity: Instant::now() });
     }
 
@@ -700,6 +771,11 @@ impl Session {
 
     /// Bytes from the human. This is the preemptive takeover path.
     pub fn human_input(&mut self, bytes: &[u8]) {
+        if self.external_private {
+            if !bytes.is_empty() { self.revoke_external(); }
+            if self.process_alive { self.write_pty(bytes); }
+            return;
+        }
         if self.ui.is_some() {
             self.ui_input(bytes);
             return;
@@ -747,6 +823,7 @@ impl Session {
 
     /// Revoke the agent lease without typing anything (`conn take`, frontend button).
     pub fn human_take(&mut self) -> Option<String> {
+        self.revoke_external();
         self.cancel_scheduled_if(|_| true, "taken");
         let lease = self.authority.revoke()?;
         let ev = ServerEvent::ControlRevoked { lease: lease.label(), agent_id: lease.agent_id.clone(), reason: RevokeReason::Taken };
@@ -787,6 +864,7 @@ impl Session {
     }
 
     pub fn process_exited(&mut self, exit_code: Option<u32>) {
+        self.revoke_external();
         self.process_alive = false;
         self.cancel_scheduled_if(|_| true, "process_exited");
         if let Some(lease) = self.authority.revoke() {
@@ -903,6 +981,7 @@ impl Session {
 
     /// Agent: ask the human to look at this session.
     pub fn agent_request_attention(&mut self, conn: ConnId, reason: Option<String>) -> Result<(), SessionError> {
+        self.require_shared()?;
         let agent_id = self.agent_name(conn);
         let req = AttentionRequest { agent_id: agent_id.clone(), reason: reason.clone(), at: chrono::Local::now().format("%H:%M:%S").to_string() };
         self.attention_request = Some(req);
@@ -923,6 +1002,7 @@ impl Session {
 
     /// May this agent do `a` right now? Mask first, then the state table.
     pub fn agent_can(&self, conn: ConnId, a: Affordance) -> Result<(), SessionError> {
+        self.require_shared()?;
         self.check_mask(a)?;
         if self.affordances(Actor::Agent { conn }).contains(&a) {
             return Ok(());
@@ -936,6 +1016,7 @@ impl Session {
     /// This session was just opened as a tab by `conn`. It starts unattended and
     /// knocks with the agent's reason so the human can decide to look or entrust.
     pub fn agent_opened_tab(&mut self, conn: ConnId, reason: Option<String>) {
+        if self.external_private { return; }
         let agent_id = self.agent_name(conn);
         self.opened_by = Some(agent_id.clone());
         self.attention_request = Some(AttentionRequest { agent_id: agent_id.clone(), reason: reason.clone(), at: chrono::Local::now().format("%H:%M:%S").to_string() });
@@ -945,6 +1026,7 @@ impl Session {
 
     /// Tell this session's listeners that `conn` moved between tabs.
     pub fn agent_switched_tab(&mut self, conn: ConnId, from: &str, to: &str) {
+        if self.external_private { return; }
         let agent_id = self.agent_name(conn);
         self.audit.record(&agent_id, "tab_switched", json!({ "from": from, "to": to }));
         self.broadcast(ServerEvent::AgentSwitchedTab { agent_id, from: from.into(), to: to.into() });
@@ -1017,6 +1099,7 @@ impl Session {
     }
 
     pub fn affordances(&self, actor: Actor) -> Vec<Affordance> {
+        if self.external_private && matches!(actor, Actor::Agent { .. }) { return vec![]; }
         let has_pending = match actor {
             Actor::Agent { conn } => self.approvals.has_pending_for(conn),
             Actor::Human => false,
@@ -1052,6 +1135,7 @@ impl Session {
 
     pub fn snapshot(&self, actor: Actor) -> Result<Snapshot, SessionError> {
         if let Actor::Agent { conn } = actor {
+            self.require_shared()?;
             self.check_mask(Affordance::Snapshot)?;
             // The agent sees exactly what the human sees. Nobody looking → nothing to see.
             if !self.attended_for(conn) {
@@ -1080,6 +1164,7 @@ impl Session {
 
     /// Preserve the submitted parameters before any human decision. Metadata does not authorize execution.
     pub fn agent_request_control_original(&mut self, conn: ConnId, params: serde_json::Value) -> Result<ControlOutcome, SessionError> {
+        self.require_shared()?;
         if !params.is_object() || params.to_string().len() > 65536 {
             return Err(SessionError::InvalidInput("request parameters must be an object of at most 64 KiB".into()));
         }
@@ -1367,6 +1452,7 @@ impl Session {
     }
 
     pub fn agent_release_control(&mut self, conn: ConnId) -> Result<(), SessionError> {
+        self.require_shared()?;
         let lease = self.authority.revoke_if_held_by(conn).ok_or(AuthorityError::NotController)?;
         self.cancel_scheduled_if(|s| s.conn == conn, "released");
         self.audit.record(&lease.agent_id, "lease_released", json!({ "lease": lease.label() }));
@@ -1376,6 +1462,7 @@ impl Session {
     }
 
     fn check_writer(&mut self, conn: ConnId, a: Affordance) -> Result<(), SessionError> {
+        self.require_shared()?;
         if !self.process_alive {
             return Err(SessionError::ProcessExited);
         }
@@ -1626,6 +1713,7 @@ impl Session {
 
     /// Ctrl-C. Cancels any pending approval / scheduled execution from this agent.
     pub fn agent_interrupt(&mut self, conn: ConnId) -> Result<(), SessionError> {
+        self.require_shared()?;
         if !self.process_alive {
             return Err(SessionError::ProcessExited);
         }
@@ -1765,6 +1853,13 @@ impl Session {
     /// Periodic maintenance. Call often (the engine uses 50 ms): lease expiry, approval
     /// expiry, scheduled executions, screen-change coalescing, policy reload.
     pub fn tick(&mut self, now: Instant) {
+        if self.external_private {
+            if self.screen_dirty {
+                self.screen_dirty = false;
+                self.broadcast(ServerEvent::ScreenChanged { revision: self.screen.revision() });
+            }
+            return;
+        }
         // Waiting on a human decision is not idleness: keep the lease alive meanwhile.
         if let Some(conn) = self.authority.controller().lease().map(|l| l.conn) {
             if self.approvals.has_pending_for(conn) {
@@ -1815,6 +1910,8 @@ impl Session {
         let mut connected_agents: Vec<_> = agent_connections.iter().map(|c| c.agent_id.clone()).collect();
         connected_agents.dedup();
         Status {
+            external_private: self.external_private,
+            external_input_available: self.external_writer_active(),
             profile_id: self.execution_profile.as_ref().map(|p|p.id.clone()),
             profile_name: self.execution_profile.as_ref().map(|p|p.name.clone()),
             review_required: self.execution_profile.as_ref().is_some_and(|p|p.needs_review()),

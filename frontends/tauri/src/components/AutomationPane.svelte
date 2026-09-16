@@ -4,7 +4,7 @@
   import { t } from '../lib/i18n.svelte';
   import { toast } from '../lib/store.svelte';
   type Config = { enabled: boolean; profiles: string[] };
-  type Info = { config: Config; nativeSupported: boolean; recent: {caller: string; result: {requestId: string; session: string; tab?: string; state: string}}[] };
+  type Info = { config: Config; nativeSupported: boolean; requiresReenable: boolean };
   let info = $state<Info | null>(null);
   let profiles = $state<{id: string; name: string}[]>([]);
   let busy = $state(false);
@@ -65,6 +65,7 @@
   {#if error}<p role="alert">{error}</p>{/if}
   {#if info}
     {#if !info.nativeSupported}<p class="notice">{t('automation.macos')}</p>{/if}
+    {#if info.requiresReenable}<p class="notice" role="status">{t('automation.reenable')}</p>{/if}
     <label class="toggle"><input type="checkbox" checked={info.config.enabled} disabled={busy || !info.nativeSupported} onchange={toggle} />{t('automation.enable')}</label>
     <p class="hint">{t('automation.permission')}</p>
     <h3>{t('automation.profiles')}</h3>
@@ -73,10 +74,6 @@
     {/each}
     <p class="hint">{t('automation.scope')}</p>
     <button class="revoke" disabled={busy} onclick={revoke}>{t('automation.revoke')}</button>
-    <h3>{t('automation.recent')}</h3>
-    {#if info.recent.length}
-      <ul>{#each info.recent as request}<li><strong>{request.caller}</strong><span>{request.result.tab ?? request.result.session} · {t(`automation.state.${request.result.state}`)}</span></li>{/each}</ul>
-    {:else}<p class="hint">{t('automation.empty')}</p>{/if}
   {/if}
 </div>
 
@@ -91,5 +88,5 @@
   input { accent-color: var(--agent); } .revoke { justify-self: start; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); cursor: pointer; }
   .revoke:disabled { cursor: default; opacity: .5; }
   .revoke:focus-visible, input:focus-visible { outline: 2px solid var(--agent); outline-offset: 3px; }
-  ul { list-style: none; padding: 0; margin: 0; } li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 12px; } li span { color: var(--muted); } li strong, li span, .profile span { min-width: 0; overflow-wrap: anywhere; }
+  .profile span { min-width: 0; overflow-wrap: anywhere; }
 </style>

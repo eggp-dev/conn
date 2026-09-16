@@ -7,6 +7,7 @@ struct Window {
     active: Option<String>,
     ready: bool,
     closed: bool,
+    pending: bool,
 }
 
 #[derive(Default)]
@@ -15,6 +16,9 @@ impl Windows {
     pub fn available(&self, window: &str) -> bool {
         !window.is_empty() && !self.0.get(window).is_some_and(|w| w.closed)
     }
+    pub fn prepare(&mut self, window: &str) { self.0.entry(window.into()).or_default().pending = true; }
+    pub fn pending(&self, window: &str) -> bool { self.0.get(window).is_some_and(|w| w.pending) }
+    pub fn finish_prepare(&mut self, window: &str) { if let Some(w) = self.0.get_mut(window) { w.pending = false; } }
     pub fn add(&mut self, window: &str, session: &str) {
         let w = self.0.entry(window.into()).or_default();
         w.sessions.push(session.into());

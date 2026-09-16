@@ -4,6 +4,14 @@
 
 Sessions report `profileId`, `profileName` and `reviewRequired` in `status`. A selected profile is resolved when the session starts; subsequent profile edits apply to new sessions. See [shell backends](backends.md).
 
+**Unreleased private external sessions:** the native AppleScript contract is a
+separate entry point, not a new role or bypass flag in this protocol. External
+private sessions are omitted from public IPC/MCP discovery and cannot be accessed
+by explicit ID, subscriptions, snapshots or detailed status. Public callers cannot
+select private origin, disable recording or share such a session with an agent.
+See [external automation](external-automation.md) for its owner-bound,
+metadata-only status API. These changes are not present in released v0.5.1.
+
 ```
 → {"id":1,"method":"hello","params":{"kind":"frontend","name":"my-ui","streamOutput":true}}
 ← {"id":1,"result":{"conn":3,"kind":"frontend"}}

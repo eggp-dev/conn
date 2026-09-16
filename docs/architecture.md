@@ -148,6 +148,20 @@ semantics remain in the core. See [the adapter contract](agent-integrations.md#a
 ## External automation (unreleased)
 
 The [external automation contract](external-automation.md) ([한국어](external-automation.ko.md))
-covers an external PAM or launcher opening Conn and sending terminal input, with
-macOS AppleScript as the first adapter. The shared service and macOS adapter are implemented for the next release;
-native Apple Event and PAM acceptance tests remain required.
+describes the **UNRELEASED replacement** for the recorded automation path in
+v0.5.1. The macOS AppleScript adapter binds a native caller to its own private
+session. A startup program replaces the allowed local profile's executable and
+argv; later input follows a dedicated external writer, not agent control or policy.
+
+Private origin is established before spawn. The existing native window and PTY
+renderer are reused, while private input/output is excluded from public IPC/MCP
+and Conn activity recording. Settings keep permissions only; request polling keeps
+bounded, volatile metadata with generic error codes. Human input, cancellation or
+revocation invalidates the external writer. Upgrades require one explicit
+re-enable of old permissions. Native Apple Event and external-launcher acceptance
+checks remain release gates.
+
+Sharing an external private session with an AI agent, Windows/Linux external
+adapters, and replacement of ordinary-session human-input history are later work,
+not features of this increment. See [the design](automation-design.md) for those
+separate transitions and [the trust model](security.md) for limits.

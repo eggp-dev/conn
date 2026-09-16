@@ -44,6 +44,7 @@ impl Audit {
     }
 
     pub fn record(&self, actor: &str, action: &str, fields: Value) {
+        if matches!(self.sink, Sink::Null) { return; }
         let fields = match fields {
             Value::Object(m) => m,
             Value::Null => Map::new(),

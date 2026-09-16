@@ -141,3 +141,50 @@ fn native_windows_keep_tabs_output_and_close_lifecycle_separate() {
     assert!(events.iter().filter(|(_,v)| v["session"] == a).all(|(_,v)| v["window"] == "main"));
     assert!(events.iter().filter(|(_,v)| v["session"] == b || v["session"] == extra).all(|(_,v)| v["window"] == "automation-1"));
 }
+
+#[test]
+fn private_output_and_terminal_responses_are_confined_to_the_owning_native_window() {
+    use base64::Engine as _;
+    let dir = tempfile::tempdir().unwrap();
+    configure_profile(dir.path());
+    let events = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let recorded = events.clone();
+    let target: Arc<std::sync::Mutex<std::sync::Weak<Harness>>> = Default::default();
+    let receiver = target.clone();
+    let h = Arc::new(Harness::new(dir.path().into(), dir.path().join("conn.sock"), Arc::new(move |name, value| {
+        recorded.lock().unwrap().push((name.to_owned(), value.clone()));
+        if name == "ss:tab_opened" && value["externalStarting"] == true {
+            if let Some(h) = receiver.lock().unwrap().upgrade() {
+                h.invoke_in_window(value["window"].as_str().unwrap(), "attach_output", json!({"session":value["session"]})).unwrap();
+            }
+        }
+    })));
+    *target.lock().unwrap() = Arc::downgrade(&h);
+    h.invoke_in_window("main", "automation_save", json!({"config":{"enabled":true,"profiles":["test"]}})).unwrap();
+    h.prepare_automation_window("private-window").unwrap();
+    h.invoke_in_window("private-window", "ui_ready", json!({})).unwrap();
+    h.automate_in_window("private-window", conn_frontend::automation::Caller {
+        identity: "synthetic-caller:1".into(), name: "Synthetic launcher".into(), still_alive: Arc::new(|| true),
+    }, "window.create", json!({"command":"/bin/sh -c 'printf SYNTHETIC_WINDOW_OUTPUT; sleep 60'"})).unwrap();
+    let started = h.invoke_in_window("private-window", "start", json!({"rows":24,"cols":80})).unwrap();
+    let id = started["session"].as_str().unwrap();
+    assert!(h.invoke("attach_output", json!({"session":id})).is_err());
+    assert!(h.invoke_in_window("main", "terminal_response", json!({"session":id,"data":"\u{1b}[0n"})).is_err());
+    h.invoke_in_window("private-window", "attach_output", json!({"session":id})).unwrap();
+    h.invoke_in_window("private-window", "terminal_response", json!({"session":id,"data":"\u{1b}[0n"})).unwrap();
+    assert_eq!(h.invoke_in_window("private-window", "status", json!({"session":id})).unwrap()["externalInputAvailable"], true);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let output: Vec<u8> = events.lock().unwrap().iter().filter(|(name,v)| name == "ss:output" && v["session"] == id)
+            .flat_map(|(_,v)| base64::engine::general_purpose::STANDARD.decode(v["data"].as_str().unwrap()).unwrap()).collect();
+        if String::from_utf8_lossy(&output).contains("SYNTHETIC_WINDOW_OUTPUT") { break; }
+        assert!(Instant::now() < deadline, "private output was not rendered");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let captured = events.lock().unwrap();
+    assert!(captured.iter().filter(|(_,v)| v["session"] == id).all(|(_,v)| v["window"] == "private-window"));
+    assert!(captured.iter().filter(|(name,_)| name != "ss:output").all(|(_,v)| !v.to_string().contains("SYNTHETIC_WINDOW_OUTPUT")));
+    drop(captured);
+    assert!(!std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap_or_default().contains("SYNTHETIC_WINDOW_OUTPUT"));
+    h.close_window("private-window");
+}

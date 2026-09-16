@@ -4,10 +4,20 @@
   // The island: a dot in the top-right corner that says who has the conn. When
   // something happens it pops to the centre, rolls a short message in, then
   // settles back into the dot. Compositor-only motion (transform / opacity).
-  import { st, cur } from "../lib/store.svelte";
+  import { cmd } from "../lib/bridge";
+  import { st, cur, toast } from "../lib/store.svelte";
   import { agentColor } from "../lib/themes";
   let { onopen }: { onopen: () => void } = $props();
   const t = $derived(cur());
+  let stopping = $state(false);
+  async function stopExternal() {
+    if (stopping) return;
+    stopping = true;
+    const session = t.id;
+    try { await cmd("take", { session }); const current = st.tabs[session]; if (current) current.externalInputAvailable = false; }
+    catch { toast(tr("private.stop_failed"), "danger"); }
+    finally { stopping = false; }
+  }
   const isAgent = $derived(t.controller.type === "agent");
   const color = $derived(isAgent ? agentColor(t.controller.agentId) : "var(--muted)");
   const who = $derived(!t.processAlive ? tr("shell.exited") : isAgent ? tr("conn.agent", { agent: t.controller.agentId ?? "" }) : tr("conn.yours"));
@@ -26,6 +36,13 @@
   const words = $derived(st.announcement ? st.announcement.text.split(" ") : []);
 </script>
 
+{#if t.externalPrivate}
+  <div class="private" title={tr("private.description")}>
+    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+    <span>{tr(t.externalStarting ? "private.preparing" : t.processAlive ? "private.label" : "private.finished")}</span>
+    {#if t.processAlive && !t.externalStarting}<button disabled={stopping || !t.externalInputAvailable} onclick={stopExternal}>{tr(!t.externalInputAvailable ? "private.stopped" : "private.stop")}</button>{/if}
+  </div>
+{:else}
 <!-- dot (idle state) -->
 <button class="dot" class:agent={isAgent} class:facts={showLabel} class:typing={t.typing} class:hidden={!!st.announcement} class:dead={!t.processAlive}
         style:--c={color} onclick={onopen} title={`${label} · ${shortcutLabel("⌘K")}`}>
@@ -49,7 +66,15 @@
   {/key}
 {/if}
 
+{/if}
+
 <style>
+  .private { position: absolute; top: 12px; right: 14px; z-index: 21; display: flex; align-items: center; gap: 7px; min-height: 26px; max-width: min(55vw, 360px); padding: 0 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 11.5px; }
+  .private span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .private svg { flex-shrink: 0; }
+  .private button { padding: 3px 4px 3px 9px; border: 0; border-left: 1px solid var(--line); background: transparent; color: var(--fg); cursor: pointer; font: inherit; white-space: nowrap; }
+  .private button:disabled { color: var(--muted); cursor: default; }
+  .private button:focus-visible { outline: 2px solid var(--agent); outline-offset: 2px; border-radius: 3px; }
   .dot { position: absolute; top: 12px; right: 14px; z-index: 21; height: 26px; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 8px; border-radius: 999px;
     border: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter: blur(12px); cursor: pointer;
     transform: scale(1); opacity: 1; transition: transform .28s cubic-bezier(.34, 1.56, .64, 1), opacity .18s, border-color .4s; will-change: transform, opacity; }

@@ -8,8 +8,8 @@ export type TimelineItem = {
   originalRequest?: OriginalRequest;
   controlId?: string; requestId?: string; lease?: string; commands?: string[]; saved?: boolean;
 };
-export type TimelineState = { items: TimelineItem[]; seq: number; activeControl?: string; waiting: Record<string, string>; awaitingResult: Record<string, string>; refs: Record<string, string> };
-export const newTimeline = (): TimelineState => ({ items: [], seq: 0, waiting: {}, awaitingResult: {}, refs: {} });
+export type TimelineState = { externalPrivate?: boolean; items: TimelineItem[]; seq: number; activeControl?: string; waiting: Record<string, string>; awaitingResult: Record<string, string>; refs: Record<string, string> };
+export const newTimeline = (externalPrivate = false): TimelineState => ({ externalPrivate, items: [], seq: 0, waiting: {}, awaitingResult: {}, refs: {} });
 export type TimelineFilter = "all" | "commands" | "collaboration";
 export const isCommand = (it: TimelineItem) => it.kind === "exec";
 export const isPolicyBlocked = (it: TimelineItem) => it.policy === "deny" || it.policy?.startsWith("deny:") === true;
@@ -80,6 +80,7 @@ export function commandDecisions(it: TimelineItem): ("approved" | "accepted" | "
 
 /** Correlate by backend request/approval/proposal/execution IDs, never by rendered labels. */
 export function recordTimeline(s: TimelineState, ev: Record<string, any>, t = Date.now()) {
+  if (s.externalPrivate || ev.externalPrivate) return;
   switch (ev.event) {
     case "control_requested": {
       const r = ev.request;
@@ -175,7 +176,9 @@ export function recordTimeline(s: TimelineState, ev: Record<string, any>, t = Da
 }
 /** Old audit entries have no reliable tab/lease identity. Label them explicitly, without guessing links. */
 export function importSavedActivity(s: TimelineState, entries: Record<string, any>[]) {
+  if (s.externalPrivate) return;
   for (const e of entries) {
+    if (e.externalPrivate || e.origin === "external_automation" || e.originalRequest?.params?.origin === "external_automation" || String(e.actor ?? "").startsWith("AppleScript · ")) continue;
     if (e.action === "control_request_resolved" && ["denied", "expired"].includes(e.state)) {
       const it = add(s, e.actor, "control", e.reason ?? "", Date.parse(e.ts) || Date.now());
       it.originalRequest = e.originalRequest;

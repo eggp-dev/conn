@@ -32,5 +32,5 @@ pub mod screen;
 pub mod session;
 
 pub use config::Pacing;
-pub use engine::{Engine, EngineConfig};
+pub use engine::{Engine, EngineConfig, LaunchSpec};
 pub use session::{ServerEvent, Session, SessionConfig, SharedSession};

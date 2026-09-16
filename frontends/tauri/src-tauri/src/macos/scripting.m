@@ -2,6 +2,8 @@
 #import <Carbon/Carbon.h>
 #import <libproc.h>
 #import <sys/proc_info.h>
+#include <stdbool.h>
+#include <stdio.h>
 
 extern char *conn_automation_call(const char *payload);
 extern void conn_automation_free(char *payload);
@@ -42,7 +44,7 @@ extern void conn_automation_free(char *payload);
     NSDictionary *request = @{@"operation": operation, @"params": params, @"identity": identity, @"name": name};
     NSError *error = nil;
     NSData *data = [NSJSONSerialization dataWithJSONObject:request options:0 error:&error];
-    if (!data) { self.scriptErrorNumber = -1700; self.scriptErrorString = error.localizedDescription; return nil; }
+    if (!data) { self.scriptErrorNumber = -1700; self.scriptErrorString = @"Invalid automation request"; return nil; }
     NSString *payload = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
     [self suspendExecution];
     // Suspending returns first. Shell creation never blocks the Cocoa event loop.
@@ -77,4 +79,15 @@ void conn_script_link(void) {
     // Keep the class in the static archive and initialize Cocoa's bundle dictionary.
     [ConnAutomationCommand class];
     [NSScriptSuiteRegistry sharedScriptSuiteRegistry];
+}
+
+// Recheck sender lifetime at delivery. A recycled PID is never the original owner.
+bool conn_script_sender_alive(const char *identity) {
+    if (!identity) return false;
+    int pid = 0;
+    unsigned long long seconds = 0, micros = 0;
+    if (sscanf(identity, "%d:%llu:%llu", &pid, &seconds, &micros) != 3 || pid <= 0) return false;
+    struct proc_bsdinfo info = {0};
+    int size = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof(info));
+    return size == sizeof(info) && info.pbi_start_tvsec == seconds && info.pbi_start_tvusec == micros;
 }

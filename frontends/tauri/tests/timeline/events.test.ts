@@ -167,13 +167,26 @@ test('saved commands preserve explicit human acts without guessing from policy o
   assert.deepEqual(s.items.map(commandDecisions), [['approved'],['accepted'],['cosigned'],[]]);
 });
 
-test('external automation remains identifiable on linked commands and saved audit records', () => {
+test('private sessions never collect live events or restored activity', () => {
+  const s = newTimeline(true);
+  recordTimeline(s, {event:'human_exec', cmd:'private-marker'});
+  recordTimeline(s, {event:'control_requested', request:{requestId:'r1', agentId:'caller', reason:'private-marker'}});
+  recordTimeline(s, exec('private-marker'));
+  importSavedActivity(s, [{action:'exec', actor:'human', cmd:'private-marker'}]);
+  assert.equal(s.items.length, 0);
+  assert.equal(JSON.stringify(s).includes('private-marker'), false);
+});
+
+test('restoration excludes old external automation payloads while keeping normal commands', () => {
   const s = newTimeline();
-  recordTimeline(s,{...grant(),originalRequest:{method:'request_control',params:{origin:'external_automation'}}});
-  recordTimeline(s,exec());
-  assert.equal(isExternalAutomation(s,s.items[1]),true);
-  importSavedActivity(s,[{action:'exec',actor:'AppleScript · PAM',cmd:'ssh example.invalid',policy:'allow'}]);
-  assert.equal(isExternalAutomation(s,s.items[2]),true);
-  recordTimeline(s,{event:'human_exec',cmd:'pwd'});
-  assert.equal(isExternalAutomation(s,s.items[3]),false);
+  importSavedActivity(s, [
+    {action:'exec', actor:'AppleScript · launcher', cmd:'private-marker'},
+    {action:'exec', actor:'human', cmd:'private-marker', externalPrivate:true},
+    {action:'exec', actor:'caller', cmd:'private-marker', origin:'external_automation'},
+    {action:'control_request_resolved', actor:'caller', reason:'private-marker', state:'denied', originalRequest:{method:'request_control',params:{origin:'external_automation'}}},
+    {action:'exec', actor:'human', cmd:'pwd'},
+  ]);
+  recordTimeline(s, {event:'human_exec', cmd:'private-marker', externalPrivate:true});
+  assert.deepEqual(s.items.map(item => item.text), ['pwd']);
+  assert.equal(JSON.stringify(s).includes('private-marker'), false);
 });

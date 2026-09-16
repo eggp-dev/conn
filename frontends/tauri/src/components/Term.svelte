@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { Terminal } from "@xterm/xterm";
   import { FitAddon } from "@xterm/addon-fit";
+  import { observeTerminalInput } from "../lib/terminalInput";
   import { cmd, onOutput, b64ToBytes } from "../lib/bridge";
   import { st, tab } from "../lib/store.svelte";
   import { THEMES, applyTheme, agentColor } from "../lib/themes";
@@ -42,7 +43,10 @@
   }
 
   onMount(() => {
-    term = new Terminal({ fontFamily: '"SF Mono", "JetBrains Mono", Menlo, monospace', fontSize: st.fontSize, cursorBlink: true, allowProposedApi: true, scrollback: 5000, macOptionIsMeta: true });
+    term = new Terminal({ logLevel: t.externalPrivate ? "off" : "info", fontFamily: '"SF Mono", "JetBrains Mono", Menlo, monospace', fontSize: st.fontSize, cursorBlink: true, allowProposedApi: true, scrollback: 5000, macOptionIsMeta: true });
+    // Consume clipboard escape sequences before any private output is attached.
+    // Returning true prevents fall-through to built-in or future addon handlers.
+    const privateClipboard = term.parser.registerOscHandler(52, () => t.externalPrivate);
     fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
@@ -59,31 +63,44 @@
       if (appShortcut(e) && /^[1-9]$/.test(key)) return false;
       return true;
     });
-    term.onData((data) => {
-      if (st.paletteOpen || st.settingsOpen) return;
+    const inputListener = observeTerminalInput(term, (data, origin) => {
       const tb = t;
-      if (tb.proposal?.ready) {
+      if (tb.externalPrivate && origin === "terminal") {
+        // The first child output can precede the final started-status refresh.
+        cmd("terminal_response", { session, data });
+        return;
+      }
+      // During preparation, genuine input cancels the pending launch. The native
+      // boundary discards these bytes instead of sending them to a future child.
+      if (tb.externalStarting) {
+        cmd("input", { session, data });
+        return;
+      }
+      if (st.paletteOpen || st.settingsOpen) return;
+      if (!tb.externalPrivate && tb.proposal?.ready) {
         if (data === "\r") { cmd("accept_proposal", { session, proposalId: tb.proposal.id }); return; }
         if (data === "\x1b") { cmd("reject_proposal", { session, proposalId: tb.proposal.id }); return; }
       }
-      if (tb.approval) {
+      if (!tb.externalPrivate && tb.approval) {
         const map: Record<string, string> = { a: "grant", y: "grant", d: "deny", n: "deny", "\x1b": "deny", A: "allow_session" };
         const d = data === "A" && tb.reviewRequired ? undefined : map[data];
         if (d) { cmd("approve", { session, approvalId: tb.approval.id, decision: d }); return; }
       }
-      if (tb.grace) {
+      if (!tb.externalPrivate && tb.grace) {
         if (data === "\r") { cmd("execute_now", { session, execId: tb.grace.execId }); return; }
         if (data === "\x1b") { cmd("cancel_exec", { session, execId: tb.grace.execId }); return; }
       }
+      if (tb.externalPrivate) tb.externalInputAvailable = false;
       cmd("input", { session, data });
     });
     term.onRender(measure);
     term.onCursorMove(measure);
     const ro = new ResizeObserver(() => { if (active) fit.fit(); });
     ro.observe(host);
-    const un = onOutput((p) => { if (p.session === session) term.write(b64ToBytes(p.data)); });
-    un.then(() => cmd("attach_output", { session }));
-    return () => { ro.disconnect(); un.then((f) => f()); term.dispose(); };
+    let mounted = true;
+    const un = onOutput((p) => { if (mounted && p.session === session) term.write(b64ToBytes(p.data)); });
+    un.then(() => { if (mounted) return cmd("attach_output", { session }); }).catch(() => {});
+    return () => { mounted = false; inputListener.dispose(); privateClipboard.dispose(); ro.disconnect(); un.then((f) => f()); term.dispose(); };
   });
 
   $effect(() => {
