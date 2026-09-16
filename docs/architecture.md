@@ -138,3 +138,9 @@ When a connection drops, the lease it held and its pending approvals are cleaned
 ## Session lifetime
 
 `conn` ends when the child shell ends. It removes the socket file and restores termios. There is no detach/reattach.
+
+## Client integration adapters
+
+The shared frontend owns local MCP/skill setup through a client registry, lossless
+config editors and a guarded file transaction layer. Terminal and permission
+semantics remain in the core. See [the adapter contract](agent-integrations.md#adapter-contract).

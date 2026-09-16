@@ -97,6 +97,16 @@ fn configuration_text(command: &str, endpoint: &str) -> Value {
     })
 }
 
+pub(crate) fn configuration_command_path(config_dir: &Path) -> Option<PathBuf> {
+    if let Some(bundled) = sidecar_path() {
+        #[cfg(target_os = "linux")]
+        if std::env::var_os("APPIMAGE").is_some() { return Some(config_dir.join("agent-bin/conn")); }
+        let _ = config_dir;
+        return Some(bundled);
+    }
+    on_path()
+}
+
 fn cli_for_configuration(config_dir: &Path) -> Result<PathBuf, String> {
     if let Some(bundled) = sidecar_path() {
         // AppImage mounts are temporary. Copy only on this explicit setup

@@ -2,6 +2,7 @@
 //! events reach the webview tagged with the session id.
 
 mod agent_setup;
+mod integrations;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -16,6 +17,7 @@ use std::path::PathBuf;
 use conn_core::backend::{Profile, Availability};
 
 struct AppState {
+    integration_home: Option<PathBuf>,
     config_dir: PathBuf,
     socket: PathBuf,
     engines: parking_lot::Mutex<HashMap<String, Arc<Engine>>>,
@@ -34,8 +36,12 @@ impl AppHandle { fn emit(&self, name: &str, value: Value) -> Result<(), String> 
 pub struct Harness { state: Arc<AppState>, app: AppHandle }
 impl Harness {
     pub fn new(config_dir: PathBuf, socket: PathBuf, emit: Emit) -> Self {
+        Self::with_setup_home(config_dir, socket, emit, None)
+    }
+    /// The browser harness uses the same installer against disposable client files.
+    pub fn with_setup_home(config_dir: PathBuf, socket: PathBuf, emit: Emit, integration_home: Option<PathBuf>) -> Self {
         let defaults = std::fs::read_to_string(config_dir.join("app.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(json!({}));
-        let state = Arc::new(AppState { config_dir, socket, engines: Default::default(), hub: Hub::new(), server: Default::default(), seq: parking_lot::Mutex::new(0), defaults: parking_lot::Mutex::new(defaults) });
+        let state = Arc::new(AppState { integration_home, config_dir, socket, engines: Default::default(), hub: Hub::new(), server: Default::default(), seq: parking_lot::Mutex::new(0), defaults: parking_lot::Mutex::new(defaults) });
         let app = AppHandle { state: Arc::downgrade(&state), emit };
         Self { state, app }
     }
@@ -370,6 +376,13 @@ fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Resul
         "policy_test" => serde_json::to_value(policy_test(state, arg::<String>(&args, "session")?, arg::<String>(&args, "cmd")?)?).map_err(|e|e.to_string()),
         "audit_tail" => serde_json::to_value(audit_tail(state, arg::<usize>(&args, "n")?)?).map_err(|e|e.to_string()),
         "cli_status" => Ok(agent_setup::cli_status()),
+        "agent_integrations" => {
+            let connected: Vec<String> = state.engines.lock().values().flat_map(|e| e.session().lock().agent_affordances().into_iter().map(|(_, id, _)| id)).collect();
+            integrations::catalog(&state.config_dir, &state.socket, state.integration_home.as_deref(), &connected)
+        },
+        "agent_integration_install" => { integrations::configure(&state.config_dir, &state.socket, state.integration_home.as_deref(), &arg::<String>(&args, "client")?)?; Ok(Value::Null) },
+        "agent_integration_remove" => { integrations::remove(&state.config_dir, state.integration_home.as_deref(), &arg::<String>(&args, "client")?)?; Ok(Value::Null) },
+        "agent_integration_manual" => integrations::manual(&state.config_dir, &state.socket, &arg::<String>(&args, "client")?),
         "agent_configuration" => agent_setup::configuration(&state.config_dir, &state.socket),
         "install_cli" => serde_json::to_value(agent_setup::install_cli(&state.config_dir)?).map_err(|e|e.to_string()),
         "profiles_catalog" => serde_json::to_value(profiles_catalog(state)?).map_err(|e|e.to_string()),

@@ -16,7 +16,7 @@ Actions는 커밋 SHA로 고정합니다. PR에는 서명 secrets를 제공하�
 2. 사용자 관점의 [CHANGELOG](../CHANGELOG.md) 항목을 적고 정확한 릴리스 버전으로 확인합니다.
 
    ```sh
-   python3 scripts/release.py check --tag v0.3.0
+   python3 scripts/release.py check --tag v0.4.0
    python3 scripts/check_repo.py
    python3 -m unittest discover -s tests/release -v
    cargo test --workspace --locked
@@ -30,8 +30,8 @@ Actions는 커밋 SHA로 고정합니다. PR에는 서명 secrets를 제공하�
 4. 의도적으로 버전 태그를 생성하고 푸시합니다.
 
    ```sh
-   git tag -a v0.3.0 -m "Conn v0.3.0 preview"
-   git push origin v0.3.0
+   git tag -a v0.4.0 -m "Conn v0.4.0 preview"
+   git push origin v0.4.0
    ```
 
 태그 생성과 공개는 관리자의 릴리스 작업입니다. 공개된 태그를 옮기지 마세요.

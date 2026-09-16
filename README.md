@@ -12,14 +12,14 @@ Conn connects your AI agent to a terminal you can both use. Keep the conversatio
 
 **Install the desktop app — no Rust or Node.js required.** It includes the Conn CLI used to connect your agent.
 
-| Platform | Download v0.3.0 preview |
+| Platform | Download v0.4.0 preview |
 |---|---|
-| macOS · Apple Silicon | [Download for Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-aarch64-apple-darwin-desktop.dmg) |
-| macOS · Intel | [Download for Intel Mac](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-apple-darwin-desktop.dmg) |
-| Windows · x64 | [Download Windows installer](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-pc-windows-msvc-setup.exe) |
-| Ubuntu · x64 | [Download .deb](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage) |
+| macOS · Apple Silicon | [Download for Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-aarch64-apple-darwin-desktop.dmg) |
+| macOS · Intel | [Download for Intel Mac](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-apple-darwin-desktop.dmg) |
+| Windows · x64 | [Download Windows installer](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-pc-windows-msvc-setup.exe) |
+| Ubuntu · x64 | [Download .deb](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.AppImage) |
 
-[All downloads and checksums](https://github.com/eggplantiny/conn/releases/tag/v0.3.0) · [Installation help](docs/getting-started.md) · [Platform support](docs/platform-support.md)
+[All downloads and checksums](https://github.com/eggplantiny/conn/releases/tag/v0.4.0) · [Installation help](docs/getting-started.md) · [Platform support](docs/platform-support.md)
 
 Windows preview installers are unsigned and may show an unknown-publisher warning. Linux packages are built on Ubuntu 24.04. See the release notes for signing and tested platform details.
 
@@ -36,7 +36,7 @@ An agent fixes a failing test. You add an edge case. It reads the updated termin
 ## Your first collaboration
 
 1. **Open Conn.** Install the app above and choose your shell under **Settings → Profiles**.
-2. **Connect your agent.** Open **Settings → Agents**, choose **MCP JSON** or **Codex TOML**, and copy the agent configuration into your client. It includes the bundled executable and this session's endpoint, so you do not need to set up `PATH`. Keep Conn open. [Connection guide](docs/getting-started.md#connect-your-agent)
+2. **Connect your agent.** Open **Settings → Agents**, choose Codex, Claude Code, Cursor or GitHub Copilot, and click **Set up**. Conn registers MCP and its collaboration skill using the bundled CLI. Restart your client and keep Conn open. [Connection guide](docs/agent-integrations.md)
 3. **Try one request.** In the top-right controls, select **Autopilot**, enable **Ask before granting**, and set **Grace** to 2 seconds. Ask your agent:
 
    > Use Conn to read the current screen, then request control to show the current directory. Include the exact command. Do not change files. Stop if I deny the request or take control back.

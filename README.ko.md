@@ -12,14 +12,14 @@ Conn은 나와 AI 에이전트가 함께 쓰는 터미널입니다. 쓰던 에�
 
 **앱을 내려받아 설치하세요. Rust나 Node.js는 필요하지 않습니다.** 에이전트 연결에 쓰는 Conn CLI도 앱에 포함됩니다.
 
-| 운영체제 | v0.3.0 프리뷰 다운로드 |
+| 운영체제 | v0.4.0 프리뷰 다운로드 |
 |---|---|
-| macOS · Apple Silicon | [Apple Silicon용 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-aarch64-apple-darwin-desktop.dmg) |
-| macOS · Intel | [Intel Mac용 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-apple-darwin-desktop.dmg) |
-| Windows · x64 | [Windows 설치 파일](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-pc-windows-msvc-setup.exe) |
-| Ubuntu · x64 | [.deb 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage) |
+| macOS · Apple Silicon | [Apple Silicon용 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-aarch64-apple-darwin-desktop.dmg) |
+| macOS · Intel | [Intel Mac용 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-apple-darwin-desktop.dmg) |
+| Windows · x64 | [Windows 설치 파일](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-pc-windows-msvc-setup.exe) |
+| Ubuntu · x64 | [.deb 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.AppImage) |
 
-[전체 다운로드와 체크섬](https://github.com/eggplantiny/conn/releases/tag/v0.3.0) · [설치 도움말](docs/getting-started.ko.md) · [플랫폼 지원](docs/platform-support.ko.md)
+[전체 다운로드와 체크섬](https://github.com/eggplantiny/conn/releases/tag/v0.4.0) · [설치 도움말](docs/getting-started.ko.md) · [플랫폼 지원](docs/platform-support.ko.md)
 
 Windows 프리뷰는 무서명으로 배포하므로 알 수 없는 게시자 안내가 나타날 수 있습니다. Linux 패키지는 Ubuntu 24.04에서 빌드합니다. 실제 서명·검증 범위는 릴리스 노트에서 확인할 수 있습니다.
 
@@ -36,7 +36,7 @@ https://github.com/user-attachments/assets/4f06180c-6a2c-4c10-99e1-7941db86470b
 ## 첫 협업 시작하기
 
 1. **Conn을 여세요.** 위 앱을 설치하고 **설정 → 프로필**에서 사용할 셸을 선택합니다.
-2. **에이전트를 연결하세요.** **설정 → 에이전트**에서 **MCP JSON** 또는 **Codex TOML**을 선택하고 설정을 복사해 클라이언트에 등록합니다. 앱에 포함된 실행 파일과 현재 세션의 연결 주소가 들어 있어 `PATH`를 따로 설정할 필요가 없습니다. Conn은 켜 두세요. [연결 안내](docs/getting-started.ko.md#에이전트-연결)
+2. **에이전트를 연결하세요.** **설정 → 에이전트**에서 Codex·Claude Code·Cursor·GitHub Copilot을 고르고 **설정하기**를 누릅니다. 앱에 포함된 CLI로 MCP와 협업 스킬을 함께 등록합니다. 클라이언트를 재시작하고 Conn은 켜 두세요. [연결 안내](docs/agent-integrations.ko.md)
 3. **요청을 하나 보내세요.** 오른쪽 위 제어 메뉴에서 **Autopilot**을 선택하고 **conn 을 넘길 때마다 묻는다**를 켜세요. **실행 유예 2초**로 설정한 뒤 에이전트에게 요청합니다.
 
    > Conn으로 현재 화면을 읽고, 현재 폴더를 확인할 제어권을 요청해. 정확한 명령을 포함하고 파일은 변경하지 마. 내가 거절하거나 제어권을 되찾으면 멈춰.

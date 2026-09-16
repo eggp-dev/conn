@@ -100,3 +100,10 @@ conn agent --agent-id demo run "pwd" --reason "파일을 변경하지 않고 현
 ```
 
 cmd.exe 대상에는 `cd`를 사용하세요. `run`은 요청, 입력, Enter, 결과 스냅샷을 하나의 연결에서 처리합니다. `request`, `type`, `enter`를 서로 다른 CLI 프로세스로 실행하면 제어권을 공유하지 않습니다. 지속적인 연결에는 MCP 또는 [JSON 프로토콜](../docs/protocol.md)을 사용하세요.
+
+## Desktop setup adapters
+
+Conn v0.4.0 and newer install the MCP entry and this skill together from
+**Settings → Agents**. See [English](../docs/agent-integrations.md) /
+[한국어](../docs/agent-integrations.ko.md). This folder remains useful for manual
+plugin distribution; the desktop installer embeds the same `SKILL.md` in its binary.

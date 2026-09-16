@@ -6,32 +6,32 @@ Conn을 설치하고 에이전트를 연결해 같은 터미널에서 번갈아 
 
 ## 1. 설치하고 세션 열기
 
-OS와 CPU에 맞는 [v0.3.0 프리뷰](https://github.com/eggplantiny/conn/releases/tag/v0.3.0)를 받으세요. 실제 서명 상태와 실행 검증 결과는 릴리스 안내에서 확인할 수 있습니다.
+OS와 CPU에 맞는 [v0.4.0 프리뷰](https://github.com/eggplantiny/conn/releases/tag/v0.4.0)를 받으세요. 실제 서명 상태와 실행 검증 결과는 릴리스 안내에서 확인할 수 있습니다.
 
 | 플랫폼 | 다운로드 | 설치 |
 |---|---|---|
-| Ubuntu x64 | [`.deb`](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.deb) | 아래 명령으로 설치한 뒤 앱 목록에서 Conn을 엽니다. |
-| Ubuntu x64 | [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage) | 실행 권한을 준 뒤 파일을 엽니다. |
-| macOS Apple Silicon | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-aarch64-apple-darwin-desktop.dmg) | DMG를 열고 Conn을 Applications로 옮긴 뒤 그곳에서 실행합니다. |
-| macOS Intel | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-apple-darwin-desktop.dmg) | DMG를 열고 Conn을 Applications로 옮긴 뒤 그곳에서 실행합니다. |
-| Windows x64 | [설치 `.exe`](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-pc-windows-msvc-setup.exe) | 설치 파일을 실행하고 시작 메뉴에서 Conn을 엽니다. |
+| Ubuntu x64 | [`.deb`](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.deb) | 아래 명령으로 설치한 뒤 앱 목록에서 Conn을 엽니다. |
+| Ubuntu x64 | [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.AppImage) | 실행 권한을 준 뒤 파일을 엽니다. |
+| macOS Apple Silicon | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-aarch64-apple-darwin-desktop.dmg) | DMG를 열고 Conn을 Applications로 옮긴 뒤 그곳에서 실행합니다. |
+| macOS Intel | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-apple-darwin-desktop.dmg) | DMG를 열고 Conn을 Applications로 옮긴 뒤 그곳에서 실행합니다. |
+| Windows x64 | [설치 `.exe`](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-pc-windows-msvc-setup.exe) | 설치 파일을 실행하고 시작 메뉴에서 Conn을 엽니다. |
 
 Ubuntu에서는 다운로드한 폴더에서 실행합니다.
 
 ```sh
-sudo apt install ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.deb
+sudo apt install ./conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.deb
 ```
 
 AppImage를 선택했다면 다음과 같이 실행합니다.
 
 ```sh
-chmod +x ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage
-./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage
+chmod +x ./conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.AppImage
+./conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.AppImage
 ```
 
 Linux 빌드 대상은 Ubuntu 24.04·26.04 x64이며 AppImage에도 시스템 라이브러리가 필요합니다. Windows 프리뷰는 의도적으로 무서명 배포하므로 SmartScreen·알 수 없는 배포자 경고가 나올 수 있고 관리되는 PC에서는 설치가 차단될 수 있습니다. Mac 공개 파일은 릴리스의 Developer ID 서명·공증 검사를 통과해야 합니다. 각 대상의 범위는 [플랫폼 지원](platform-support.ko.md)을 참고하세요.
 
-원하면 파일과 함께 [SHA256SUMS](https://github.com/eggplantiny/conn/releases/download/v0.3.0/SHA256SUMS)를 받으세요. Linux는 `sha256sum --ignore-missing -c SHA256SUMS`, macOS는 `shasum -a 256 <파일>` 결과와 해당 줄 비교, Windows는 `Get-FileHash <파일> -Algorithm SHA256`을 사용합니다. 체크섬은 파일 손상을 확인하며 코드 서명과는 별개입니다.
+원하면 파일과 함께 [SHA256SUMS](https://github.com/eggplantiny/conn/releases/download/v0.4.0/SHA256SUMS)를 받으세요. Linux는 `sha256sum --ignore-missing -c SHA256SUMS`, macOS는 `shasum -a 256 <파일>` 결과와 해당 줄 비교, Windows는 `Get-FileHash <파일> -Algorithm SHA256`을 사용합니다. 체크섬은 파일 손상을 확인하며 코드 서명과는 별개입니다.
 
 ## 2. 터미널 설정
 
@@ -47,15 +47,15 @@ Autopilot은 정책 안에서 에이전트 실행을 허용합니다. **Co-pilot
 
 **설정 → 에이전트 → 에이전트 연결**에서 진행합니다.
 
-1. Codex라면 **Codex TOML**, `mcpServers` 설정을 쓰는 클라이언트라면 **MCP JSON**을 고릅니다.
-2. **에이전트 설정 복사**를 누릅니다.
-3. 복사한 서버 항목을 클라이언트의 MCP 설정에 추가한 뒤 클라이언트를 다시 실행하거나 연결합니다. Codex는 `~/.codex/config.toml`에 항목을 합치며 다른 설정은 유지하세요.
+1. Codex / ChatGPT 로컬 작업, Claude Code, Cursor, GitHub Copilot(VS Code 또는 CLI)을 고릅니다.
+2. **설정하기**를 눌러 MCP 서버와 협업 스킬을 등록합니다.
+3. 카드의 안내대로 클라이언트를 재시작하거나 다시 연결합니다. Conn을 켜 두고 에이전트에게 현재 터미널을 읽어 달라고 요청하세요.
 
-복사한 설정에는 CLI의 **실제 절대 경로**와 현재 Conn 세션의 연결 주소가 들어갑니다. Rust 설치, Cargo 실행, `PATH` 등록은 필요하지 않으며 AppImage도 같은 절차를 사용합니다. 에이전트가 연결하는 동안 Conn을 열어 두세요. 앱을 업데이트하거나 옮기거나 재설치했다면 설정을 다시 복사하세요.
+**설정 완료**는 파일 등록을 뜻하며 실제 접속하면 **현재 접속 중**으로 표시됩니다. 클라이언트의 신뢰 확인과 명령 승인은 별도로 유지됩니다. [클라이언트별 경로·갱신·해제·문제 해결](agent-integrations.ko.md).
 
-서버는 MCP stdio 방식입니다. 클라이언트마다 설정 형식이 다르며 JSON은 설정 데이터이므로 셸 명령으로 실행하지 않습니다. 이 로컬 연결만으로 브라우저 전용 클라이언트에 필요한 원격 서버가 제공되지는 않습니다.
+앱에 포함된 CLI의 절대 경로와 현재 연결 주소를 사용합니다. Rust·Cargo·Node.js 설치나 PATH 변경은 필요 없으며 AppImage의 CLI는 유지되는 경로에 복사합니다. 앱을 옮기거나 재설치했다면 **설정 갱신**을 사용하세요. 기존에 수동으로 등록한 Conn 항목은 덮어쓰지 않고 검토하도록 안내합니다.
 
-Conn은 MCP 초기화 정보에서 에이전트 이름을 정합니다. 고정 이름이 필요하면 `mcp` 뒤에 `--agent-id my-agent`를 추가하세요. 도구 목록을 새로 읽지 못하는 클라이언트에는 `--tools static`을 사용할 수 있습니다. Codex로 인식되는 클라이언트는 자동 모드에서 이미 정적 목록을 사용하며 실제 호출마다 권한을 검사합니다. [함께 제공하는 스킬](../plugin/skills/conn/SKILL.md)에서 절차를 확인할 수 있습니다.
+다른 클라이언트는 **다른 MCP 클라이언트 · 수동 설정**을 펼쳐 MCP JSON 또는 Codex TOML을 복사합니다. JSON은 설정 데이터이므로 셸 명령으로 실행하지 않습니다. 이 로컬 연결은 ChatGPT 웹·클라우드 작업용 원격 서버를 제공하지 않습니다.
 
 ### 직접 설정과 연결 주소
 
@@ -91,7 +91,7 @@ codex mcp add conn -- conn mcp
 
 ## 기존 터미널과 CLI 사용
 
-[Linux x64](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-unknown-linux-gnu-cli.tar.gz), [Mac Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-aarch64-apple-darwin-cli.tar.gz), [Mac Intel](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-apple-darwin-cli.tar.gz), [Windows x64](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-pc-windows-msvc-cli.zip)용 CLI 압축 파일을 받으세요. `conn`(Windows는 `conn.exe`)을 사용자 `PATH`에 포함된 폴더에 풀고 터미널을 다시 엽니다.
+[Linux x64](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-cli.tar.gz), [Mac Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-aarch64-apple-darwin-cli.tar.gz), [Mac Intel](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-apple-darwin-cli.tar.gz), [Windows x64](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-pc-windows-msvc-cli.zip)용 CLI 압축 파일을 받으세요. `conn`(Windows는 `conn.exe`)을 사용자 `PATH`에 포함된 폴더에 풀고 터미널을 다시 엽니다.
 
 ```sh
 conn --version

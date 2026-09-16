@@ -2,9 +2,9 @@
 
 [English](platform-support.md) · 한국어 · [설치](getting-started.ko.md) · [릴리스](releasing.ko.md)
 
-Conn은 MIT 라이선스 소스와 네이티브 바이너리를 [GitHub Releases](https://github.com/eggplantiny/conn/releases/tag/v0.3.0)로 제공합니다. 모든 데스크톱 패키지는 같은 Rust 엔진과 Svelte UI를 사용하며 브라우저 하네스는 개발용 어댑터입니다.
+Conn은 MIT 라이선스 소스와 네이티브 바이너리를 [GitHub Releases](https://github.com/eggplantiny/conn/releases/tag/v0.4.0)로 제공합니다. 모든 데스크톱 패키지는 같은 Rust 엔진과 Svelte UI를 사용하며 브라우저 하네스는 개발용 어댑터입니다.
 
-## v0.3.0 프리뷰 대상
+## v0.4.0 프리뷰 대상
 
 아래 표는 빌드·배포 기준이며 모든 대상의 실제 조작 검증이 끝났다는 뜻은 아닙니다. 각 릴리스에 실제 빌드, 서명, 설치, 실행 결과를 구분해 기록합니다. 날짜별 근거는 [백엔드 검증 기록](backend-verification.md)에서도 확인할 수 있습니다.
 
