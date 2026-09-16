@@ -1,4 +1,5 @@
 <script lang="ts">
+  import UpdateDialog from "./UpdateDialog.svelte";
   import ConnMark from "./ConnMark.svelte";
   import { st, cur } from "../lib/store.svelte";
   import { agentColor } from "../lib/themes";
@@ -25,6 +26,7 @@
     return () => cancelAnimationFrame(frame);
   });
   let open = $state(false);
+  let updates = $state(false);
   let root: HTMLDivElement;
   let trigger: HTMLButtonElement;
   let menu = $state<HTMLDivElement>();
@@ -33,6 +35,7 @@
     { label: t("menu.palette"), key: "⌘K", action: onpalette },
     { label: t("menu.timeline"), key: "⌘J", action: ontimeline },
     { label: t("center.settings") + "…", key: "⌘,", action: onsettings },
+    { label: t("update.title") + "…", key: "", action: () => { updates = true; } },
   ]);
   function close(restore = false) { open = false; if (restore) trigger.focus(); }
   async function show(last = false) {
@@ -71,6 +74,8 @@
     </div>
   {/if}
 </div>
+
+{#if updates}<UpdateDialog onclose={async () => { updates = false; await tick(); trigger.focus(); }} />{/if}
 
 <style>
   .app-menu { position: relative; flex: 0 0 auto; margin-right: 6px; }

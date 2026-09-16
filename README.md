@@ -14,12 +14,12 @@ Conn connects your AI agent to a terminal you can both use. Keep the conversatio
 
 | Platform | Download v0.4.0 preview |
 |---|---|
-| macOS · Apple Silicon | [Download for Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-aarch64-apple-darwin-desktop.dmg) |
-| macOS · Intel | [Download for Intel Mac](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-apple-darwin-desktop.dmg) |
-| Windows · x64 | [Download Windows installer](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-pc-windows-msvc-setup.exe) |
-| Ubuntu · x64 | [Download .deb](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.AppImage) |
+| macOS · Apple Silicon | [Download for Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-aarch64-apple-darwin-desktop.dmg) |
+| macOS · Intel | [Download for Intel Mac](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-apple-darwin-desktop.dmg) |
+| Windows · x64 | [Download Windows installer](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-pc-windows-msvc-setup.exe) |
+| Ubuntu · x64 | [Download .deb](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-unknown-linux-gnu-desktop.AppImage) |
 
-[All downloads and checksums](https://github.com/eggplantiny/conn/releases/tag/v0.4.0) · [Installation help](docs/getting-started.md) · [Platform support](docs/platform-support.md)
+[All downloads and checksums](https://github.com/eggplantiny/conn/releases/tag/v0.4.1) · [Installation help](docs/getting-started.md) · [Platform support](docs/platform-support.md)
 
 Windows preview installers are unsigned and may show an unknown-publisher warning. Linux packages are built on Ubuntu 24.04. See the release notes for signing and tested platform details.
 

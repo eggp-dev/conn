@@ -16,7 +16,7 @@ Actions are pinned by commit SHA. Pull requests receive no signing secrets. Only
 2. Add a user-facing [CHANGELOG](../CHANGELOG.md) entry and check the exact release version:
 
    ```sh
-   python3 scripts/release.py check --tag v0.4.0
+   python3 scripts/release.py check --tag v0.4.1
    python3 scripts/check_repo.py
    python3 -m unittest discover -s tests/release -v
    cargo test --workspace --locked
@@ -30,8 +30,8 @@ Actions are pinned by commit SHA. Pull requests receive no signing secrets. Only
 4. Create and push the version tag deliberately:
 
    ```sh
-   git tag -a v0.4.0 -m "Conn v0.4.0 preview"
-   git push origin v0.4.0
+   git tag -a v0.4.1 -m "Conn v0.4.1 preview"
+   git push origin v0.4.1
    ```
 
 Tagging and publishing are maintainer release actions. Do not move a published tag.

@@ -6,15 +6,15 @@ Conn을 설치하고 에이전트를 연결해 같은 터미널에서 번갈아 
 
 ## 1. 설치하고 세션 열기
 
-OS와 CPU에 맞는 [v0.4.0 프리뷰](https://github.com/eggplantiny/conn/releases/tag/v0.4.0)를 받으세요. 실제 서명 상태와 실행 검증 결과는 릴리스 안내에서 확인할 수 있습니다.
+OS와 CPU에 맞는 [v0.4.0 프리뷰](https://github.com/eggplantiny/conn/releases/tag/v0.4.1)를 받으세요. 실제 서명 상태와 실행 검증 결과는 릴리스 안내에서 확인할 수 있습니다.
 
 | 플랫폼 | 다운로드 | 설치 |
 |---|---|---|
-| Ubuntu x64 | [`.deb`](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.deb) | 아래 명령으로 설치한 뒤 앱 목록에서 Conn을 엽니다. |
-| Ubuntu x64 | [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.AppImage) | 실행 권한을 준 뒤 파일을 엽니다. |
-| macOS Apple Silicon | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-aarch64-apple-darwin-desktop.dmg) | DMG를 열고 Conn을 Applications로 옮긴 뒤 그곳에서 실행합니다. |
-| macOS Intel | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-apple-darwin-desktop.dmg) | DMG를 열고 Conn을 Applications로 옮긴 뒤 그곳에서 실행합니다. |
-| Windows x64 | [설치 `.exe`](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-pc-windows-msvc-setup.exe) | 설치 파일을 실행하고 시작 메뉴에서 Conn을 엽니다. |
+| Ubuntu x64 | [`.deb`](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-unknown-linux-gnu-desktop.deb) | 아래 명령으로 설치한 뒤 앱 목록에서 Conn을 엽니다. |
+| Ubuntu x64 | [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-unknown-linux-gnu-desktop.AppImage) | 실행 권한을 준 뒤 파일을 엽니다. |
+| macOS Apple Silicon | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-aarch64-apple-darwin-desktop.dmg) | DMG를 열고 Conn을 Applications로 옮긴 뒤 그곳에서 실행합니다. |
+| macOS Intel | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-apple-darwin-desktop.dmg) | DMG를 열고 Conn을 Applications로 옮긴 뒤 그곳에서 실행합니다. |
+| Windows x64 | [설치 `.exe`](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-pc-windows-msvc-setup.exe) | 설치 파일을 실행하고 시작 메뉴에서 Conn을 엽니다. |
 
 Ubuntu에서는 다운로드한 폴더에서 실행합니다.
 
@@ -31,7 +31,7 @@ chmod +x ./conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.AppImage
 
 Linux 빌드 대상은 Ubuntu 24.04·26.04 x64이며 AppImage에도 시스템 라이브러리가 필요합니다. Windows 프리뷰는 의도적으로 무서명 배포하므로 SmartScreen·알 수 없는 배포자 경고가 나올 수 있고 관리되는 PC에서는 설치가 차단될 수 있습니다. Mac 공개 파일은 릴리스의 Developer ID 서명·공증 검사를 통과해야 합니다. 각 대상의 범위는 [플랫폼 지원](platform-support.ko.md)을 참고하세요.
 
-원하면 파일과 함께 [SHA256SUMS](https://github.com/eggplantiny/conn/releases/download/v0.4.0/SHA256SUMS)를 받으세요. Linux는 `sha256sum --ignore-missing -c SHA256SUMS`, macOS는 `shasum -a 256 <파일>` 결과와 해당 줄 비교, Windows는 `Get-FileHash <파일> -Algorithm SHA256`을 사용합니다. 체크섬은 파일 손상을 확인하며 코드 서명과는 별개입니다.
+원하면 파일과 함께 [SHA256SUMS](https://github.com/eggplantiny/conn/releases/download/v0.4.1/SHA256SUMS)를 받으세요. Linux는 `sha256sum --ignore-missing -c SHA256SUMS`, macOS는 `shasum -a 256 <파일>` 결과와 해당 줄 비교, Windows는 `Get-FileHash <파일> -Algorithm SHA256`을 사용합니다. 체크섬은 파일 손상을 확인하며 코드 서명과는 별개입니다.
 
 ## 2. 터미널 설정
 
@@ -91,7 +91,7 @@ codex mcp add conn -- conn mcp
 
 ## 기존 터미널과 CLI 사용
 
-[Linux x64](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-cli.tar.gz), [Mac Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-aarch64-apple-darwin-cli.tar.gz), [Mac Intel](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-apple-darwin-cli.tar.gz), [Windows x64](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-pc-windows-msvc-cli.zip)용 CLI 압축 파일을 받으세요. `conn`(Windows는 `conn.exe`)을 사용자 `PATH`에 포함된 폴더에 풀고 터미널을 다시 엽니다.
+[Linux x64](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-unknown-linux-gnu-cli.tar.gz), [Mac Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-aarch64-apple-darwin-cli.tar.gz), [Mac Intel](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-apple-darwin-cli.tar.gz), [Windows x64](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-pc-windows-msvc-cli.zip)용 CLI 압축 파일을 받으세요. `conn`(Windows는 `conn.exe`)을 사용자 `PATH`에 포함된 폴더에 풀고 터미널을 다시 엽니다.
 
 ```sh
 conn --version
@@ -139,3 +139,9 @@ npm run tauri dev
 기존 터미널 프런트엔드는 Cargo 설치 후 `conn`을 실행하세요. 이 경로에는 Node.js와 Tauri가 필요하지 않습니다.
 
 다음 안내: [백엔드](backends.md), [정책](policy.md), [신뢰 범위](security.md#한국어-요약), [기여](../CONTRIBUTING.ko.md).
+
+## 업데이트 확인 (v0.4.1 이상)
+
+Conn 아이콘 메뉴 → **업데이트 확인**을 선택하세요. 요청할 때 공개 GitHub 릴리스를 조회하여 버전을 비교하고 변경 사항과 운영체제별 다운로드 버튼을 표시합니다. **프리뷰 버전 포함**은 기본으로 켜져 있으며 선택을 기억합니다. 네트워크 오류가 나면 다시 시도하거나 릴리스 페이지를 열 수 있습니다. 계정이나 토큰은 필요하지 않습니다.
+
+다운로드는 기본 브라우저에서 열립니다. 터미널 작업을 마치고 Conn을 종료한 뒤 앱을 교체하세요. Linux 바로가기는 AppImage를 받으며 `.deb`는 릴리스 페이지에서 받을 수 있습니다. 자동 설치나 재시작은 수행하지 않습니다. 기존 v0.4.0에는 이 기능이 없어 최초 한 번은 직접 다운로드해야 합니다.

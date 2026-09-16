@@ -6,15 +6,15 @@ Install Conn, connect your agent, and take turns in the same terminal. The deskt
 
 ## 1. Install and open a session
 
-Download the [v0.4.0 preview](https://github.com/eggplantiny/conn/releases/tag/v0.4.0) for your OS and CPU. See the release notes for the exact signing and runtime verification results.
+Download the [v0.4.0 preview](https://github.com/eggplantiny/conn/releases/tag/v0.4.1) for your OS and CPU. See the release notes for the exact signing and runtime verification results.
 
 | Platform | Download | Install |
 |---|---|---|
-| Ubuntu x64 | [`.deb`](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.deb) | Run the command below, then open Conn from your applications. |
-| Ubuntu x64 | [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.AppImage) | Make the file executable, then open it. |
-| macOS Apple Silicon | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-aarch64-apple-darwin-desktop.dmg) | Open the DMG, drag Conn into Applications, then launch it there. |
-| macOS Intel | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-apple-darwin-desktop.dmg) | Open the DMG, drag Conn into Applications, then launch it there. |
-| Windows x64 | [Installer `.exe`](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-pc-windows-msvc-setup.exe) | Run the installer, then open Conn from the Start menu. |
+| Ubuntu x64 | [`.deb`](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-unknown-linux-gnu-desktop.deb) | Run the command below, then open Conn from your applications. |
+| Ubuntu x64 | [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-unknown-linux-gnu-desktop.AppImage) | Make the file executable, then open it. |
+| macOS Apple Silicon | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-aarch64-apple-darwin-desktop.dmg) | Open the DMG, drag Conn into Applications, then launch it there. |
+| macOS Intel | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-apple-darwin-desktop.dmg) | Open the DMG, drag Conn into Applications, then launch it there. |
+| Windows x64 | [Installer `.exe`](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-pc-windows-msvc-setup.exe) | Run the installer, then open Conn from the Start menu. |
 
 For Ubuntu, run the matching command in your download directory:
 
@@ -31,7 +31,7 @@ chmod +x ./conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.AppImage
 
 The Linux build targets Ubuntu 24.04 and 26.04 x64; AppImage still depends on system libraries. Windows previews are intentionally unsigned, so SmartScreen or an unknown-publisher prompt may appear; managed PCs may block installation. Public Mac assets must pass the release's Developer ID signing and notarization checks. See [platform support](platform-support.md) for the limits of each target.
 
-Optional: download [SHA256SUMS](https://github.com/eggplantiny/conn/releases/download/v0.4.0/SHA256SUMS) alongside your file. On Linux, run `sha256sum --ignore-missing -c SHA256SUMS`; on macOS, compare `shasum -a 256 <file>` with its line; on Windows, use `Get-FileHash <file> -Algorithm SHA256`. Checksums detect corruption and are separate from code signing.
+Optional: download [SHA256SUMS](https://github.com/eggplantiny/conn/releases/download/v0.4.1/SHA256SUMS) alongside your file. On Linux, run `sha256sum --ignore-missing -c SHA256SUMS`; on macOS, compare `shasum -a 256 <file>` with its line; on Windows, use `Get-FileHash <file> -Algorithm SHA256`. Checksums detect corruption and are separate from code signing.
 
 ## 2. Set up your terminal
 
@@ -91,7 +91,7 @@ Denied, blocked, cancelled, expired and executed are separate outcomes. **Execut
 
 ## Existing-terminal and CLI use
 
-Download the CLI archive for [Linux x64](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-cli.tar.gz), [Mac Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-aarch64-apple-darwin-cli.tar.gz), [Mac Intel](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-apple-darwin-cli.tar.gz), or [Windows x64](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-pc-windows-msvc-cli.zip). Extract `conn` (`conn.exe` on Windows) to a directory on your user `PATH` and reopen your terminal.
+Download the CLI archive for [Linux x64](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-unknown-linux-gnu-cli.tar.gz), [Mac Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-aarch64-apple-darwin-cli.tar.gz), [Mac Intel](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-apple-darwin-cli.tar.gz), or [Windows x64](https://github.com/eggplantiny/conn/releases/download/v0.4.1/conn-v0.4.1-x86_64-pc-windows-msvc-cli.zip). Extract `conn` (`conn.exe` on Windows) to a directory on your user `PATH` and reopen your terminal.
 
 ```sh
 conn --version
@@ -139,3 +139,9 @@ npm run tauri dev
 For the existing-terminal frontend, run `conn` after the Cargo installation; Node.js and Tauri are unnecessary for that path.
 
 Next: [backends](backends.md), [policy](policy.md), [trust model](security.md), or [contributing](../CONTRIBUTING.md).
+
+## Check for updates (v0.4.1+)
+
+Open the Conn icon menu → **Check for Updates**. The app checks public GitHub releases when requested, compares versions, and shows release notes and a download button for your platform. **Include preview releases** is on by default for this preview and remembers your choice. Network failures offer retry; you can also open the releases page. No account or token is required.
+
+The download opens in your system browser. Finish terminal work and quit Conn before replacing the app. On Linux the shortcut downloads the AppImage; `.deb` packages are also available on the releases page. This does not install updates or restart Conn automatically. Existing v0.4.0 installations need a manual download to receive this feature.

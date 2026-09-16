@@ -2,7 +2,7 @@
 
 English · [한국어](platform-support.ko.md) · [Install](getting-started.md) · [Release](releasing.md)
 
-Conn provides its MIT-licensed source and native binaries through [GitHub Releases](https://github.com/eggplantiny/conn/releases/tag/v0.4.0). All desktop packages use the same Rust engine and Svelte UI. The browser harness is a development adapter.
+Conn provides its MIT-licensed source and native binaries through [GitHub Releases](https://github.com/eggplantiny/conn/releases/tag/v0.4.1). All desktop packages use the same Rust engine and Svelte UI. The browser harness is a development adapter.
 
 ## v0.4.0 preview targets
 
@@ -57,4 +57,4 @@ SSH, Docker, WSL and Git Bash are profile options. Claim verified support only f
 
 The workflow prepares a **draft prerelease** with nine binaries/installers, two Mac signing reports, and `SHA256SUMS`. It does not publish automatically. Missing or failed Mac signing evidence blocks the release draft upload; unsigned Windows assets are the explicit preview policy.
 
-Before publishing, maintainers review the [release checks](releasing.md), record runtime results and limitations, and confirm that download links match the assets. Updates are manual downloads. This preview has no in-app updater, updater signing key, app-store listing or hosted package repository.
+Before publishing, maintainers review the [release checks](releasing.md), record runtime results and limitations, and confirm that download links match the assets. Updates are manual downloads. Version 0.4.1 adds an on-demand update check and browser download links; it does not install updates. There is no automatic installer, updater signing key, app-store listing or hosted package repository.
