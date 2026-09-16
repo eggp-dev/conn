@@ -14,6 +14,7 @@ extern void conn_automation_free(char *payload);
     NSMutableDictionary *params = [arguments mutableCopy];
     NSString *operation;
     switch (self.commandDescription.appleEventCode) {
+        case 'cwdf': operation = @"window.create"; break;
         case 'opns': operation = @"session.create"; break;
         case 'wrte': operation = @"session.write"; params[@"text"] = self.directParameter ?: @""; break;
         case 'rqss':

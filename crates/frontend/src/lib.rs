@@ -5,6 +5,7 @@ mod agent_setup;
 mod integrations;
 mod diagnostics;
 pub mod automation;
+mod windows;
 
 mod updates;
 use std::collections::{HashMap, HashSet};
@@ -22,7 +23,7 @@ use conn_core::backend::{Profile, Availability};
 struct AppState {
     startup: parking_lot::Mutex<()>,
     automation: automation::Automation,
-    ui_ready: std::sync::atomic::AtomicBool,
+    windows: parking_lot::Mutex<windows::Windows>,
     output: parking_lot::Mutex<HashMap<String, Option<Vec<String>>>>,
     integration_home: Option<PathBuf>,
     config_dir: PathBuf,
@@ -38,7 +39,16 @@ struct AppState {
 pub type Emit = Arc<dyn Fn(&str, Value) + Send + Sync>;
 #[derive(Clone)]
 struct AppHandle { state: std::sync::Weak<AppState>, emit: Emit }
-impl AppHandle { fn emit(&self, name: &str, value: Value) -> Result<(), String> { (self.emit)(name, value); Ok(()) } }
+impl AppHandle {
+    fn emit(&self, name: &str, mut value: Value) -> Result<(), String> {
+        if let Some(session) = value["session"].as_str() {
+            let owner = self.state.upgrade().and_then(|s| s.windows.lock().owner(session));
+            let Some(owner) = owner else { return Ok(()); };
+            value["window"] = json!(owner);
+        }
+        (self.emit)(name, value); Ok(())
+    }
+}
 
 pub struct Harness { state: Arc<AppState>, app: AppHandle }
 impl Harness {
@@ -49,7 +59,7 @@ impl Harness {
     pub fn with_setup_home(config_dir: PathBuf, socket: PathBuf, emit: Emit, integration_home: Option<PathBuf>) -> Self {
         let defaults = std::fs::read_to_string(config_dir.join("app.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(json!({}));
         let automation = automation::Automation::load(&config_dir);
-        let state = Arc::new(AppState { startup: Default::default(), automation, ui_ready: Default::default(), output: Default::default(), integration_home, config_dir, socket, engines: Default::default(), hub: Hub::new(), server: Default::default(), seq: parking_lot::Mutex::new(0), defaults: parking_lot::Mutex::new(defaults) });
+        let state = Arc::new(AppState { startup: Default::default(), automation, windows: Default::default(), output: Default::default(), integration_home, config_dir, socket, engines: Default::default(), hub: Hub::new(), server: Default::default(), seq: parking_lot::Mutex::new(0), defaults: parking_lot::Mutex::new(defaults) });
         let app = AppHandle { state: Arc::downgrade(&state), emit };
         Self { state, app }
     }
@@ -60,11 +70,54 @@ impl Harness {
         for e in self.state.engines.lock().drain().map(|(_,e)|e) { let _ = e.terminate(); }
     }
     pub fn invoke(&self, name: &str, args: Value) -> Result<Value, String> {
-        dispatch(&self.app, &self.state, name, args)
+        self.invoke_in_window("main", name, args)
+    }
+    /// Native adapters supply the real window label, never a webview argument.
+    pub fn invoke_in_window(&self, window: &str, name: &str, args: Value) -> Result<Value, String> {
+        if !self.state.windows.lock().available(window) { return Err("Window closed".into()); }
+        if let Some(session) = args.get("session").and_then(Value::as_str) {
+            if self.state.windows.lock().owner(session).as_deref() != Some(window) {
+                return Err("Session does not belong to this window".into());
+            }
+        }
+        match name {
+            "start" => start(&self.app, &self.state, window, arg(&args, "rows")?, arg(&args, "cols")?),
+            "open_tab" => open_tab(&self.app, &self.state, window, arg(&args, "rows")?, arg(&args, "cols")?, arg(&args, "profileId")?).map(|id| json!(id)),
+            "ui_ready" => { self.state.windows.lock().mark_ready(window); Ok(Value::Null) },
+            "attend" => {
+                let session: String = arg(&args, "session")?;
+                self.state.windows.lock().select(window, &session);
+                attend(&self.state, session).map(|v| json!(v))
+            },
+            "close_tab" => {
+                let _startup = self.state.startup.lock();
+                close_tab(&self.state, arg(&args, "session")?).map(|v| json!(v))
+            },
+            _ => dispatch(&self.app, &self.state, name, args),
+        }
+    }
+    pub fn focus_window(&self, window: &str) {
+        let active = self.state.windows.lock().active(window);
+        if let Some(id) = active {
+            if self.state.hub.attended_id().as_deref() != Some(&id) { self.state.hub.set_attended(&id); }
+        }
+    }
+    /// Closing one native window must not terminate another window's shell.
+    pub fn close_window(&self, window: &str) {
+        let _startup = self.state.startup.lock();
+        let ids = {
+            let mut windows = self.state.windows.lock();
+            windows.close(window);
+            windows.sessions(window)
+        };
+        for id in ids { let _ = close_tab(&self.state, id); }
     }
     /// Narrow external adapter boundary. Never exposes trusted UI dispatch.
     pub fn automate(&self, caller: automation::Caller, operation: &str, args: Value) -> Result<Value, String> {
-        automation::dispatch(&self.app, &self.state, caller, operation, args)
+        self.automate_in_window("main", caller, operation, args)
+    }
+    pub fn automate_in_window(&self, window: &str, caller: automation::Caller, operation: &str, args: Value) -> Result<Value, String> {
+        automation::dispatch(&self.app, &self.state, window, caller, operation, args)
     }
 }
 impl Drop for Harness { fn drop(&mut self) { self.shutdown(); } }
@@ -124,7 +177,7 @@ impl std::io::Write for TerminalOutput {
     fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
 }
 
-fn spawn_tab(app: &AppHandle, state: &AppState, rows: u16, cols: u16, profile_id: Option<&str>) -> Result<String, String> {
+fn spawn_tab(app: &AppHandle, state: &AppState, window: &str, rows: u16, cols: u16, profile_id: Option<&str>) -> Result<String, String> {
     let profiles = conn_core::profiles::Profiles::load(&state.config_dir.join("profiles.json"))?;
     let profile = profiles.profiles.iter().find(|p| p.id == profile_id.unwrap_or(&profiles.default_profile)).ok_or("Unknown profile")?.clone();
     let availability = profile.availability();
@@ -139,6 +192,8 @@ fn spawn_tab(app: &AppHandle, state: &AppState, rows: u16, cols: u16, profile_id
             return Err(format!("Could not load policy {}: {e}. Fix the policy before starting a shell.", policy_path.display()));
         }
     };
+    if !state.windows.lock().available(window) { return Err("Window closed".into()); }
+    state.windows.lock().add(window, &id);
     state.output.lock().insert(id.clone(), Some(Vec::new()));
     let engine = Arc::new(Engine::spawn(EngineConfig {
         profile: Some(profile), rows, cols, render_prompt: false,
@@ -148,7 +203,7 @@ fn spawn_tab(app: &AppHandle, state: &AppState, rows: u16, cols: u16, profile_id
         env: vec![("TERM".into(), "xterm-256color".into())],
         cwd: conn_core::profiles::home_dir(), audit: Some(audit), policy: Some(policy),
         ..EngineConfig::default()
-    }).map_err(|e| { state.output.lock().remove(&id); e.to_string() })?);
+    }).map_err(|e| { state.output.lock().remove(&id); state.windows.lock().remove(&id); e.to_string() })?);
     let handle = app.clone();
     let sid = id.clone();
     engine.subscribe(
@@ -219,13 +274,15 @@ fn log(msg: String) {
     eprintln!("[webview] {msg}");
 }
 
-fn start(app: &AppHandle, state: &AppState, rows: u16, cols: u16) -> Result<Value, String> {
+fn start(app: &AppHandle, state: &AppState, window: &str, rows: u16, cols: u16) -> Result<Value, String> {
     let _startup = state.startup.lock();
+    if !state.windows.lock().available(window) { return Err("Window closed".into()); }
     ensure_runtime(app, state)?;
-    let first = state.engines.lock().is_empty();
-    let session = if first { spawn_tab(app, state, rows, cols, None)? } else { state.hub.attended_id().unwrap_or_default() };
+    let current = state.windows.lock().active(window);
+    let session = match current { Some(id) => id, None => spawn_tab(app, state, window, rows, cols, None)? };
     let e = engine(state, &session)?;
-    Ok(json!({ "socket": state.socket, "shell": e.shell(), "session": session, "sessions": state.hub.ids() }))
+    let sessions = state.windows.lock().sessions(window);
+    Ok(json!({ "socket": state.socket, "shell": e.shell(), "session": session, "sessions": sessions }))
 }
 
 fn ensure_runtime(app: &AppHandle, state: &AppState) -> Result<(), String> {
@@ -238,13 +295,15 @@ fn ensure_runtime(app: &AppHandle, state: &AppState) -> Result<(), String> {
         let handle = app.clone();
         state.hub.set_opener(std::sync::Arc::new(move |agent_id, reason| {
             let st = handle.state.upgrade().ok_or("frontend closed")?;
+            let _startup = st.startup.lock();
+            let window = st.hub.attended_id().and_then(|id| st.windows.lock().owner(&id)).unwrap_or_else(|| "main".into());
             let (rows, cols) = st
                 .hub
                 .attended_id()
                 .and_then(|id| st.engines.lock().get(&id).cloned())
                 .map(|e| { let s = e.session().lock().status().size; (s.rows, s.cols) })
                 .unwrap_or((24, 80));
-            let id = spawn_tab(&handle, &st, rows, cols, None)?;
+            let id = spawn_tab(&handle, &st, &window, rows, cols, None)?;
             let _ = handle.emit("ss:tab_opened", json!({ "session": id, "agentId": agent_id, "reason": reason }));
             Ok(id)
         }));
@@ -252,8 +311,10 @@ fn ensure_runtime(app: &AppHandle, state: &AppState) -> Result<(), String> {
     Ok(())
 }
 
-fn open_tab(app: &AppHandle, state: &AppState, rows: u16, cols: u16, profile_id: Option<String>) -> Result<String, String> {
-    let id = spawn_tab(&app, &state, rows, cols, profile_id.as_deref())?;
+fn open_tab(app: &AppHandle, state: &AppState, window: &str, rows: u16, cols: u16, profile_id: Option<String>) -> Result<String, String> {
+    let _startup = state.startup.lock();
+    let id = spawn_tab(app, state, window, rows, cols, profile_id.as_deref())?;
+    state.windows.lock().select(window, &id);
     state.hub.set_attended(&id);
     Ok(id)
 }
@@ -265,6 +326,7 @@ fn close_tab(state: &AppState, session: String) -> Result<Option<String>, String
     if let Some(e) = state.engines.lock().remove(&session) {
         e.terminate().map_err(|e| e.to_string())?;
     }
+    state.windows.lock().remove(&session);
     Ok(state.hub.attended_id())
 }
 
@@ -393,7 +455,6 @@ fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Resul
         "automation_settings" => Ok(state.automation.settings()),
         "automation_save" => automation::save(state, arg(&args, "config")?),
         "automation_revoke" => { state.automation.stop_all(); Ok(Value::Null) },
-        "ui_ready" => { state.ui_ready.store(true, std::sync::atomic::Ordering::Release); Ok(Value::Null) },
         "attach_output" => {
             let id: String = arg(&args, "session")?;
             let mut output = state.output.lock();
@@ -410,10 +471,6 @@ fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Resul
         "policy_rules" => serde_json::to_value(policy_rules(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
         "diagnostics" => serde_json::to_value(diagnostics(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
         "log" => serde_json::to_value(log(arg::<String>(&args, "msg")?)).map_err(|e|e.to_string()),
-        "start" => serde_json::to_value(start(app, state, arg::<u16>(&args, "rows")?, arg::<u16>(&args, "cols")?)?).map_err(|e|e.to_string()),
-        "open_tab" => serde_json::to_value(open_tab(app, state, arg::<u16>(&args, "rows")?, arg::<u16>(&args, "cols")?, arg::<Option<String>>(&args, "profileId")?)?).map_err(|e|e.to_string()),
-        "close_tab" => serde_json::to_value(close_tab(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
-        "attend" => serde_json::to_value(attend(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
         "entrust" => serde_json::to_value(entrust(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
         "input" => serde_json::to_value(input(state, arg::<String>(&args, "session")?, arg::<String>(&args, "data")?)?).map_err(|e|e.to_string()),
         "resize" => serde_json::to_value(resize(state, arg::<String>(&args, "session")?, arg::<u16>(&args, "rows")?, arg::<u16>(&args, "cols")?)?).map_err(|e|e.to_string()),

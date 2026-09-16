@@ -99,3 +99,45 @@ fn shared_commands_execute_native_shell_and_preserve_tab_defaults() {
     assert!(h.invoke("status", json!({"session":id})).is_err());
     h.shutdown();
 }
+
+#[test]
+fn native_windows_keep_tabs_output_and_close_lifecycle_separate() {
+    let dir = tempfile::tempdir().unwrap();
+    configure_profile(dir.path());
+    let events = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let recorded = events.clone();
+    let h = Harness::new(dir.path().into(), dir.path().join("conn.sock"), Arc::new(move |name, value| {
+        recorded.lock().unwrap().push((name.to_owned(), value));
+    }));
+    let main = h.invoke("start", json!({"rows":24,"cols":80})).unwrap();
+    let other = h.invoke_in_window("automation-1", "start", json!({"rows":24,"cols":80})).unwrap();
+    let a = main["session"].as_str().unwrap();
+    let b = other["session"].as_str().unwrap();
+    assert_ne!(a,b);
+    assert_eq!(main["sessions"], json!([a]));
+    assert_eq!(other["sessions"], json!([b]));
+    assert!(h.invoke("input", json!({"session":b,"data":"echo wrong-window\n"})).is_err());
+    let extra = h.invoke_in_window("automation-1", "open_tab", json!({"rows":24,"cols":80,"profileId":"test"})).unwrap();
+    assert_eq!(h.invoke("start", json!({"rows":24,"cols":80})).unwrap()["sessions"], json!([a]));
+    assert_eq!(h.invoke_in_window("automation-1", "start", json!({"rows":24,"cols":80})).unwrap()["sessions"], json!([b,extra]));
+    h.focus_window("main");
+    assert_eq!(h.invoke("status", json!({"session":a})).unwrap()["attended"], true);
+    h.focus_window("automation-1");
+    assert_eq!(h.invoke_in_window("automation-1", "status", json!({"session":extra})).unwrap()["attended"], true);
+    assert_eq!(h.invoke("status", json!({"session":a})).unwrap()["attended"], false);
+    h.close_window("automation-1");
+    assert!(h.invoke_in_window("automation-1", "start", json!({"rows":24,"cols":80})).is_err());
+    assert_eq!(h.invoke("status", json!({"session":a})).unwrap()["processAlive"], true);
+    h.focus_window("main");
+    h.invoke("attach_output", json!({"session":a})).unwrap();
+    h.invoke("input", json!({"session":a,"data":"printf alive > window-close-proof\n"})).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !dir.path().join("window-close-proof").exists() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(std::fs::read_to_string(dir.path().join("window-close-proof")).unwrap(), "alive");
+    let events = events.lock().unwrap();
+    assert!(events.iter().any(|(name,v)| name == "ss:output" && v["session"] == a));
+    assert!(events.iter().filter(|(_,v)| v["session"] == a).all(|(_,v)| v["window"] == "main"));
+    assert!(events.iter().filter(|(_,v)| v["session"] == b || v["session"] == extra).all(|(_,v)| v["window"] == "automation-1"));
+}

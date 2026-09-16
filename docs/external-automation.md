@@ -7,6 +7,42 @@ native adapter is macOS AppleScript. Windows/Linux share the internal contract;
 their external launch adapters are not implemented yet. Actual PAM compatibility
 and macOS permission behavior require a Mac acceptance test.
 
+## PAM window command (unreleased)
+
+The next implementation supports this iTerm-style launch statement. **It is not
+included in v0.5.0 binaries.**
+
+```applescript
+tell application "Conn"
+    create window with default profile command "/bin/sh -c '__RUN_COMMAND__ ; echo \"Press [Enter] key to exit.\"; read ANSWER;'"
+end tell
+```
+
+[Copy the complete template](../examples/applescript/pam-window.applescript).
+PAM must replace `__RUN_COMMAND__`; Conn does not expand it. In Script Editor,
+replace the placeholder with `pwd` for a harmless test.
+
+Enable the **default profile** in Settings → Automation. This creates a real
+native window using that profile, then queues the exact command through the
+existing control gate, policy and grace path. Omitting `command` opens only the
+shell. Existing windows and tabs remain available.
+
+Input waits until this window's frontend is ready. After input delivery, control
+returns to the human automatically so they can interact with the connection.
+Delivery does not mean the command completed or authentication succeeded.
+The supplied `echo` and `read` implement the message and Enter wait. Afterwards,
+the profile shell remains open; Conn does not automatically close the window.
+
+Each native window owns its tabs, output and session commands. Closing one window
+cancels its queued automation and terminates its shells, without closing other
+windows. A launch failure cleans up its new session.
+
+This is compatibility for the launch statement only. The return value is an opaque
+session ID, **not** iTerm's `window` object. `tell current session`, split panes and
+iTerm's complete object model are not supported. The existing `create session`,
+`write text` and request-status API remain available.
+See [iTerm's original scripting documentation](https://iterm2.com/documentation-scripting.html).
+
 ## Connect an external application
 
 A PAM client or launcher can open Conn, create a tab from a saved profile and send
@@ -44,8 +80,8 @@ end tell
 This is Conn's dictionary, not drop-in iTerm2 or Terminal compatibility. A PAM
 product that permits script templates can use it; a fixed bundle ID or compiled
 vendor script may need a vendor adapter. Check the actual product and sanitized
-script before claiming compatibility. Multi-window/split-pane scripting is not
-part of this first adapter.
+script before claiming compatibility. The window launch statement above is the
+only iTerm-style compatibility entry point; split-pane/object scripting is not supported.
 
 ## Script commands
 

@@ -197,13 +197,13 @@
   });
 
   onMount(async () => {
-    listen<{ connected: boolean }>("ss:connection", ({payload}) => { st.backendOnline = payload.connected; });
-    onTabOpened(async (p) => {
+    const connectionListener = listen<{ connected: boolean }>("ss:connection", ({payload}) => { st.backendOnline = payload.connected; });
+    const tabListener = onTabOpened(async (p) => {
       // Agent tabs stay in the background; an explicit external-launch request may select its new tab.
       if (!tab(p.session)) { addTab(p.session); await syncStatus(p.session); }
       if (p.focus) { st.active = p.session; focusTerm(); }
     });
-    onEvent((ev) => {
+    const eventListener = onEvent((ev) => {
       const t = ev.session ? tab(ev.session) : cur();
       if (!t) return;
       recordTimeline(t.timeline, ev);
@@ -297,6 +297,7 @@
       }
     });
     try {
+      await Promise.all([connectionListener, tabListener, eventListener]);
       await refreshProfiles();
       const info = await invoke<{ socket: string; shell: string; session: string; sessions: string[] }>("start", { rows: 24, cols: 80 });
       st.socket = info.socket; st.shell = info.shell;

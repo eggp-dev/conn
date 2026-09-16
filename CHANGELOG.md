@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Support `create window with default profile command` for PAM-style AppleScript launch templates, with real native windows, per-window sessions/output, the existing approval/policy path, and automatic control return after input delivery.
+- Compile both session-based and window-launch PAM examples in macOS CI. Native interactive verification remains pending.
+
+한국어: PAM의 새 창 생성 문법을 추가했습니다. 창별 탭·출력을 분리하고 시작 명령은 기존 승인·정책을 거쳐 전달한 뒤 제어권을 반환합니다. 실제 Mac 대화형 검증은 남아 있습니다.
+
 ## 0.5.0 — Preview · 2026-09-16
 
 - Prevent mode changes from stranding shell input; restore real Co-pilot interrupts and withdraw entrusted control when the human returns.
