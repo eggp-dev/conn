@@ -57,6 +57,20 @@ def validate_identity(identity: str, team: str):
         raise release.ReleaseError("A Developer ID Application identity matching APPLE_TEAM_ID is required; ad-hoc signing is forbidden")
 
 
+def import_failure_category(stderr: str) -> str:
+    # Match only known Security.framework messages and emit a fixed label. Never
+    # echo stderr, which may also include certificate subjects or private paths.
+    if "MAC verification failed during PKCS12 import" in stderr:
+        return "pkcs12-verification (password, container integrity or algorithm compatibility)"
+    if any(message in stderr for message in ("Unknown format in import", "Import/Export format unsupported",
+                                             "Unable to decode the provided data")):
+        return "pkcs12-format-or-decoding"
+    if any(message in stderr for message in ("User interaction is not allowed", "Write permissions error",
+                                             "The specified keychain could not be found")):
+        return "keychain-access"
+    return "unclassified-import-error"
+
+
 def command(args, label, timeout=120, *, input_text=None):
     # Do not echo args or captured output: security/notarytool arguments can carry
     # secrets. All errors name only the fixed stage and numeric exit status.
@@ -67,7 +81,8 @@ def command(args, label, timeout=120, *, input_text=None):
     except (OSError, subprocess.TimeoutExpired):
         raise release.ReleaseError(f"{label} could not complete") from None
     if result.returncode != 0:
-        raise release.ReleaseError(f"{label} failed (exit {result.returncode}); no release artifacts will be uploaded")
+        category = f"; category: {import_failure_category(result.stderr)}" if args[:2] == ["security", "import"] else ""
+        raise release.ReleaseError(f"{label} failed (exit {result.returncode}){category}; no release artifacts will be uploaded")
     return result
 
 
@@ -113,7 +128,9 @@ def prepare(path: Path, env=os.environ):
         command(["security", "create-keychain", "-p", password, keychain], "Create temporary keychain")
         command(["security", "set-keychain-settings", "-lut", "21600", keychain], "Configure temporary keychain")
         command(["security", "unlock-keychain", "-p", password, keychain], "Unlock temporary keychain")
-        command(["security", "import", certificate, "-k", keychain, "-P", env["APPLE_CERTIFICATE_PASSWORD"],
+        # Explicit PKCS12 selects SecPKCS12Import on macOS 15; autodetection uses
+        # the older SecKeychainItemImport path, which can reject modern PKCS12.
+        command(["security", "import", certificate, "-f", "pkcs12", "-k", keychain, "-P", env["APPLE_CERTIFICATE_PASSWORD"],
                  "-T", "/usr/bin/codesign", "-T", "/usr/bin/security"], "Import signing certificate")
         command(["security", "set-key-partition-list", "-S", "apple-tool:,apple:,codesign:",
                  "-s", "-k", password, keychain], "Authorize signing tools")

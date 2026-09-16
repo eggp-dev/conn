@@ -23,6 +23,18 @@ The job creates a random password for its temporary keychain. **Do not create a 
 
 A valid Developer ID Application certificate includes its private key and must match the configured Team ID. Membership alone is not a certificate or proof that notarization passed. The workflow fails on missing or invalid credentials and has no ad-hoc fallback. [Tauri's signing guide](https://v2.tauri.app/distribute/sign/macos/) describes the certificate and notarization inputs.
 
+## Optional credential check before tagging
+
+Run [Check macOS signing credentials](../.github/workflows/signing-check.yml) from GitHub Actions on `main`, or from the repository with:
+
+```sh
+gh workflow run signing-check.yml --ref main
+```
+
+This manual, `main`-only job uses the same six secrets and preparation code on `macos-15`. It checks PKCS#12 import, the expected Developer ID identity and Team, and authentication with Apple's notarization service. It always cleans up its temporary keychain. No app is built and no release assets are created.
+
+A successful check confirms credential preparation only; it does **not** establish that code signing or an artifact's notarization passed. If it fails, inspect the reported stage and error category before changing secrets; an import failure alone does not identify the cause.
+
 ## Pipeline stages
 
 1. **Prepare.** Import the certificate into an ephemeral runner keychain; verify the Developer ID identity and Team match.

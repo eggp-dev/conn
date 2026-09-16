@@ -23,6 +23,18 @@ GitHub의 `macos-15`, `macos-15-intel` 러너에서 두 아키텍처를 빌드�
 
 유효한 Developer ID Application 인증서는 개인 키를 포함하고 설정한 Team ID와 일치해야 합니다. 멤버십만으로 인증서가 준비되거나 공증이 통과한 것은 아닙니다. 값이 없거나 잘못되면 워크플로가 실패하며 ad-hoc 서명으로 전환하지 않습니다. 인증서·공증 입력은 [Tauri 서명 안내](https://v2.tauri.app/distribute/sign/macos/)에 설명되어 있습니다.
 
+## 태그 생성 전 자격 증명 확인 — 선택 사항
+
+GitHub Actions에서 `main`을 선택해 [Check macOS signing credentials](../.github/workflows/signing-check.yml)를 실행하거나 저장소에서 다음 명령을 사용하세요.
+
+```sh
+gh workflow run signing-check.yml --ref main
+```
+
+`main`에서만 실행되는 수동 작업이며 `macos-15`에서 동일한 Secret 6개와 준비 코드를 사용합니다. PKCS#12 가져오기, 예상한 Developer ID 신원과 Team, Apple 공증 서비스 인증을 확인하고 항상 임시 키체인을 정리합니다. 앱을 빌드하거나 릴리스 파일을 만들지는 않습니다.
+
+성공은 자격 증명 준비가 확인됐다는 뜻이며 **코드 서명이나 파일 공증의 성공을 뜻하지 않습니다.** 실패하면 Secret을 바꾸기 전에 표시된 단계와 오류 분류를 확인하세요. 가져오기 실패만으로 원인이 무엇인지 단정할 수는 없습니다.
+
 ## 파이프라인 단계
 
 1. **준비.** 임시 러너 키체인에 인증서를 가져오고 Developer ID 신원과 Team 일치를 확인합니다.
