@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 — Preview · 2026-09-16
 
 - Support `create window with default profile command` for PAM-style AppleScript launch templates, with real native windows, per-window sessions/output, the existing approval/policy path, and automatic control return after input delivery.
 - Compile both session-based and window-launch PAM examples in macOS CI. Native interactive verification remains pending.

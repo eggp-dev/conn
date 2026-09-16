@@ -7,10 +7,9 @@ native adapter is macOS AppleScript. Windows/Linux share the internal contract;
 their external launch adapters are not implemented yet. Actual PAM compatibility
 and macOS permission behavior require a Mac acceptance test.
 
-## PAM window command (unreleased)
+## PAM window command (v0.5.1)
 
-The next implementation supports this iTerm-style launch statement. **It is not
-included in v0.5.0 binaries.**
+Starting with v0.5.1, Conn supports this iTerm-style launch statement.
 
 ```applescript
 tell application "Conn"

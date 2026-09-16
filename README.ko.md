@@ -12,13 +12,13 @@ Conn은 나와 AI 에이전트가 함께 쓰는 터미널입니다. 쓰던 에�
 
 **앱을 내려받아 설치하세요. Rust나 Node.js는 필요하지 않습니다.** 에이전트 연결에 쓰는 Conn CLI도 앱에 포함됩니다.
 
-| 운영체제 | v0.5.0 프리뷰 다운로드 |
+| 운영체제 | v0.5.1 프리뷰 다운로드 |
 |---|---|
-| macOS · Apple Silicon | [Apple Silicon용 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.5.0/conn-v0.5.0-aarch64-apple-darwin-desktop.dmg) |
-| Windows · x64 | [Windows 설치 파일](https://github.com/eggplantiny/conn/releases/download/v0.5.0/conn-v0.5.0-x86_64-pc-windows-msvc-setup.exe) |
-| Ubuntu · x64 | [.deb 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.5.0/conn-v0.5.0-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.5.0/conn-v0.5.0-x86_64-unknown-linux-gnu-desktop.AppImage) |
+| macOS · Apple Silicon | [Apple Silicon용 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.5.1/conn-v0.5.1-aarch64-apple-darwin-desktop.dmg) |
+| Windows · x64 | [Windows 설치 파일](https://github.com/eggplantiny/conn/releases/download/v0.5.1/conn-v0.5.1-x86_64-pc-windows-msvc-setup.exe) |
+| Ubuntu · x64 | [.deb 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.5.1/conn-v0.5.1-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.5.1/conn-v0.5.1-x86_64-unknown-linux-gnu-desktop.AppImage) |
 
-[전체 다운로드와 체크섬](https://github.com/eggplantiny/conn/releases/tag/v0.5.0) · [설치 도움말](docs/getting-started.ko.md) · [플랫폼 지원](docs/platform-support.ko.md)
+[전체 다운로드와 체크섬](https://github.com/eggplantiny/conn/releases/tag/v0.5.1) · [설치 도움말](docs/getting-started.ko.md) · [플랫폼 지원](docs/platform-support.ko.md)
 
 새 릴리스는 Apple Silicon, Windows x64, Linux x64를 대상으로 합니다. Intel Mac 배포는 잠시 중단하며 기존 파일은 [이전 릴리스](https://github.com/eggplantiny/conn/releases)에 유지합니다.
 
