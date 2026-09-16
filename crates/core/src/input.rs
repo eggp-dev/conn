@@ -30,6 +30,10 @@ impl InputTracker {
         self.buf.iter().collect()
     }
 
+    pub fn has_pending(&self) -> bool {
+        !self.buf.is_empty() || !self.pending.is_empty() || self.dirty
+    }
+
     pub fn is_dirty(&self) -> bool {
         self.dirty
     }

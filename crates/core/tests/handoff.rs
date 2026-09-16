@@ -16,7 +16,7 @@ fn copilot_proposal_committed_by_human() {
     let mut h = Harness::headless();
     let fe = h.frontend("ui");
     h.agent(1, "claude");
-    h.session.set_mode(AgentMode::Copilot);
+    h.session.set_mode(AgentMode::Copilot).unwrap();
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "kubectl get pods").unwrap();
     assert_eq!(h.pty_str(), "", "copilot typing never reaches the shell");
@@ -44,7 +44,7 @@ fn copilot_proposal_committed_by_human() {
 fn copilot_confirm_is_granted_by_commit_but_deny_still_blocks() {
     let mut h = Harness::headless();
     h.agent(1, "claude");
-    h.session.set_mode(AgentMode::Copilot);
+    h.session.set_mode(AgentMode::Copilot).unwrap();
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "kubectl delete pod x").unwrap();
     let KeyResult::Proposed { proposal_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
@@ -65,7 +65,7 @@ fn copilot_confirm_is_granted_by_commit_but_deny_still_blocks() {
 fn proposal_is_rejected_by_human_typing_or_esc() {
     let mut h = Harness::headless();
     h.agent(1, "claude");
-    h.session.set_mode(AgentMode::Copilot);
+    h.session.set_mode(AgentMode::Copilot).unwrap();
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "ls").unwrap();
     let KeyResult::Proposed { proposal_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
@@ -88,11 +88,11 @@ fn observe_mode_only_allows_snapshot() {
     let mut h = Harness::new();
     h.agent(1, "claude");
     h.session.agent_request_control(1).unwrap();
-    h.session.set_mode(AgentMode::Observe);
+    h.session.set_mode(AgentMode::Observe).unwrap();
     assert!(h.session.controller().is_human(), "switching to observe revokes the lease");
     assert_eq!(h.session.affordances(Actor::Agent { conn: 1 }), vec![Affordance::Snapshot]);
     assert!(matches!(h.session.agent_request_control(1), Err(SessionError::WrongMode(AgentMode::Observe))));
-    h.session.set_mode(AgentMode::Autopilot);
+    h.session.set_mode(AgentMode::Autopilot).unwrap();
     assert!(h.session.agent_request_control(1).is_ok());
 }
 

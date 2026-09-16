@@ -3,11 +3,11 @@
   import { t, tabName } from "../lib/i18n.svelte";
   import { fly } from "svelte/transition";
   import { st, cur } from "../lib/store.svelte";
-  import { cmd } from "../lib/bridge";
+  import { cmd, changeMode } from "../lib/bridge";
   import { agentColor } from "../lib/themes";
   const r = $derived(cur().ctlReq!);
   async function decide(d: "grant" | "copilot" | "deny") {
-    if (d === "copilot") await cmd("set_mode", { mode: "copilot" });
+    if (d === "copilot" && !await changeMode("copilot")) return;
     await cmd("decide_control", { requestId: r.id, grant: d !== "deny" });
   }
 </script>

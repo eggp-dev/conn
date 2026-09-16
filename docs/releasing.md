@@ -6,7 +6,7 @@ English · [한국어](releasing.ko.md) · [User installation](getting-started.m
 
 `eggplantiny/conn` uses `main` as its integration branch. Keep Actions tokens read-only by default, enable private vulnerability reporting, and require **Required checks** and resolved conversations for changes to `main`. The [versioned ruleset](../.github/main-ruleset.json) provides PR/CI requirements and an explicit owner recovery bypass. Update an existing ruleset rather than creating duplicates.
 
-CI checks version consistency, repository hygiene, relative documentation links, release tooling, frontend tests and the Svelte build. Rust tests and native desktop debug builds cover Linux, macOS ARM and Windows; release packaging adds Intel macOS. These checks do not replace installer or interactive desktop testing.
+CI checks version consistency, repository hygiene, relative documentation links, release tooling, frontend tests and the Svelte build. Rust tests and native desktop debug builds cover Linux, macOS Apple Silicon and Windows. Release packaging uses the same three targets; Intel Mac distribution is paused after v0.4.1. The macOS debug build is bundled and signed ad-hoc in PR CI, then checked with `plutil` and `sdef`; `osacompile` compiles the PAM example against that exact app without running it. This catches missing scripting resources and dictionary syntax without release credentials. These checks do not replace installer or interactive desktop testing.
 
 Actions are pinned by commit SHA. Pull requests receive no signing secrets. Only the draft-upload job gets `contents: write`. Mac release jobs use the six credentials documented in [macOS signing](macos-signing.md); the temporary keychain password is generated during the job.
 
@@ -16,7 +16,7 @@ Actions are pinned by commit SHA. Pull requests receive no signing secrets. Only
 2. Add a user-facing [CHANGELOG](../CHANGELOG.md) entry and check the exact release version:
 
    ```sh
-   python3 scripts/release.py check --tag v0.4.1
+   python3 scripts/release.py check --tag v0.5.0
    python3 scripts/check_repo.py
    python3 -m unittest discover -s tests/release -v
    cargo test --workspace --locked
@@ -30,8 +30,8 @@ Actions are pinned by commit SHA. Pull requests receive no signing secrets. Only
 4. Create and push the version tag deliberately:
 
    ```sh
-   git tag -a v0.4.1 -m "Conn v0.4.1 preview"
-   git push origin v0.4.1
+   git tag -a v0.5.0 -m "Conn v0.5.0 preview"
+   git push origin v0.5.0
    ```
 
 Tagging and publishing are maintainer release actions. Do not move a published tag.
@@ -44,7 +44,6 @@ A `v*` tag or manual dispatch with an existing tag starts `release.yml`. It requ
 |---|---|---|
 | Ubuntu x64 | Ubuntu 24.04 | CLI `.tar.gz`, desktop `.deb`, desktop `.AppImage` |
 | macOS Apple Silicon | `macos-15` | CLI `.tar.gz`, desktop `.dmg`, signing report |
-| macOS Intel | `macos-15-intel` | CLI `.tar.gz`, desktop `.dmg`, signing report |
 | Windows x64 | Windows Server 2022 | CLI `.zip`, NSIS installer `.exe` |
 
 The platform contract is Ubuntu 24.04/26.04 runtime targets, intentionally unsigned Windows preview assets, and Developer ID signing plus notarization for Mac assets. GitHub-hosted Mac runners handle signing; a personal Mac is not required to run the CI job. There is no silent fallback to ad-hoc signing.
@@ -54,9 +53,9 @@ Each native runner also extracts its standalone CLI archive outside the checkout
 The release stages are:
 
 1. Build the matching CLI and desktop package on each native runner.
-2. On Mac, sign and notarize the app, embedded CLI, standalone CLI and DMG as described in [macOS signing](macos-signing.md). Generate a report for each architecture, including acceptance and final asset hashes.
-3. `release.py package` normalizes filenames. `finalize` requires all nine binaries/installers and both valid Mac reports before writing `SHA256SUMS` and bilingual notes.
-4. After the exact commit's CI and all build/signing jobs pass, `draft` uploads **12 assets**: nine binaries/installers, two signing reports and `SHA256SUMS`. It creates or updates an unpublished prerelease and refuses to modify a public release.
+2. On Mac, sign and notarize the app, embedded CLI, standalone CLI and DMG as described in [macOS signing](macos-signing.md). Generate the Apple Silicon report, including acceptance and final asset hashes.
+3. `release.py package` normalizes filenames. `finalize` requires all seven binaries/installers and the valid Apple Silicon report before writing `SHA256SUMS` and bilingual notes.
+4. After the exact commit's CI and all build/signing jobs pass, `draft` uploads **9 assets**: seven binaries/installers, one signing report and `SHA256SUMS`. It creates or updates an unpublished prerelease and refuses to modify a public release.
 
 Re-running can repair an incomplete draft. No workflow publishes automatically. Actions retains temporary build artifacts for seven days; uploaded release assets persist. The CLI archives contain the license and installation notes. This preview has no automatic updater.
 
@@ -64,10 +63,10 @@ Re-running can repair an incomplete draft. No workflow publishes automatically. 
 
 Review the downloaded draft artifacts, not a different local build.
 
-- Check both Mac reports, `Accepted` notarization results, and the final asset hashes. Signing reports must match the exact release files.
+- Check the Apple Silicon report, `Accepted` notarization results, and the final asset hashes. Signing reports must match the exact release files.
 - Compare checksums. With all files present, use `sha256sum -c SHA256SUMS` on Linux or `shasum -a 256 -c SHA256SUMS` on macOS. On Windows, compare `Get-FileHash <file> -Algorithm SHA256` with its entry. Checksums are separate from publisher signatures.
 - Run the [platform checklist](platform-support.md#release-verification-checklist). Record build/signing results separately from clean installation, native GUI and external-agent connection results. Mark untested OS versions or behaviors explicitly.
-- Confirm the desktop runs without Rust, Node.js or a dev server, and that copied agent configuration works without `PATH` setup. Test Windows PowerShell/cmd and both Mac architectures before describing those interactions as verified.
+- Confirm the desktop runs without Rust, Node.js or a dev server, and that copied agent configuration works without `PATH` setup. Test Windows PowerShell/cmd and Apple Silicon before describing those interactions as verified.
 - Keep the intentional Windows unsigned notice. Mac assets need successful Developer ID and notarization evidence. Do not tell users to disable system protection.
 - Review the bilingual release notes and download links, replace the pending changelog date with the publication date, and publish the reviewed prerelease explicitly. Then open the public version page and each linked asset to confirm availability.
 

@@ -239,6 +239,23 @@ fn concurrent_setup_lock_is_respected() {
 }
 #[cfg(unix)]
 #[test]
+fn setup_unlocks_even_while_a_duplicated_descriptor_is_open() {
+    let f = Fixture::new();
+    fs::create_dir(&f.state).unwrap();
+    let path = f.state.join("integration-setup.lock");
+    let file = fs::File::create(&path).unwrap();
+    file.try_lock().unwrap();
+    let lock = SetupLock(file);
+    // try_clone shares the open-file description, as a forked PTY child does.
+    let inherited = lock.0.try_clone().unwrap();
+    let next = fs::OpenOptions::new().write(true).open(path).unwrap();
+    assert!(next.try_lock().is_err(), "active setup still excludes other callers");
+    drop(lock);
+    next.try_lock().unwrap();
+    drop(inherited);
+}
+#[cfg(unix)]
+#[test]
 fn refuses_symlink_files_and_parent_directories() {
     use std::os::unix::fs::symlink;
     let f = Fixture::new();

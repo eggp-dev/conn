@@ -20,7 +20,7 @@
   import HandoffWash from "./components/HandoffWash.svelte";
   import { recordTimeline, importSavedActivity } from "./lib/timeline";
   import { invoke, listen } from "./lib/transport";
-  import { cmd, onEvent, onTabOpened, log, type Pacing } from "./lib/bridge";
+  import { cmd, changeMode, onEvent, onTabOpened, log, type Pacing } from "./lib/bridge";
   import { st, cur, tab, tabIndex, newTab, toast, announce, type TabState } from "./lib/store.svelte";
   import { THEMES, agentColor } from "./lib/themes";
   import { t as tr, tabName, fmtMs, setLang, LANGS, i18n } from "./lib/i18n.svelte";
@@ -141,7 +141,7 @@
       { id: "tab-new", group: "tabs", label: tr("a.tab.new"), keys: shortcutLabel("⌘T"), aliases: ["new tab", "새 탭"], run: openTab },
       { id: "tab-attn", group: "tabs", label: tr("a.tab.attn"), keys: shortcutLabel("⌘⌥→"), aliases: ["attention", "주의", "next"], run: () => { const n = nextNeedingAttention(); if (n) select(n); else toast(tr("tab.none.waiting")); } },
       { id: "tab-close", group: "tabs", label: tr("a.tab.close"), keys: shortcutLabel("⌘W"), aliases: ["close tab", "탭 닫기"], run: () => closeTab(st.active), when: () => st.order.length > 1 },
-      ...(["observe", "copilot", "autopilot"] as const).map((m) => ({ id: `mode-${m}`, group: "mode", label: tr("a.mode.set", { mode: tr(`mode.${m}`) }), hint: tr(`mode.${m}.desc`), aliases: ["mode", "모드", m], active: () => cur().mode === m, run: () => cmd("set_mode", { mode: m }) })),
+      ...(["observe", "copilot", "autopilot"] as const).map((m) => ({ id: `mode-${m}`, group: "mode", label: tr("a.mode.set", { mode: tr(`mode.${m}`) }), hint: tr(`mode.${m}.desc`), aliases: ["mode", "모드", m], active: () => cur().mode === m, run: () => changeMode(m) })),
       { id: "gate", group: "mode", label: tr("a.gate"), aliases: ["gate", "ask", "묻기", "게이트"], value: () => (cur().gate ? tr("on") : tr("off")), run: () => cmd("set_control_gate", { ask: !cur().gate }) },
       ...TOOL_PRESETS.map(([k, p]) => ({ id: `tools-${k}`, group: "agents", label: tr("a.tools.preset", { name: tr(k) }), aliases: ["tools", "도구", "affordance"], active: () => maskIs(p), run: () => cmd("set_affordances", { allow: p }) })),
       { id: "grace", group: "pacing", label: tr("a.grace"), hint: tr("a.grace.hint"), aliases: ["grace", "유예", "delay"], value: () => fmtMs(cur().pacing.enterGraceMs), run: () => (st.centerOpen = true) },
@@ -153,7 +153,7 @@
       { id: "timeline", group: "view", label: tr("a.timeline"), keys: shortcutLabel("⌘J"), aliases: ["timeline", "타임라인", "history"], run: () => (st.timelineOpen = !st.timelineOpen) },
       { id: "center", group: "view", label: tr("a.center"), aliases: ["center", "센터", "island", "quick"], run: () => (st.centerOpen = true) },
       ...LANGS.map((l) => ({ id: `lang-${l.id}`, group: "language", label: tr("a.lang", { name: l.name }), aliases: ["language", "언어", l.id, l.name], active: () => i18n.lang === l.id, run: () => setLang(l.id) })),
-      ...(["profiles", "agents", "policy", "pacing", "appearance", "diagnostics"] as const).map((tb) => ({ id: `settings-${tb}`, group: "settings", label: tr("a.settings", { tab: tr(`s.nav.${tb}`) }), keys: shortcutLabel("⌘,"), aliases: ["settings", "설정", tb], run: () => openSettings(tb) })),
+      ...(["profiles", "agents", "automation", "policy", "pacing", "appearance", "diagnostics"] as const).map((tb) => ({ id: `settings-${tb}`, group: "settings", label: tr("a.settings", { tab: tr(`s.nav.${tb}`) }), keys: shortcutLabel("⌘,"), aliases: ["settings", "설정", tb], run: () => openSettings(tb) })),
       { id: "connect-agent", group: "setup", label: tr("s.connect.copy"), aliases: ["connect", "mcp", "codex", "cli", "agent", "에이전트", "연결", "설정 복사"], run: () => openSettings("agents") },
     ];
   });
@@ -199,8 +199,9 @@
   onMount(async () => {
     listen<{ connected: boolean }>("ss:connection", ({payload}) => { st.backendOnline = payload.connected; });
     onTabOpened(async (p) => {
-      // Create the tab in the strip but do not switch to it: the human's view is theirs.
+      // Agent tabs stay in the background; an explicit external-launch request may select its new tab.
       if (!tab(p.session)) { addTab(p.session); await syncStatus(p.session); }
+      if (p.focus) { st.active = p.session; focusTerm(); }
     });
     onEvent((ev) => {
       const t = ev.session ? tab(ev.session) : cur();
@@ -290,7 +291,7 @@
         case "human_exec": t.title = ev.cmd.length > 24 ? ev.cmd.slice(0, 24) + "…" : ev.cmd; break;
         case "process_exited": t.processAlive = false; setController(t, "human"); announce(tr("shell.exited") + sfx, "var(--danger)", "warn"); break;
         case "pacing_changed": t.pacing = ev.pacing as Pacing; break;
-        case "mode_changed": t.mode = ev.mode; t.effectiveMode = ev.mode; break;
+        case "mode_changed": t.mode = ev.mode; t.effectiveMode = ev.effectiveMode ?? ev.mode; break;
         case "control_gate_changed": t.gate = !!ev.ask; break;
         case "affordance_mask_changed": t.mask = ev.allow; break;
       }
@@ -305,6 +306,7 @@
       const tail = await invoke<any[]>("audit_tail", { n: 60 });
       importSavedActivity(cur().timeline, tail);
       st.booted = true; st.backendOnline = true;
+      await invoke("ui_ready");
       setTimeout(() => { terms[st.active]?.refit(); focusTerm(); }, 50);
       setInterval(async () => { for (const id of st.order) { try { const s = await invoke<any>("status", { session: id }); const t = tab(id); if (t) t.agents = s.connectedAgents ?? []; } catch {} } }, 5000);
     } catch (e) {

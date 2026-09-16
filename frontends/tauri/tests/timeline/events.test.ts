@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { newTimeline, recordTimeline, visibleTimeline, timelineSteps, importSavedActivity } from '../../src/lib/timeline.ts';
+import { newTimeline, recordTimeline, visibleTimeline, timelineSteps, importSavedActivity, commandDecisions, isExternalAutomation } from '../../src/lib/timeline.ts';
 const request = (id = 'r1', actor = 'codex') => ({ event: 'control_requested', request: { requestId: id, agentId: actor, reason: 'Inspect a file' } });
 const grant = (actor = 'codex', lease = 'l1') => ({ event: 'control_granted', agentId: actor, lease, reason: 'Inspect a file' });
 const exec = (cmd = 'pwd', policy = 'allow') => ({ event: 'agent_exec', agentId: 'codex', cmd, policy });
@@ -126,4 +126,54 @@ test('live and saved policy refusals retain the reason, distinct from human deni
   assert.equal(policyBlockLabel(s.items[1]),'run dangerous commands alone');
   recordTimeline(s,exec('rm f','confirm:denied'));
   assert.equal(isPolicyBlocked(s.items[2]),false);
+});
+
+test('control grants and elapsed grace never imply command approval, including after retention', () => {
+  const s = newTimeline(); recordTimeline(s, grant());
+  recordTimeline(s, {event:'exec_scheduled',execId:'e1',agentId:'codex',cmd:'pwd',graceMs:5000});
+  recordTimeline(s, exec());
+  assert.deepEqual(commandDecisions(visibleTimeline(s,'commands')[0]), []);
+  for(let i=0;i<399;i++) recordTimeline(s,{event:'human_exec',cmd:'true'});
+  assert.ok(s.items[0].steps.some(s=>s.type==='control_granted'));
+  assert.deepEqual(commandDecisions(s.items[0]), []);
+});
+
+test('approval, proposal acceptance and grace co-sign are distinct command decisions', () => {
+  const s = newTimeline();
+  recordTimeline(s,{event:'approval_requested',request:{id:'a1',agentId:'codex',cmd:'rm sample',label:'delete'}});
+  recordTimeline(s,{event:'approval_resolved',approvalId:'a1',state:'granted',by:'human'});
+  recordTimeline(s,exec('rm sample','confirm:granted'));
+  recordTimeline(s,{event:'proposal_changed',proposal:{proposalId:'p1',agentId:'codex',text:'ls',state:'ready'}});
+  recordTimeline(s,{event:'proposal_resolved',proposalId:'p1',state:'executed'});
+  recordTimeline(s,exec('ls'));
+  recordTimeline(s,{event:'exec_scheduled',execId:'e1',agentId:'codex',cmd:'pwd',graceMs:5000});
+  recordTimeline(s,{event:'exec_cosigned',execId:'e1',agentId:'codex'});
+  recordTimeline(s,exec());
+  assert.deepEqual(s.items.map(commandDecisions), [['approved'],['accepted'],['cosigned']]);
+  assert.equal(s.items[2].steps.filter(s=>s.type==='exec_cosigned').length,1);
+  recordTimeline(s,exec());
+  assert.deepEqual(commandDecisions(s.items[3]), []);
+});
+
+test('saved commands preserve explicit human acts without guessing from policy or nearby events', () => {
+  const s = newTimeline();
+  importSavedActivity(s,[
+    {action:'exec',actor:'codex',cmd:'a',policy:'confirm',approval:'granted'},
+    {action:'exec',actor:'codex',cmd:'b',policy:'confirm',by:'human_commit'},
+    {action:'exec',actor:'codex',cmd:'c',policy:'allow',by:'human_cosign'},
+    {action:'exec_cosigned',actor:'human',cmd:'d'},
+    {action:'exec',actor:'codex',cmd:'d',policy:'allow'},
+  ]);
+  assert.deepEqual(s.items.map(commandDecisions), [['approved'],['accepted'],['cosigned'],[]]);
+});
+
+test('external automation remains identifiable on linked commands and saved audit records', () => {
+  const s = newTimeline();
+  recordTimeline(s,{...grant(),originalRequest:{method:'request_control',params:{origin:'external_automation'}}});
+  recordTimeline(s,exec());
+  assert.equal(isExternalAutomation(s,s.items[1]),true);
+  importSavedActivity(s,[{action:'exec',actor:'AppleScript · PAM',cmd:'ssh example.invalid',policy:'allow'}]);
+  assert.equal(isExternalAutomation(s,s.items[2]),true);
+  recordTimeline(s,{event:'human_exec',cmd:'pwd'});
+  assert.equal(isExternalAutomation(s,s.items[3]),false);
 });

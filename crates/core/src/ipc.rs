@@ -58,6 +58,7 @@ impl From<SessionError> for RpcError {
             SessionError::Authority(AuthorityError::NotController) => "not_controller",
             SessionError::Authority(AuthorityError::Expired) => "lease_expired",
             SessionError::ProcessExited => "process_exited",
+            SessionError::InputPending => "input_pending",
             SessionError::InvalidInput(_) => "invalid_input",
             SessionError::NotFound(_) => "not_found",
             SessionError::ApprovalPending(_) => "approval_pending",
@@ -91,6 +92,7 @@ fn bytes_param(params: &Value, key: &str) -> Result<Vec<u8>, RpcError> {
 /// Synchronous dispatch. Runs under the session lock; must not block.
 pub fn dispatch(session: &SharedSession, conn: ConnId, method: &str, params: &Value) -> Result<Value, RpcError> {
     let mut s = session.lock();
+    s.note_connection_activity(conn);
     let kind = s.conn_kind(conn).unwrap_or(ConnKind::Human);
     let actor = match kind {
         ConnKind::Agent => Actor::Agent { conn },
@@ -179,8 +181,7 @@ pub fn dispatch(session: &SharedSession, conn: ConnId, method: &str, params: &Va
         "set_mode" => {
             match serde_json::from_value::<AgentMode>(params.get("mode").cloned().unwrap_or(Value::Null)) {
                 Ok(m) => {
-                    s.set_mode(m);
-                    Ok(json!({ "mode": m }))
+                    s.set_mode(m).map(|_| json!({ "mode": m, "effectiveMode": s.effective_mode() }))
                 }
                 Err(e) => Err(SessionError::InvalidInput(format!("mode: {e}; use observe | copilot | autopilot"))),
             }
@@ -528,6 +529,9 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
                 continue;
             }
         };
+        for sid in &registered {
+            if let Some(s) = hub.get(sid) { s.lock().note_connection_activity(conn); }
+        }
         let result = if req.method == "hello" {
             let name = str_param(&req.params, "agentId").or_else(|| str_param(&req.params, "name")).unwrap_or_else(|| "client".into());
             let kind = match str_param(&req.params, "kind").as_deref() {
@@ -547,13 +551,15 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
                 register(&sid, &s, &identity, &mut registered);
                 bound = Some(sid);
             }
-            Ok(json!({ "conn": conn, "kind": match kind { ConnKind::Agent => "agent", ConnKind::Frontend => "frontend", ConnKind::Human => "human" }, "attended": hub.attended_id() }))
+            let target = bound.clone().or_else(|| hub.attended_id());
+            let modes = target.as_deref().and_then(|id| hub.get(id)).map(|s| { let s = s.lock(); (s.mode(), s.effective_mode()) });
+            Ok(json!({ "conn": conn, "kind": match kind { ConnKind::Agent => "agent", ConnKind::Frontend => "frontend", ConnKind::Human => "human" }, "attended": hub.attended_id(), "session": target, "mode": modes.map(|m| m.0), "effectiveMode": modes.map(|m| m.1) }))
         } else if req.method == "sessions" || req.method == "list_tabs" {
             let list: Vec<Value> = hub.ids().into_iter().enumerate().filter_map(|(i, sid)| {
                 let s = hub.get(&sid)?;
                 let g = s.lock();
                 let st = g.status();
-                Some(json!({ "tab": i + 1, "id": sid, "current": bound.as_deref() == Some(sid.as_str()), "attended": st.attended, "controller": st.controller, "pending": st.pending.len(), "entrustedTo": st.entrusted_to, "attentionRequest": st.attention_request, "openedBy": st.opened_by, "processAlive": st.process_alive }))
+                Some(json!({ "tab": i + 1, "id": sid, "current": bound.as_deref() == Some(sid.as_str()), "attended": st.attended, "controller": st.controller, "pending": st.pending.len(), "entrustedTo": st.entrusted_to, "attentionRequest": st.attention_request, "openedBy": st.opened_by, "processAlive": st.process_alive, "mode": st.mode, "effectiveMode": st.effective_mode }))
             }).collect();
             Ok(json!({ "sessions": list, "tabs": list.len(), "attended": hub.attended_id(), "current": bound }))
         } else if req.method == "open_tab" {

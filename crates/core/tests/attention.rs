@@ -74,7 +74,9 @@ fn entrust_requires_a_connected_agent() {
     h.agent(1, "claude");
     h.session.agent_request_control(1).unwrap();
     h.session.human_take();
-    assert_eq!(h.session.entrust().unwrap(), "claude", "falls back to the last agent and re-grants");
+    assert_eq!(h.session.entrust().unwrap(), "claude", "falls back to the last agent and arms entrustment");
+    assert!(h.session.current_lease().is_none(), "arming entrustment does not grant while attended");
+    h.session.set_attended(false);
     assert!(h.session.current_lease().is_some());
     h.session.connection_closed(1);
     assert!(h.session.entrusted_agent().is_none());

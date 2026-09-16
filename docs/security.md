@@ -16,6 +16,8 @@ Invalid or unreadable policy files prevent new shells from starting and produce 
 
 Clean input is tracked in full, including Unicode and lines that wrap visually. Policy checks and the command audit use that complete tracked text. After completion, history navigation or cursor editing marks input dirty, Conn falls back to the VT cursor row with the prompt prefix removed. **Wrapped or complex edited input can therefore be incomplete in policy evaluation and command history.** Use explicit full commands through the agent API and inspect the terminal before approving sensitive work. Original request details preserve what was submitted to Conn, but they are not a full terminal recording.
 
+A complete submitted command is not proof of the bytes a shell eventually parses. Shell line editors, key bindings and locale settings can transform terminal input before parsing; the macOS 15 / Bash 3.2 Unicode PTY report is an example of this distinction. Conn records submitted text and input delivery, not a shell parser acknowledgement. For sensitive operations, inspect the resulting screen and filesystem state as well as the approval record.
+
 Alternate-screen input (for example inside an editor) is not treated as shell command history. Shell syntax, prompts and interactive applications differ; reconstructed command records should not be treated as forensic proof.
 
 ## Approval and takeover
@@ -53,6 +55,7 @@ There is no detach/reattach. Closing the desktop session or disconnecting/reload
 Conn은 신뢰하는 사람과 에이전트가 터미널을 공유하도록 돕습니다. 정책 검사는 실수 방지 장치이며, 악의적인 에이전트나 같은 OS 사용자 권한의 프로세스를 격리하는 보안 경계가 아닙니다.
 
 - 직접 입력한 전체 명령은 화면 줄바꿈과 무관하게 검사·기록합니다. 자동 완성, 히스토리, 커서 편집 후에는 화면의 현재 행을 복원에 사용하므로 긴 편집 명령이 불완전하게 검사·기록될 수 있습니다.
+- 전체 명령을 기록했더라도 셸이 같은 바이트를 해석했다는 증거는 아닙니다. 셸의 줄 편집기·키 바인딩·로케일이 입력을 변환할 수 있습니다. macOS 15 / Bash 3.2의 Unicode PTY 제보도 이 차이를 보여 줍니다. 민감한 작업은 승인 기록과 함께 실제 화면·파일 결과를 확인하세요.
 - 잘못되었거나 읽을 수 없는 정책 파일이 있으면 새 셸을 시작하지 않습니다. 파일을 고치고 다시 시도하세요. 실행 중인 세션의 정책 재로딩이 실패하면 마지막으로 정상 로드한 규칙을 유지합니다.
 - 원격 및 비 POSIX 프로필은 명령별 검토를 요구합니다. 제어권 승인과 명령 실행 승인은 별개입니다.
 - 원문 요청, 명령, 경로, 의도와 승인 결과가 감사 로그·타임라인에 저장될 수 있습니다. 파일을 쓰는 명령에는 파일 내용도 포함될 수 있습니다. 자동 비밀정보 삭제 기능은 없습니다.

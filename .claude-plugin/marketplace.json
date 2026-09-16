@@ -1,13 +1,15 @@
 {
   "name": "conn",
-  "owner": { "name": "eggp" },
+  "owner": {
+    "name": "eggp"
+  },
   "description": "Conn — one shell, one hand on it",
   "plugins": [
     {
       "name": "conn",
       "source": "./plugin",
       "description": "Conn: MCP server + working-etiquette skill.",
-      "version": "0.4.1"
+      "version": "0.5.0"
     }
   ]
 }

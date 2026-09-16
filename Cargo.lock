@@ -276,7 +276,7 @@ checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
 name = "conn"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "base64",
  "clap",
@@ -292,7 +292,7 @@ dependencies = [
 
 [[package]]
 name = "conn-browser-harness"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "axum",
  "conn-core",
@@ -305,7 +305,7 @@ dependencies = [
 
 [[package]]
 name = "conn-core"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "base64",
  "chrono",
@@ -330,8 +330,9 @@ dependencies = [
 
 [[package]]
 name = "conn-frontend"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
+ "base64",
  "conn-core",
  "jsonc-parser",
  "parking_lot",
@@ -340,6 +341,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "toml_edit",
+ "uuid",
 ]
 
 [[package]]

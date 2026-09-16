@@ -8,6 +8,8 @@ conn-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 parking_lot.workspace = true
+uuid.workspace = true
+base64.workspace = true
 
 sha2 = "0.10"
 tempfile.workspace = true

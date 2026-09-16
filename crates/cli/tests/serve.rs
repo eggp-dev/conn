@@ -268,3 +268,30 @@ fn agent_opens_a_tab_that_starts_unattended() {
     let err = agent.call("open_tab", json!({})).unwrap_err();
     assert!(err.to_string().starts_with("masked"), "{err}");
 }
+
+
+#[test]
+fn agent_receives_modes_in_hello_tabs_snapshot_and_change_events() {
+    use conn_core::session::{AgentMode, Session};
+    use conn_core::ipc::Hub;
+    use std::sync::Arc;
+    let sa = Arc::new(parking_lot::Mutex::new(Session::new(test_session_config())));
+    let hub = Hub::new(); hub.add("mode-tab", sa.clone());
+    let dir = tempfile::tempdir().unwrap(); let sock = dir.path().join("mode.sock");
+    let _guard = conn_core::ipc::serve_in_background(sock.clone(), hub).unwrap();
+    let agent = Client::connect(&sock).unwrap();
+    let hello = agent.hello("agent", "mode-reader").unwrap();
+    assert_eq!(hello["session"], "mode-tab");
+    assert_eq!(hello["mode"], "autopilot");
+    assert_eq!(hello["effectiveMode"], "autopilot");
+    let events = agent.take_events().unwrap();
+    sa.lock().set_mode(AgentMode::Copilot).unwrap();
+    let event = events.recv_timeout(std::time::Duration::from_secs(2)).unwrap();
+    assert_eq!(event["event"], "mode_changed");
+    assert_eq!(event["mode"], "copilot"); assert_eq!(event["effectiveMode"], "copilot");
+    let tabs = agent.call("list_tabs", json!({})).unwrap();
+    assert_eq!(tabs["sessions"][0]["mode"], "copilot");
+    assert_eq!(tabs["sessions"][0]["effectiveMode"], "copilot");
+    let snapshot = agent.call("snapshot", json!({})).unwrap();
+    assert_eq!(snapshot["mode"], "copilot"); assert_eq!(snapshot["effectiveMode"], "copilot");
+}

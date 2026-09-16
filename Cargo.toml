@@ -3,13 +3,13 @@ resolver = "2"
 members = ["crates/core", "crates/cli", "crates/frontend", "crates/browser-harness"]
 
 [workspace.package]
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/eggplantiny/conn"
 
 [workspace.dependencies]
-conn-core = { path = "crates/core", version = "0.4.1" }
+conn-core = { path = "crates/core", version = "0.5.0" }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "time", "macros", "signal"] }
 portable-pty = "0.8"
 vt100 = "0.15"

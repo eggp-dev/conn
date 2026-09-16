@@ -357,7 +357,7 @@ dependencies = [
 
 [[package]]
 name = "conn-core"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -382,9 +382,10 @@ dependencies = [
 
 [[package]]
 name = "conn-desktop"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
+ "cc",
  "conn-core",
  "conn-frontend",
  "parking_lot",
@@ -396,8 +397,9 @@ dependencies = [
 
 [[package]]
 name = "conn-frontend"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
+ "base64 0.22.1",
  "conn-core",
  "jsonc-parser",
  "parking_lot",
@@ -406,6 +408,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "toml_edit 0.25.15+spec-1.1.0",
+ "uuid",
 ]
 
 [[package]]

@@ -2,9 +2,9 @@
 
 [English](macos-signing.md) · 한국어 · [플랫폼 방침](platform-support.ko.md) · [릴리스](releasing.ko.md)
 
-Mac 공개 패키지는 Developer ID 서명과 Apple 공증을 통과해야 합니다. 이 문서는 파이프라인과 필요한 근거를 설명하며 특정 실행이 이미 성공했다는 뜻은 아닙니다. 해당 실행의 `-signing.json` 파일 두 개와 릴리스 안내를 확인하세요.
+Mac 공개 패키지는 Developer ID 서명과 Apple 공증을 통과해야 합니다. 이 문서는 파이프라인과 필요한 근거를 설명하며 특정 실행이 이미 성공했다는 뜻은 아닙니다. 해당 실행의 Apple Silicon `-signing.json` 파일과 릴리스 안내를 확인하세요.
 
-GitHub의 `macos-15`, `macos-15-intel` 러너에서 두 아키텍처를 빌드하고 서명합니다. 관리자는 Linux에서 CI를 운영할 수 있으며 릴리스 작업마다 개인 Mac을 사용할 필요는 없습니다. 네이티브 첫 실행·GUI 확인에는 Mac 환경이 필요합니다. [GitHub 러너 안내](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)를 참고하세요.
+GitHub의 `macos-15` 러너에서 Apple Silicon을 빌드하고 서명합니다. v0.4.1 이후 Intel Mac 배포는 잠시 중단하며 기존 서명 릴리스는 유지합니다. 관리자는 Linux에서 CI를 운영할 수 있으며 릴리스 작업마다 개인 Mac을 사용할 필요는 없습니다. 네이티브 첫 실행·GUI 확인에는 Mac 환경이 필요합니다. [GitHub 러너 안내](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)를 참고하세요.
 
 ## 릴리스 Secret 6개
 
@@ -50,7 +50,7 @@ JSON 보고서는 네이티브 CI 검사 요약이며 별도로 서명된 증명
 
 ## 공개 전 확인
 
-Apple Silicon·Intel Mac에서 브라우저로 초안을 내려받으세요. 서명과 티켓을 확인하고 [네이티브 조작 검증표](platform-support.ko.md#릴리스-검증표)를 진행합니다. 앱 확인 명령 예시는 다음과 같습니다.
+Apple Silicon Mac에서 브라우저로 초안을 내려받으세요. 서명과 티켓을 확인하고 [네이티브 조작 검증표](platform-support.ko.md#릴리스-검증표)를 진행합니다. 앱 확인 명령 예시는 다음과 같습니다.
 
 ```sh
 codesign --verify --deep --strict --verbose=2 /Applications/Conn.app

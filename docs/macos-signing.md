@@ -2,9 +2,9 @@
 
 English · [한국어](macos-signing.ko.md) · [Platform policy](platform-support.md) · [Release](releasing.md)
 
-Public Mac packages must pass Developer ID signing and Apple notarization. This page defines the release pipeline and evidence required; it does not assert that a particular run has passed. Check that run's two `-signing.json` assets and release notes.
+Public Mac packages must pass Developer ID signing and Apple notarization. This page defines the release pipeline and evidence required; it does not assert that a particular run has passed. Check that run's Apple Silicon `-signing.json` asset and release notes.
 
-GitHub-hosted `macos-15` and `macos-15-intel` runners build and sign the two architectures. The maintainer can operate this CI from Linux; a personal Mac is not required to execute each release job. Native first-run and GUI checks still need a Mac environment. See [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+The GitHub-hosted `macos-15` runner builds and signs Apple Silicon packages. Intel Mac distribution is paused after v0.4.1; existing signed releases remain available. The maintainer can operate this CI from Linux; a personal Mac is not required to execute each release job. Native first-run and GUI checks still need a Mac environment. See [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 
 ## Six release secrets
 
@@ -50,7 +50,7 @@ The JSON reports summarize the native CI checks; they are not independent signat
 
 ## Before public distribution
 
-Download the draft in a browser on Apple Silicon and Intel Macs. Confirm the signatures and tickets, then complete the [native interaction checklist](platform-support.md#release-verification-checklist). Typical app checks are:
+Download the draft in a browser on an Apple Silicon Mac. Confirm the signatures and tickets, then complete the [native interaction checklist](platform-support.md#release-verification-checklist). Typical app checks are:
 
 ```sh
 codesign --verify --deep --strict --verbose=2 /Applications/Conn.app
