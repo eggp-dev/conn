@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
+<dictionary title="Conn Terminology">
+  <suite name="Conn Automation" code="Conn" description="External applications control their own Conn sessions. Enable profiles in Settings → Automation first.">
+    <command name="create session" code="Connopns" description="Open a tab from an allowed profile and return its session ID. Control still requires user permission.">
+      <cocoa class="ConnAutomationCommand"/>
+      <parameter name="profile" code="prof" type="text" optional="yes" description="Saved profile ID; defaults to the default profile."><cocoa key="profile"/></parameter>
+      <result type="text"/>
+    </command>
+    <command name="write text" code="Connwrte" description="Queue one line through Conn policy; returns a request ID, not command completion. No embedded control characters or credentials.">
+      <cocoa class="ConnAutomationCommand"/>
+      <direct-parameter type="text"/>
+      <parameter name="to session" code="sess" type="text"><cocoa key="session"/></parameter>
+      <parameter name="newline" code="nlin" type="boolean" optional="yes" description="Append Return through policy (default true)."><cocoa key="newline"/></parameter>
+      <parameter name="intent" code="intn" type="text" optional="yes"><cocoa key="intent"/></parameter>
+      <parameter name="request id" code="rqid" type="text" optional="yes" description="Optional unique ID to safely query or repeat the same request within this app run."><cocoa key="requestId"/></parameter>
+      <result type="text"/>
+    </command>
+    <command name="request status" code="Connrqst" description="Return JSON state for a request from this sender. Delivered means PTY input delivery, not command completion.">
+      <cocoa class="ConnAutomationCommand"/><direct-parameter type="text"/><result type="text"/>
+    </command>
+    <command name="request state" code="Connrqss" description="Return the request state as plain text for simple polling.">
+      <cocoa class="ConnAutomationCommand"/><direct-parameter type="text"/><result type="text"/>
+    </command>
+    <command name="cancel request" code="Conncncl" description="Cancel pending work and revoke this automation session; already delivered input cannot be undone.">
+      <cocoa class="ConnAutomationCommand"/><direct-parameter type="text"/><result type="boolean"/>
+    </command>
+    <command name="release session" code="Connrels" description="Revoke automation access and leave the tab for the human.">
+      <cocoa class="ConnAutomationCommand"/><direct-parameter type="text"/><result type="boolean"/>
+    </command>
+    <command name="session status" code="Connssta" description="Return JSON mode and lifecycle state for this sender's session.">
+      <cocoa class="ConnAutomationCommand"/><direct-parameter type="text"/><result type="text"/>
+    </command>
+  </suite>
+</dictionary>

@@ -82,6 +82,7 @@
     const ro = new ResizeObserver(() => { if (active) fit.fit(); });
     ro.observe(host);
     const un = onOutput((p) => { if (p.session === session) term.write(b64ToBytes(p.data)); });
+    un.then(() => cmd("attach_output", { session }));
     return () => { ro.disconnect(); un.then((f) => f()); term.dispose(); };
   });
 

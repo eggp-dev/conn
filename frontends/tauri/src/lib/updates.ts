@@ -24,7 +24,7 @@ export function compareVersions(a: string, b: string): number {
 }
 export function selectRelease(data: unknown, platform: Platform, previews: boolean): Release | null {
   if (!Array.isArray(data)) throw new Error('Invalid release response');
-  const target = ({ macos: { aarch64: 'aarch64-apple-darwin-desktop.dmg', x86_64: 'x86_64-apple-darwin-desktop.dmg' }, windows: { x86_64: 'x86_64-pc-windows-msvc-setup.exe' }, linux: { x86_64: 'x86_64-unknown-linux-gnu-desktop.AppImage' } } as Record<string, Record<string, string>>)[platform.os]?.[platform.arch];
+  const target = ({ macos: { aarch64: 'aarch64-apple-darwin-desktop.dmg' }, windows: { x86_64: 'x86_64-pc-windows-msvc-setup.exe' }, linux: { x86_64: 'x86_64-unknown-linux-gnu-desktop.AppImage' } } as Record<string, Record<string, string>>)[platform.os]?.[platform.arch];
   const releases = data.filter(r => r && r.draft === false && typeof r.prerelease === 'boolean' && (previews || !r.prerelease) && typeof r.tag_name === 'string' && version(r.tag_name));
   releases.sort((a, b) => compareVersions(b.tag_name, a.tag_name));
   const r = releases.find(r => compareVersions(r.tag_name, platform.version) > 0);

@@ -30,6 +30,7 @@ A human shares this session. Commands you did not run may appear on the screen.
 
 You only see what the human is looking at. When the human moves to another tab, snapshot and writes are refused with `unattended` / `suspended`. Ask them to come back with terminal_request_attention and wait. If the human entrusts the session to you, you may continue within the policy's `unattended` cap.
 
+Modes: snapshot and terminal_list_tabs report mode and effectiveMode. In copilot mode typing creates a proposal; tell the human to press Enter to accept it. Mode can change between calls.
 Tabs: terminal_list_tabs shows the tabs and which one the human is looking at. A tab you open with terminal_open_tab is not being watched yet: you can neither see nor write there until the human comes to it or entrusts it — open it, then wait. terminal_switch_tab moves only your connection; it never moves the human's view.";
 
 struct ToolDef {
@@ -94,7 +95,7 @@ const TOOLS: &[ToolDef] = &[
         name: "terminal_list_tabs",
         affordance: "*",
         method: "list_tabs",
-        description: "Lists the tabs (sessions): number, whether the human is looking at it (attended), who has the conn, who opened it, and which one your connection is bound to (current). No screen contents.",
+        description: "Lists the tabs (sessions): number, mode, effectiveMode (including unattended cap), whether the human is looking at it (attended), who has the conn, who opened it, and which one your connection is bound to (current). No screen contents.",
         schema: || json!({ "type": "object", "properties": {}, "additionalProperties": false }),
     },
     ToolDef {
@@ -160,6 +161,13 @@ impl Bridge {
                                 "params": { "level": "info", "logger": "conn",
                                             "data": format!("the human handed control back to you{}; continue",
                                                             ev.get("lastCmd").and_then(|v| v.as_str()).map(|c| format!(" (last: {c})")).unwrap_or_default()) } }));
+                        }
+                        "mode_changed" => {
+                            write_msg(&out, &json!({ "jsonrpc": "2.0", "method": "notifications/tools/list_changed" }));
+                            write_msg(&out, &json!({ "jsonrpc": "2.0", "method": "notifications/message",
+                                "params": { "level": "info", "logger": "conn", "data": {
+                                    "event": "mode_changed", "session": ev["session"], "mode": ev["mode"], "effectiveMode": ev["effectiveMode"]
+                                } } }));
                         }
                         "tools_changed" | "control_revoked" => {
                             write_msg(&out, &json!({ "jsonrpc": "2.0", "method": "notifications/tools/list_changed" }));

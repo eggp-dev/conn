@@ -3,6 +3,8 @@
 
 mod agent_setup;
 mod integrations;
+mod diagnostics;
+pub mod automation;
 
 mod updates;
 use std::collections::{HashMap, HashSet};
@@ -18,6 +20,10 @@ use std::path::PathBuf;
 use conn_core::backend::{Profile, Availability};
 
 struct AppState {
+    startup: parking_lot::Mutex<()>,
+    automation: automation::Automation,
+    ui_ready: std::sync::atomic::AtomicBool,
+    output: parking_lot::Mutex<HashMap<String, Option<Vec<String>>>>,
     integration_home: Option<PathBuf>,
     config_dir: PathBuf,
     socket: PathBuf,
@@ -42,17 +48,23 @@ impl Harness {
     /// The browser harness uses the same installer against disposable client files.
     pub fn with_setup_home(config_dir: PathBuf, socket: PathBuf, emit: Emit, integration_home: Option<PathBuf>) -> Self {
         let defaults = std::fs::read_to_string(config_dir.join("app.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(json!({}));
-        let state = Arc::new(AppState { integration_home, config_dir, socket, engines: Default::default(), hub: Hub::new(), server: Default::default(), seq: parking_lot::Mutex::new(0), defaults: parking_lot::Mutex::new(defaults) });
+        let automation = automation::Automation::load(&config_dir);
+        let state = Arc::new(AppState { startup: Default::default(), automation, ui_ready: Default::default(), output: Default::default(), integration_home, config_dir, socket, engines: Default::default(), hub: Hub::new(), server: Default::default(), seq: parking_lot::Mutex::new(0), defaults: parking_lot::Mutex::new(defaults) });
         let app = AppHandle { state: Arc::downgrade(&state), emit };
         Self { state, app }
     }
     pub fn shutdown(&self) {
+        self.state.automation.stop_all();
         self.state.server.lock().take();
         for id in self.state.hub.ids() { self.state.hub.remove(&id); }
         for e in self.state.engines.lock().drain().map(|(_,e)|e) { let _ = e.terminate(); }
     }
     pub fn invoke(&self, name: &str, args: Value) -> Result<Value, String> {
         dispatch(&self.app, &self.state, name, args)
+    }
+    /// Narrow external adapter boundary. Never exposes trusted UI dispatch.
+    pub fn automate(&self, caller: automation::Caller, operation: &str, args: Value) -> Result<Value, String> {
+        automation::dispatch(&self.app, &self.state, caller, operation, args)
     }
 }
 impl Drop for Harness { fn drop(&mut self) { self.shutdown(); } }
@@ -62,7 +74,7 @@ fn apply_defaults(defaults: &Value, engine: &Engine) {
     let s_arc = engine.session();
     let mut s = s_arc.lock();
     if let Some(m) = defaults.get("mode").and_then(|m| serde_json::from_value::<AgentMode>(m.clone()).ok()) {
-        s.set_mode(m);
+        let _ = s.set_mode(m); // Fresh sessions have no pending shell input.
     }
     if let Some(g) = defaults.get("gate").and_then(|g| g.as_bool()) {
         s.set_control_gate(g);
@@ -89,6 +101,29 @@ fn engine(state: &AppState, session: &str) -> Result<Arc<Engine>, String> {
     state.engines.lock().get(session).cloned().ok_or_else(|| format!("no session {session}"))
 }
 
+/// Installed before Engine starts reading the PTY, so even immediate startup output
+/// is buffered until xterm has registered its listener.
+struct TerminalOutput { app: AppHandle, session: String }
+impl std::io::Write for TerminalOutput {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        use base64::Engine as _;
+        if let Some(state) = self.app.state.upgrade() {
+            let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+            let mut output = state.output.lock();
+            match output.get_mut(&self.session) {
+                Some(Some(buffer)) => {
+                    buffer.push(data);
+                    while buffer.len() > 1 && buffer.iter().map(String::len).sum::<usize>() > 1_400_000 { buffer.remove(0); }
+                }
+                Some(None) => { let _ = self.app.emit("ss:output", json!({"session":self.session,"data":data})); }
+                None => {}, // The tab has closed.
+            }
+        }
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+}
+
 fn spawn_tab(app: &AppHandle, state: &AppState, rows: u16, cols: u16, profile_id: Option<&str>) -> Result<String, String> {
     let profiles = conn_core::profiles::Profiles::load(&state.config_dir.join("profiles.json"))?;
     let profile = profiles.profiles.iter().find(|p| p.id == profile_id.unwrap_or(&profiles.default_profile)).ok_or("Unknown profile")?.clone();
@@ -104,22 +139,22 @@ fn spawn_tab(app: &AppHandle, state: &AppState, rows: u16, cols: u16, profile_id
             return Err(format!("Could not load policy {}: {e}. Fix the policy before starting a shell.", policy_path.display()));
         }
     };
+    state.output.lock().insert(id.clone(), Some(Vec::new()));
     let engine = Arc::new(Engine::spawn(EngineConfig {
-        profile: Some(profile), rows, cols, render_prompt: false, output: None,
+        profile: Some(profile), rows, cols, render_prompt: false,
+        output: Some(Box::new(TerminalOutput { app: app.clone(), session: id.clone() })),
         // Both graphical frontends render with xterm, regardless of the launcher TERM.
         // Explicit profile environment overrides still take precedence in Engine.
         env: vec![("TERM".into(), "xterm-256color".into())],
         cwd: conn_core::profiles::home_dir(), audit: Some(audit), policy: Some(policy),
         ..EngineConfig::default()
-    }).map_err(|e|e.to_string())?);
+    }).map_err(|e| { state.output.lock().remove(&id); e.to_string() })?);
     let handle = app.clone();
     let sid = id.clone();
     engine.subscribe(
         "frontend",
         Box::new(move |ev: ServerEvent| match ev {
-            ServerEvent::Output { data } => {
-                let _ = handle.emit("ss:output", json!({ "session": sid, "data": data }));
-            }
+            ServerEvent::Output { .. } => {}, // Raw output uses the early writer above.
             other => {
                 let mut v = serde_json::to_value(&other).unwrap_or(Value::Null);
                 if let Some(o) = v.as_object_mut() {
@@ -128,7 +163,7 @@ fn spawn_tab(app: &AppHandle, state: &AppState, rows: u16, cols: u16, profile_id
                 let _ = handle.emit("ss:event", v);
             }
         }),
-        true,
+        false,
     );
     apply_defaults(&state.defaults.lock(), engine.as_ref());
     state.hub.add(&id, engine.session());
@@ -155,11 +190,16 @@ fn policy_rules(state: &AppState, session: String) -> Result<Value, String> {
     Ok(engine(&state, &session)?.session().lock().policy_description())
 }
 
-/// Where things are and which harnesses have the plugin.
+/// Local setup detection and actual open connections are intentionally separate.
 fn diagnostics(state: &AppState, session: String) -> Result<Value, String> {
-    let home = conn_core::profiles::home_dir().unwrap_or_default();
-    let has = |rel: &str, needle: &str| std::fs::read_to_string(home.join(rel)).map(|t| t.contains(needle)).unwrap_or(false);
     let policy_path = engine(&state, &session)?.session().lock().policy_path().unwrap_or_else(|| state.config_dir.join("policy.yaml"));
+    let connections = diagnostics::connections(&state.hub);
+    let connected = connections.iter().filter_map(|c| c["agentId"].as_str().map(str::to_owned)).collect::<Vec<_>>();
+    let catalog = integrations::catalog(&state.config_dir, &state.socket, state.integration_home.as_deref(), &connected);
+    let (clients, config_error) = match catalog {
+        Ok(c) => (c["clients"].clone(), None),
+        Err(e) => (json!([]), Some(e)),
+    };
     Ok(json!({
         "version": env!("CARGO_PKG_VERSION"),
         "socket": state.socket.clone(),
@@ -168,11 +208,9 @@ fn diagnostics(state: &AppState, session: String) -> Result<Value, String> {
         "policyPath": policy_path,
         "defaultsPath": defaults_path(state),
         "cli": agent_setup::cli_status(),
-        "plugins": {
-            "claude": has(".claude/plugins/installed_plugins.json", "\"conn@conn\""),
-            "copilot": has(".copilot/config.json", "conn@conn") || has(".copilot/config.json", "\"conn\"") || has(".copilot/mcp-config.json", "\"conn\""),
-            "codex": has(".codex/config.toml", "plugins.\"conn@conn\"") || has(".codex/config.toml", "[mcp_servers.conn]"),
-        },
+        "clients": clients,
+        "configError": config_error,
+        "agentConnections": connections,
         "sessions": state.hub.ids().len(),
     }))
 }
@@ -182,6 +220,15 @@ fn log(msg: String) {
 }
 
 fn start(app: &AppHandle, state: &AppState, rows: u16, cols: u16) -> Result<Value, String> {
+    let _startup = state.startup.lock();
+    ensure_runtime(app, state)?;
+    let first = state.engines.lock().is_empty();
+    let session = if first { spawn_tab(app, state, rows, cols, None)? } else { state.hub.attended_id().unwrap_or_default() };
+    let e = engine(state, &session)?;
+    Ok(json!({ "socket": state.socket, "shell": e.shell(), "session": session, "sessions": state.hub.ids() }))
+}
+
+fn ensure_runtime(app: &AppHandle, state: &AppState) -> Result<(), String> {
     let socket = state.socket.clone();
     if state.server.lock().is_none() {
         let guard = conn_core::ipc::serve_in_background(socket.clone(), state.hub.clone()).map_err(|e| e.to_string())?;
@@ -202,10 +249,7 @@ fn start(app: &AppHandle, state: &AppState, rows: u16, cols: u16) -> Result<Valu
             Ok(id)
         }));
     }
-    let first = state.engines.lock().is_empty();
-    let session = if first { spawn_tab(&app, &state, rows, cols, None)? } else { state.hub.attended_id().unwrap_or_default() };
-    let e = engine(&state, &session)?;
-    Ok(json!({ "socket": socket, "shell": e.shell(), "session": session, "sessions": state.hub.ids() }))
+    Ok(())
 }
 
 fn open_tab(app: &AppHandle, state: &AppState, rows: u16, cols: u16, profile_id: Option<String>) -> Result<String, String> {
@@ -215,6 +259,8 @@ fn open_tab(app: &AppHandle, state: &AppState, rows: u16, cols: u16, profile_id:
 }
 
 fn close_tab(state: &AppState, session: String) -> Result<Option<String>, String> {
+    state.automation.stop_session(&session);
+    state.output.lock().remove(&session);
     state.hub.remove(&session);
     if let Some(e) = state.engines.lock().remove(&session) {
         e.terminate().map_err(|e| e.to_string())?;
@@ -262,8 +308,7 @@ fn execute_now(state: &AppState, session: String, exec_id: String) -> Result<(),
 }
 
 fn set_mode(state: &AppState, session: String, mode: AgentMode) -> Result<(), String> {
-    engine(&state, &session)?.session().lock().set_mode(mode);
-    Ok(())
+    engine(&state, &session)?.session().lock().set_mode(mode).map_err(|e| e.to_string())
 }
 
 fn set_control_gate(state: &AppState, session: String, ask: bool) -> Result<(), String> {
@@ -345,6 +390,18 @@ fn arg<T: serde::de::DeserializeOwned>(args: &Value, key: &str) -> Result<T,Stri
 }
 fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Result<Value,String> {
     match name {
+        "automation_settings" => Ok(state.automation.settings()),
+        "automation_save" => automation::save(state, arg(&args, "config")?),
+        "automation_revoke" => { state.automation.stop_all(); Ok(Value::Null) },
+        "ui_ready" => { state.ui_ready.store(true, std::sync::atomic::Ordering::Release); Ok(Value::Null) },
+        "attach_output" => {
+            let id: String = arg(&args, "session")?;
+            let mut output = state.output.lock();
+            if let Some(entry) = output.get_mut(&id) {
+                for data in entry.take().unwrap_or_default() { app.emit("ss:output", json!({ "session": id, "data": data }))?; }
+            }
+            Ok(Value::Null)
+        },
         "update_info" => Ok(json!({"version": env!("CARGO_PKG_VERSION"), "os": std::env::consts::OS, "arch": std::env::consts::ARCH})),
         "open_release" => updates::open(&arg::<String>(&args, "url")?).map(|_| Value::Null),
         "get_defaults" => serde_json::to_value(get_defaults(state)).map_err(|e|e.to_string()),

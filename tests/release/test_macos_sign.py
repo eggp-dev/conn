@@ -197,6 +197,9 @@ class SigningTests(unittest.TestCase):
         self.assertNotIn("APPLE_SIGNING_IDENTITY: '-'", workflow)
         self.assertNotIn("secrets.KEYCHAIN_PASSWORD", workflow)
         self.assertIn("scripts/release.py smoke --target", workflow)
+        self.assertEqual(signing.MAC_TARGETS, ("aarch64-apple-darwin",))
+        self.assertNotIn("x86_64-apple-darwin", workflow)
+        self.assertNotIn("macos-15-intel", workflow)
         self.assertLess(workflow.index("macos_sign.py cleanup"), workflow.index("actions/upload-artifact"))
 
 

@@ -17,10 +17,17 @@ test('preview channel, drafts and malformed tags', () => {
  assert.throws(() => selectRelease({}, platform, true));
 });
 test('exact platform assets and safe fallback', () => {
- for (const [os, arch, suffix] of [['macos','aarch64','aarch64-apple-darwin-desktop.dmg'],['macos','x86_64','x86_64-apple-darwin-desktop.dmg'],['windows','x86_64','x86_64-pc-windows-msvc-setup.exe'],['linux','x86_64','x86_64-unknown-linux-gnu-desktop.AppImage']]) {
+ for (const [os, arch, suffix] of [['macos','aarch64','aarch64-apple-darwin-desktop.dmg'],['windows','x86_64','x86_64-pc-windows-msvc-setup.exe'],['linux','x86_64','x86_64-unknown-linux-gnu-desktop.AppImage']]) {
   assert.ok(selectRelease([release('v0.5.0', true, suffix)], { ...platform, os, arch }, true)?.download?.endsWith(suffix));
  }
  assert.equal(selectRelease([release()], {...platform, arch:'unknown'}, true)?.download, undefined);
+ // Paused Intel builds must never be offered the Apple Silicon installer,
+ // even if an old Intel asset is present in the response.
+ for (const suffix of ['aarch64-apple-darwin-desktop.dmg', 'x86_64-apple-darwin-desktop.dmg']) {
+  const intel = selectRelease([release('v0.5.0', true, suffix)], {...platform, arch:'x86_64'}, true);
+  assert.equal(intel?.download, undefined);
+  assert.equal(intel?.url, `${RELEASES}tag/v0.5.0`);
+ }
  const malicious = release(); malicious.assets[0].browser_download_url = 'https://evil.test/install';
  assert.equal(selectRelease([malicious], platform, true)?.download, undefined);
 });

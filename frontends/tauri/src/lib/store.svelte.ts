@@ -77,7 +77,7 @@ export const st = $state({
   centerOpen: false,
   settingsOpen: false,
   timelineOpen: false,
-  settingsTab: "agents" as "profiles" | "agents" | "pacing" | "policy" | "appearance" | "diagnostics",
+  settingsTab: "agents" as "profiles" | "agents" | "automation" | "pacing" | "policy" | "appearance" | "diagnostics",
 });
 
 /** The tab the human is looking at. Safe to call before boot (returns a placeholder). */

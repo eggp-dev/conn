@@ -1,7 +1,7 @@
 {
   "name": "conn-desktop",
   "private": true,
-  "version": "0.4.1",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "tauri": "node scripts/tauri.mjs",
     "test:browser": "node scripts/browser-test.mjs",
-    "test": "node tests/timeline/events.test.ts && node ../../tests/icon/state.test.ts && node tests/updates/releases.test.ts"
+    "test": "node tests/timeline/events.test.ts && node ../../tests/icon/state.test.ts && node tests/updates/releases.test.ts && node tests/connections/status.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

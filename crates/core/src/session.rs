@@ -51,6 +51,7 @@ pub enum ServerEvent {
     AgentInput { #[serde(rename = "agentId")] agent_id: String, len: usize },
     /// An agent's ENTER passed policy and was scheduled after `enter_grace_ms`.
     ExecScheduled { #[serde(rename = "execId")] exec_id: String, #[serde(rename = "agentId")] agent_id: String, cmd: String, intent: Option<String>, #[serde(rename = "graceMs")] grace_ms: u64 },
+    ExecCosigned { #[serde(rename = "execId")] exec_id: String, #[serde(rename = "agentId")] agent_id: String },
     ExecCancelled { #[serde(rename = "execId")] exec_id: String, reason: String },
     /// An agent command reached the shell (or was denied).
     AgentExec { #[serde(rename = "agentId")] agent_id: String, cmd: String, policy: String, intent: Option<String> },
@@ -61,7 +62,7 @@ pub enum ServerEvent {
     ProcessExited { #[serde(rename = "exitCode")] exit_code: Option<u32> },
     PacingChanged { pacing: Pacing },
     AffordanceMaskChanged { allow: Option<Vec<Affordance>> },
-    ModeChanged { mode: AgentMode },
+    ModeChanged { mode: AgentMode, #[serde(rename = "effectiveMode")] effective_mode: AgentMode },
     ControlGateChanged { ask: bool },
     /// An agent asked for control and the gate is on; the human decides.
     ControlRequested { request: ControlRequest },
@@ -183,6 +184,7 @@ struct ConnInfo {
     name: String,
     sink: Box<dyn EventSink>,
     stream_output: bool,
+    last_activity: Instant,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -191,6 +193,8 @@ pub enum SessionError {
     Authority(#[from] AuthorityError),
     #[error("the shell process has exited")]
     ProcessExited,
+    #[error("shell input is pending; clear or cancel it before changing mode")]
+    InputPending,
     #[error("invalid input: {0}")]
     InvalidInput(String),
     #[error("not found: {0}")]
@@ -237,6 +241,9 @@ pub enum ControllerInfo {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Snapshot {
+    pub mode: AgentMode,
+    #[serde(rename = "effectiveMode")]
+    pub effective_mode: AgentMode,
     #[serde(flatten)]
     pub projection: Projection,
     pub controller: ControllerInfo,
@@ -309,6 +316,14 @@ pub struct ApprovalInfo {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentConnection {
+    pub conn_id: ConnId,
+    pub agent_id: String,
+    pub idle_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct Status {
     #[serde(rename = "profileId")]
     pub profile_id: Option<String>,
@@ -329,6 +344,8 @@ pub struct Status {
     pub policy_path: Option<String>,
     #[serde(rename = "connectedAgents")]
     pub connected_agents: Vec<String>,
+    #[serde(rename = "agentConnections")]
+    pub agent_connections: Vec<AgentConnection>,
     #[serde(rename = "connectedFrontends")]
     pub connected_frontends: Vec<String>,
     pub pacing: Pacing,
@@ -611,7 +628,7 @@ impl Session {
     // ----- connections ----------------------------------------------------
 
     pub fn register_conn(&mut self, conn: ConnId, kind: ConnKind, name: &str, sink: Box<dyn EventSink>) {
-        self.conns.insert(conn, ConnInfo { kind, name: name.to_string(), sink, stream_output: false });
+        self.conns.insert(conn, ConnInfo { kind, name: name.to_string(), sink, stream_output: false, last_activity: Instant::now() });
         if kind == ConnKind::Agent {
             self.audit.record(name, "connect", json!({ "conn": conn }));
         }
@@ -619,7 +636,7 @@ impl Session {
 
     /// Register a frontend. `stream_output` = also send raw PTY output as `Output` events.
     pub fn register_frontend(&mut self, conn: ConnId, name: &str, sink: Box<dyn EventSink>, stream_output: bool) {
-        self.conns.insert(conn, ConnInfo { kind: ConnKind::Frontend, name: name.to_string(), sink, stream_output });
+        self.conns.insert(conn, ConnInfo { kind: ConnKind::Frontend, name: name.to_string(), sink, stream_output, last_activity: Instant::now() });
     }
 
     /// Subscribe an in-process frontend (embedders). Returns a handle id for `unsubscribe`.
@@ -630,12 +647,27 @@ impl Session {
         id
     }
 
+    /// Allocate a distinct in-process automation connection using the agent policy path.
+    pub fn subscribe_agent(&mut self, name: &str, sink: Box<dyn EventSink>) -> ConnId {
+        // Unlike a frontend subscription, an automation connection appears in
+        // the hub-wide connection list. Its ID must be unique across sessions.
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1 << 41);
+        let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.register_conn(id, ConnKind::Agent, name, sink);
+        id
+    }
+
     pub fn unsubscribe(&mut self, conn: ConnId) {
         self.connection_closed(conn);
     }
 
     pub fn conn_kind(&self, conn: ConnId) -> Option<ConnKind> {
         self.conns.get(&conn).map(|c| c.kind)
+    }
+
+    /// Activity describes socket liveness only; it does not renew write authority.
+    pub fn note_connection_activity(&mut self, conn: ConnId) {
+        if let Some(c) = self.conns.get_mut(&conn) { c.last_activity = Instant::now(); }
     }
 
     pub fn connection_closed(&mut self, conn: ConnId) {
@@ -804,9 +836,24 @@ impl Session {
     /// The human looks at (or away from) this session. Leaving suspends an agent's
     /// writes unless the session was entrusted to it; returning resumes them.
     pub fn set_attended(&mut self, attended: bool) {
-        if self.attended == attended {
-            return;
+        let previous_effective = self.effective_mode();
+        // Re-attending also withdraws an entrustment armed while already here.
+        // Its lease must end as well, or request_control would renew it past the gate.
+        if attended {
+            if let Some(conn) = self.entrusted.take() {
+                self.cancel_scheduled_if(|s| s.conn == conn, "human_returned");
+                self.reject_proposal_if(|p| p.conn == conn, "human_returned");
+                if let Some(lease) = self.authority.revoke_if_held_by(conn) {
+                    let ev = ServerEvent::ControlRevoked { lease: lease.label(), agent_id: lease.agent_id, reason: RevokeReason::Taken };
+                    self.notify(conn, ev.clone());
+                    self.broadcast(ev);
+                }
+                self.audit.record("human", "entrust_revoked", json!({ "reason": "human_returned" }));
+                self.broadcast(ServerEvent::Entrusted { agent_id: None, cap: None });
+                self.notify_tools_changed();
+            }
         }
+        if self.attended == attended { return; }
         self.attended = attended;
         self.audit.record("human", if attended { "attend" } else { "leave" }, json!({}));
         self.broadcast(ServerEvent::AttentionChanged { attended });
@@ -815,16 +862,16 @@ impl Session {
             if let Some(l) = self.authority.controller().lease() {
                 self.notify(l.conn, ServerEvent::ControlResumed);
             }
-            // Entrustment is for one absence only.
-            if self.entrusted.take().is_some() {
-                self.broadcast(ServerEvent::Entrusted { agent_id: None, cap: None });
+        } else if let Some(conn) = self.entrusted {
+            if !self.authority.holds(conn) {
+                // Entrustment is activated only once the human leaves.
+                let _ = self.grant(conn, Some("entrusted".into()), "entrust");
             }
         } else if let Some(holder) = self.authority.controller().lease().map(|l| l.conn) {
-            if self.entrusted != Some(holder) {
-                self.cancel_scheduled_if(|_| true, "human_left");
-                self.notify(holder, ServerEvent::ControlSuspended { reason: "human_left".into() });
-            }
+            self.cancel_scheduled_if(|_| true, "human_left");
+            self.notify(holder, ServerEvent::ControlSuspended { reason: "human_left".into() });
         }
+        if previous_effective != self.effective_mode() { self.notify_mode_changed(); }
         self.notify_tools_changed();
     }
 
@@ -839,7 +886,7 @@ impl Session {
             return Err(SessionError::NotFound(format!("{agent_id} is no longer connected")));
         }
         self.entrusted = Some(conn);
-        if !self.authority.holds(conn) {
+        if !self.attended && !self.authority.holds(conn) {
             self.grant(conn, Some("entrusted".into()), "entrust")?;
         }
         let cap = self.policy.unattended_cap().to_string();
@@ -1015,7 +1062,7 @@ impl Session {
         if let Actor::Agent { conn } = actor {
             self.audit.record(&self.agent_name(conn), "observe", json!({ "rev": projection.revision }));
         }
-        Ok(Snapshot { projection, controller: self.controller_info(), process_alive: self.process_alive })
+        Ok(Snapshot { mode: self.mode, effective_mode: self.effective_mode(), projection, controller: self.controller_info(), process_alive: self.process_alive })
     }
 
     pub fn agent_request_control(&mut self, conn: ConnId) -> Result<LeaseInfo, SessionError> {
@@ -1143,10 +1190,11 @@ impl Session {
         Ok(info)
     }
 
-    pub fn set_mode(&mut self, mode: AgentMode) {
-        if self.mode == mode {
-            return;
-        }
+    pub fn set_mode(&mut self, mode: AgentMode) -> Result<(), SessionError> {
+        if self.mode == mode { return Ok(()); }
+        // A mode switch must not leave physical shell input behind a ghost proposal.
+        // Refuse rather than assume Ctrl-U has the same meaning in every shell/TUI.
+        if self.input.has_pending() { return Err(SessionError::InputPending); }
         self.mode = mode;
         match mode {
             AgentMode::Observe => {
@@ -1169,8 +1217,15 @@ impl Session {
             }
         }
         self.audit.record("frontend", "mode_changed", json!({ "mode": mode }));
-        self.broadcast(ServerEvent::ModeChanged { mode });
+        self.notify_mode_changed();
         self.notify_tools_changed();
+        Ok(())
+    }
+
+    fn notify_mode_changed(&self) {
+        let ev = ServerEvent::ModeChanged { mode: self.mode, effective_mode: self.effective_mode() };
+        self.broadcast(ev.clone());
+        for c in self.conns.values().filter(|c| c.kind == ConnKind::Agent) { c.sink.send(ev.clone()); }
     }
 
     pub fn mode(&self) -> AgentMode {
@@ -1255,6 +1310,9 @@ impl Session {
         if p.state != ProposalState::Ready {
             return Err(SessionError::InvalidInput(format!("{proposal_id} is {:?}", p.state)));
         }
+        // Attention changes can impose a Co-pilot cap without an explicit mode
+        // switch. Never append a proposal to pre-existing physical shell input.
+        if self.input.has_pending() { return Err(SessionError::InputPending); }
         let cmd = p.text.trim().to_string();
         let col = self.screen.cursor().col;
         self.input.feed(p.text.as_bytes(), col);
@@ -1505,10 +1563,14 @@ impl Session {
     }
 
     fn execute_now_with(&mut self, agent_id: &str, cmd: &str, intent: Option<String>) {
+        self.execute_with_source(agent_id, cmd, intent, None);
+    }
+
+    fn execute_with_source(&mut self, agent_id: &str, cmd: &str, intent: Option<String>, by: Option<&str>) {
         self.last_agent_cmd = Some(cmd.to_string());
         self.write_pty(b"\r");
         self.input.reset();
-        self.audit.record(agent_id, "exec", json!({ "cmd": cmd, "policy": "allow", "intent": intent }));
+        self.audit.record(agent_id, "exec", json!({ "cmd": cmd, "policy": "allow", "intent": intent, "by": by }));
         self.broadcast(ServerEvent::AgentExec { agent_id: agent_id.to_string(), cmd: cmd.to_string(), policy: "allow".into(), intent });
     }
 
@@ -1518,7 +1580,7 @@ impl Session {
                 s.state = ExecState::Cancelled;
                 s.cancel_reason = Some(reason.to_string());
                 let (id, agent, cmd) = (s.exec_id.clone(), s.agent_id.clone(), s.cmd.clone());
-                self.input.reset();
+                // Cancellation leaves bytes in the shell, so retain their tracking.
                 self.audit.record(&agent, "exec_cancelled", json!({ "exec": id, "cmd": cmd, "reason": reason }));
                 self.broadcast(ServerEvent::ExecCancelled { exec_id: id, reason: reason.into() });
             }
@@ -1531,8 +1593,9 @@ impl Session {
             Some(s) if s.exec_id == exec_id && s.state == ExecState::Scheduled => {
                 s.state = ExecState::Executed;
                 let (agent, cmd, intent) = (s.agent_id.clone(), s.cmd.clone(), s.intent.clone());
-                self.audit.record("human", "exec_cosigned", json!({ "exec": exec_id, "cmd": cmd }));
-                self.execute_now_with(&agent, &cmd, intent);
+                self.audit.record("human", "exec_cosigned", json!({ "exec": exec_id, "cmd": cmd, "agentId": agent }));
+                self.broadcast(ServerEvent::ExecCosigned { exec_id: exec_id.into(), agent_id: agent.clone() });
+                self.execute_with_source(&agent, &cmd, intent, Some("human_cosign"));
                 Ok(())
             }
             Some(s) if s.exec_id == exec_id => Err(SessionError::InvalidInput(format!("{exec_id} is not scheduled"))),
@@ -1567,18 +1630,13 @@ impl Session {
             return Err(SessionError::ProcessExited);
         }
         self.check_mask(Affordance::Interrupt)?;
+        if !self.attended_for(conn) { return Err(SessionError::Suspended); }
         self.authority.check_and_touch(conn, Instant::now())?;
         self.cancel_scheduled_if(|s| s.conn == conn, "interrupted");
         for id in self.approvals.pending_for_conn(conn) {
             self.finish_approval(&id, ApprovalState::Denied, "interrupted");
         }
-        if self.effective_mode() == AgentMode::Copilot {
-            self.reject_proposal_if(|p| p.conn == conn, "interrupted");
-            self.input.reset();
-            let name = self.agent_name(conn);
-            self.audit.record(&name, "interrupt", json!({ "mode": "copilot" }));
-            return Ok(());
-        }
+        self.reject_proposal_if(|p| p.conn == conn, "interrupted");
         self.write_pty(b"\x03");
         self.input.reset();
         let name = self.agent_name(conn);
@@ -1603,6 +1661,9 @@ impl Session {
     pub fn resolve_approval(&mut self, id: &str, decision: ApprovalDecision, by: &str) -> Result<ApprovalInfo, SessionError> {
         if self.approvals.get(id).is_none() {
             return Err(SessionError::NotFound(id.to_string()));
+        }
+        if decision == ApprovalDecision::AllowSession && self.execution_profile.as_ref().is_some_and(|p| p.needs_review()) {
+            return Err(SessionError::InvalidInput("this shell or remote environment requires review for every command; allow_session is unavailable".into()));
         }
         let state = match decision {
             ApprovalDecision::Grant | ApprovalDecision::AllowSession => ApprovalState::Granted,
@@ -1748,6 +1809,11 @@ impl Session {
     }
 
     pub fn status(&self) -> Status {
+        let mut agent_connections: Vec<_> = self.conns.iter().filter(|(_, c)| c.kind == ConnKind::Agent)
+            .map(|(conn, c)| AgentConnection { conn_id: *conn, agent_id: c.name.clone(), idle_secs: c.last_activity.elapsed().as_secs() }).collect();
+        agent_connections.sort_by(|a, b| a.agent_id.cmp(&b.agent_id).then(a.conn_id.cmp(&b.conn_id)));
+        let mut connected_agents: Vec<_> = agent_connections.iter().map(|c| c.agent_id.clone()).collect();
+        connected_agents.dedup();
         Status {
             profile_id: self.execution_profile.as_ref().map(|p|p.id.clone()),
             profile_name: self.execution_profile.as_ref().map(|p|p.name.clone()),
@@ -1760,7 +1826,8 @@ impl Session {
             scheduled: self.scheduled_exec().cloned(),
             session_allows: self.policy.session_allows(),
             policy_path: self.policy.path().map(|p| p.display().to_string()),
-            connected_agents: self.conns.values().filter(|c| c.kind == ConnKind::Agent).map(|c| c.name.clone()).collect(),
+            connected_agents,
+            agent_connections,
             connected_frontends: self.conns.values().filter(|c| c.kind == ConnKind::Frontend).map(|c| c.name.clone()).collect(),
             pacing: self.pacing.clone(),
             affordance_mask: self.affordance_mask(),

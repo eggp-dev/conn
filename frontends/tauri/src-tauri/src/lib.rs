@@ -3,6 +3,8 @@ use std::sync::Arc;
 use serde_json::Value;
 use tauri::{Emitter, Manager, State};
 use conn_frontend::Harness;
+#[cfg(target_os = "macos")]
+mod macos;
 
 #[tauri::command]
 async fn dispatch(state: State<'_, Arc<Harness>>, name: String, args: Value) -> Result<Value,String> {
@@ -14,7 +16,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![dispatch])
         .setup(|app| {
             let handle = app.handle().clone();
-            app.manage(Arc::new(Harness::new(conn_core::paths::config_dir(), conn_core::paths::socket_path(), Arc::new(move |name,value| { let _ = handle.emit(name,value); }))));
+            let harness = Arc::new(Harness::new(conn_core::paths::config_dir(), conn_core::paths::socket_path(), Arc::new(move |name,value| { let _ = handle.emit(name,value); })));
+            #[cfg(target_os = "macos")]
+            macos::install(&harness);
+            app.manage(harness);
             Ok(())
         })
         .on_window_event(|window,event| { if let tauri::WindowEvent::Destroyed = event { window.state::<Arc<Harness>>().shutdown(); } })

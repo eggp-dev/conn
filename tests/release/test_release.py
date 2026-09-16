@@ -100,6 +100,13 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaises(release.ReleaseError):
             release.asset_names(self.version, "../../secret")
 
+    def test_future_releases_include_only_supported_targets(self):
+        self.assertEqual(set(release.TARGETS), {
+            "aarch64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc",
+        })
+        with self.assertRaises(release.ReleaseError):
+            release.asset_names(self.version, "x86_64-apple-darwin")
+
     def test_missing_platform_build_is_not_a_successful_package(self):
         with self.assertRaises(release.ReleaseError):
             release.package("x86_64-unknown-linux-gnu", self.out, self.root)
@@ -165,7 +172,7 @@ class ReleaseTests(unittest.TestCase):
     def test_finalize_requires_exact_matrix_and_checksums_every_asset(self):
         self.complete_assets()
         manifest = (self.out / "SHA256SUMS").read_text()
-        self.assertEqual(len(manifest.splitlines()), 11)
+        self.assertEqual(len(manifest.splitlines()), 8)
         for line in manifest.splitlines():
             digest, filename = line.split("  ")
             self.assertEqual(digest, release.sha256(self.out / filename))
@@ -173,6 +180,8 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn("Preview / prerelease", notes)
         self.assertIn("getting-started.ko.md", notes)
         self.assertIn("Developer ID", notes)
+        self.assertNotIn("x86_64-apple-darwin", notes)
+        self.assertIn("Intel Mac packages are paused", notes)
         self.assertNotIn("currently ad-hoc", notes)
         self.assertNotIn("release-notes.md", manifest)
         (self.out / "private.txt").write_text("do not publish")
@@ -202,7 +211,22 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn("--verify-tag", create)
         upload = github.call_args_list[3].args
         self.assertNotIn(str((self.out / "release-notes.md").resolve()), upload)
-        self.assertEqual(len([arg for arg in upload if arg.startswith(str(self.out))]), 12)
+        expected = {str((self.out / name).resolve()) for name in release.release_names(self.version)}
+        expected.add(str((self.out / "SHA256SUMS").resolve()))
+        self.assertEqual(set(upload[upload.index("--clobber") + 1:]), expected)
+        self.assertEqual(len(expected), 9)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX directory symlinks unavailable")
+    def test_draft_uploads_resolved_paths_through_a_tempdir_symlink(self):
+        self.complete_assets()
+        alias = self.out.with_name("assets-alias")
+        alias.symlink_to(self.out, target_is_directory=True)
+        with patch.object(release, "github", side_effect=self.github_answers()) as github:
+            release.draft(alias, self.tag, self.sha, self.root)
+        upload = github.call_args_list[3].args
+        expected = {str((alias / name).resolve()) for name in release.release_names(self.version)}
+        expected.add(str((alias / "SHA256SUMS").resolve()))
+        self.assertEqual(set(upload[upload.index("--clobber") + 1:]), expected)
 
     def test_draft_retry_edits_draft_but_refuses_published_release(self):
         self.complete_assets()

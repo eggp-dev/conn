@@ -25,7 +25,7 @@ SECRET_PATTERNS = [
     re.compile(r"\bgithub_pat_[A-Za-z0-9_]{60,}\b"),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
 ]
-TEXT_SUFFIXES = {".md", ".py", ".rs", ".ts", ".js", ".mjs", ".svelte", ".json", ".toml", ".yaml", ".yml", ".sh", ".txt", ".html", ".css", ".svg", ".lock"}
+TEXT_SUFFIXES = {".md", ".py", ".rs", ".ts", ".js", ".mjs", ".svelte", ".json", ".toml", ".yaml", ".yml", ".sh", ".txt", ".html", ".css", ".svg", ".lock", ".m", ".sdef", ".applescript", ".plist"}
 
 
 def private_path(relative: str) -> str | None:

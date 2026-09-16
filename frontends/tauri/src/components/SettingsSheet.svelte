@@ -1,17 +1,23 @@
 <script lang="ts">
+  import AutomationPane from "./AutomationPane.svelte";
   import AgentConnections from "./AgentConnections.svelte";
+  import DiagnosticConnections from "./DiagnosticConnections.svelte";
   import ProfilesPane from "./ProfilesPane.svelte";
   import { fly } from "svelte/transition";
   import { st, cur, toast, type Analysis } from "../lib/store.svelte";
-  import { cmd } from "../lib/bridge";
+  import { cmd, changeMode, type Mode } from "../lib/bridge";
   import { THEMES, agentColor } from "../lib/themes";
   import { t, fmtMs, i18n, setLang, LANGS } from "../lib/i18n.svelte";
   let { onclose }: { onclose: () => void } = $props();
-  const NAV = ["profiles", "agents", "policy", "pacing", "appearance", "diagnostics"] as const;
+  const NAV = ["profiles", "agents", "automation", "policy", "pacing", "appearance", "diagnostics"] as const;
 
   // ---- scope: this tab or all tabs; plus stored defaults for new tabs ----
   let scope = $state<"tab" | "all">("tab");
   async function apply(name: string, args: Record<string, unknown>) {
+    if (name === "set_mode") {
+      for (const id of scope === "all" ? st.order : [st.active]) await changeMode(args.mode as Mode, id);
+      return;
+    }
     if (scope === "all") { await Promise.all(st.order.map((id) => cmd(name, { ...args, session: id }))); }
     else await cmd(name, args);
   }
@@ -134,7 +140,13 @@
   // ---- diagnostics ----
   let diag = $state<any>(null);
   async function loadDiag() { try { diag = await cmd("diagnostics"); } catch (e) { toast(String(e), "danger"); } }
-  $effect(() => { if (st.settingsTab === "diagnostics") loadDiag(); });
+  $effect(() => {
+    void st.active;
+    if (st.settingsTab !== "diagnostics") return;
+    void loadDiag();
+    const timer = setInterval(loadDiag, 3000);
+    return () => clearInterval(timer);
+  });
 
   function key(e: KeyboardEvent) { if (e.key === "Escape") onclose(); }
 </script>
@@ -142,7 +154,7 @@
 <aside class="sheet" transition:fly={{ x: 40, duration: 220 }} onkeydown={key} tabindex="-1">
   <header>
     <span class="title">{t("s.title")}</span>
-    {#if st.settingsTab !== "profiles"}<span class="scope">
+    {#if st.settingsTab !== "profiles" && st.settingsTab !== "automation"}<span class="scope">
       <button class:on={scope === "tab"} onclick={() => (scope = "tab")}><span class="dot" style:background={cur().controller.type === "agent" ? agentColor(cur().controller.agentId) : "var(--muted)"}></span>{cur().title}</button>
       <button class:on={scope === "all"} onclick={() => (scope = "all")}>{t("s.scope.all")} · {st.order.length}</button>
     </span>{/if}
@@ -154,12 +166,14 @@
         <button class:on={st.settingsTab === id} onclick={() => (st.settingsTab = id)}>{t(`s.nav.${id}`)}</button>
       {/each}
       <span class="spacer"></span>
-      {#if st.settingsTab !== "profiles"}<p class="muted small">{t("s.scope.hint")}</p>
+      {#if st.settingsTab !== "profiles" && st.settingsTab !== "automation"}<p class="muted small">{t("s.scope.hint")}</p>
       <button class="link" onclick={saveDefaults}>{t("s.defaults.use")}</button>{/if}
     </nav>
     <section>
       {#if st.settingsTab === "profiles"}
         <ProfilesPane />
+      {:else if st.settingsTab === "automation"}
+        <AutomationPane />
       {:else if st.settingsTab === "agents"}
         <AgentConnections />
         <details class="agent-setup"><summary>{t("agents.other")}</summary>
@@ -326,10 +340,14 @@
             {#if diag.cli.canConfigure}<dt>{t("s.connect.title")}</dt><dd><button class="btn mini" onclick={() => st.settingsTab = "agents"}>{t("s.connect.copy")}</button></dd>{/if}
             <dt>{t("s.diag.plugins")}</dt>
             <dd class="plugins">
-              {#each [["claude", "Claude Code"], ["copilot", "Copilot CLI"], ["codex", "Codex CLI"]] as [id, name]}
-                <span class="plug" class:ok={diag.plugins[id]}><span class="sw" style:background={agentColor(id)}></span>{name}<em>{diag.plugins[id] ? t("s.diag.installed") : t("s.diag.missing")}</em></span>
+              {#each diag.clients ?? [] as client}
+                <span class="plug" class:ok={client.state === "configured" || client.state === "external"}><span class="sw" style:background={agentColor(client.id)}></span>{client.name}<em>{t(`agents.state.${client.state}`)}</em></span>
               {/each}
+              {#if diag.configError}<span class="muted">{t("s.diag.config.failed")}</span>{/if}
+              <p class="muted">{t("s.diag.config.note")}</p>
             </dd>
+            <dt>{t("s.diag.connected")}</dt>
+            <dd><DiagnosticConnections connections={diag.agentConnections ?? []} /></dd>
           </dl>
         {/if}
       {/if}
@@ -430,7 +448,7 @@
   .agent-setup .setup-error { color: var(--danger); overflow-wrap: anywhere; }
   .agent-setup button:disabled { opacity: .55; cursor: default; }
   .diag { display: grid; grid-template-columns: 110px 1fr; gap: 10px 12px; margin: 4px 0; font-size: 12px; align-items: center; }
-  .diag dt { color: var(--muted); }
+  .diag dt { color: var(--muted); align-self: start; padding-top: 2px; }
   .diag dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .diag code { font-size: 11.5px; }
   .rowdd { display: flex; gap: 8px; align-items: center; }

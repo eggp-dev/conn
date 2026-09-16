@@ -60,6 +60,22 @@ fn wrapping_cannot_hide_a_dangerous_prefix_from_policy() {
 #[cfg(unix)]
 #[test]
 fn real_pty_wrapped_unicode_write_waits_for_approval_and_records_exact_command() {
+    // C.UTF-8 is not available on macOS; use its built-in UTF-8 locale.
+    let locale = if cfg!(target_os = "macos") { "en_US.UTF-8" } else { "C.UTF-8" };
+    unicode_write("/bin/sh", &["-i"], locale, true);
+}
+
+#[cfg(unix)]
+#[test]
+fn real_bash_pty_preserves_unicode_even_in_the_c_locale() {
+    // macOS supplies Bash 3.2 here. A developer can also point this test at an
+    // isolated older Bash build without replacing the system shell.
+    let shell = std::env::var("CONN_TEST_BASH").unwrap_or_else(|_| "/bin/bash".into());
+    unicode_write(&shell, &["--noprofile", "--norc", "-i"], "C", false);
+}
+
+#[cfg(unix)]
+fn unicode_write(shell: &str, args: &[&str], locale: &str, expect_wrapping: bool) {
     use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
 
@@ -69,32 +85,45 @@ fn real_pty_wrapped_unicode_write_waits_for_approval_and_records_exact_command()
     use conn_core::session::ConnKind;
     use conn_core::{Engine, EngineConfig};
 
-    fn wait_for(mut ready: impl FnMut() -> bool) {
+    fn wait_for(mut ready: impl FnMut() -> bool) -> bool {
         let deadline = Instant::now() + Duration::from_secs(5);
         while Instant::now() < deadline {
-            if ready() { return; }
+            if ready() { return true; }
             std::thread::sleep(Duration::from_millis(10));
         }
-        assert!(ready(), "PTY did not reach the expected state within 5 seconds");
+        ready()
     }
 
     let dir = tempfile::tempdir().unwrap();
     let target = dir.path().join("result.txt");
     let (audit, records) = Audit::memory();
-    let mut profile = Profile::local("test".into(), "/bin/sh".into());
-    profile.args = vec!["-i".into()];
+    // Do not inherit the developer's readline key bindings or terminal/locale.
+    // Bash 3.2 under the C locale can interpret UTF-8 bytes as Meta commands:
+    // the approval still contains the original text, but Enter may only redraw
+    // `printf %s`. Explicit eight-bit input makes this fixture deterministic.
+    let inputrc = dir.path().join("inputrc");
+    std::fs::write(&inputrc, "set editing-mode emacs\nset input-meta on\nset output-meta on\nset convert-meta off\nset horizontal-scroll-mode off\n").unwrap();
+    let mut profile = Profile::local("test".into(), shell.into());
+    profile.args = args.iter().map(|arg| (*arg).into()).collect();
     let engine = Engine::spawn(EngineConfig {
         profile: Some(profile),
         cwd: Some(dir.path().to_path_buf()),
         rows: 24,
         cols: 40,
-        env: vec![("PS1".into(), "conn-test$ ".into()), ("ENV".into(), String::new())],
+        env: vec![
+            ("PS1".into(), "conn-test$ ".into()), ("PS2".into(), "conn-cont> ".into()),
+            ("ENV".into(), "/dev/null".into()), ("BASH_ENV".into(), "/dev/null".into()),
+            ("INPUTRC".into(), inputrc.to_string_lossy().into_owned()),
+            ("HISTFILE".into(), "/dev/null".into()), ("PROMPT_COMMAND".into(), String::new()),
+            ("TERM".into(), "xterm-256color".into()), ("LC_ALL".into(), locale.into()),
+        ],
         audit: Some(audit),
         policy: Some(PolicyStore::from_policy(Policy::parse(EXAMPLE_POLICY).unwrap())),
         ..EngineConfig::default()
     }).unwrap();
     let session = engine.session();
-    wait_for(|| session.lock().screen().cursor_line().contains("conn-test$"));
+    assert!(wait_for(|| session.lock().screen().cursor_line().contains("conn-test$")),
+        "shell {shell} ({locale}) did not reach its prompt: {:?}", session.lock().screen().rows());
     let events = Arc::new(Mutex::new(Vec::new()));
     let text = "협업 실험 🚀 ".repeat(24);
     let command = format!("printf '%s' '{text}' > result.txt");
@@ -104,10 +133,15 @@ fn real_pty_wrapped_unicode_write_waits_for_approval_and_records_exact_command()
         s.agent_request_control(1).unwrap();
         s.agent_type(1, &command).unwrap();
     }
-    wait_for(|| session.lock().screen().rows().join("").contains("result.txt"));
+    assert!(wait_for(|| session.lock().screen().rows().join("").contains("result.txt")),
+        "shell {shell} ({locale}) did not echo the command: {:?}", session.lock().screen().rows());
     let approval_id = {
         let mut s = session.lock();
-        assert!(s.screen().cursor().row > 0, "real echo wraps onto multiple rows");
+        // Legacy readline may use one horizontally scrolling row in a byte
+        // locale. The UTF-8 shell case must still exercise actual VT wrapping.
+        if expect_wrapping {
+            assert!(s.screen().cursor().row > 0, "real echo wraps onto multiple rows");
+        }
         let result = s.agent_send_key_with(1, "ENTER", Some("write a temporary fixture".into())).unwrap();
         let KeyResult::Pending { approval_id, cmd, .. } = result else {
             panic!("wrapped redirect bypassed approval: {result:?}");
@@ -117,7 +151,9 @@ fn real_pty_wrapped_unicode_write_waits_for_approval_and_records_exact_command()
         approval_id
     };
     session.lock().resolve_approval(&approval_id, Decision::Grant, "test").unwrap();
-    wait_for(|| std::fs::read_to_string(&target).is_ok_and(|s| s == text));
+    assert!(wait_for(|| std::fs::read_to_string(&target).is_ok_and(|s| s == text)),
+        "shell {shell} ({locale}) did not write the submitted Unicode text; file: {:?}; screen: {:?}",
+        std::fs::read(&target), session.lock().screen().rows());
     let records = records.lock().unwrap();
     let exec = records.iter().find(|e| e.actor == "agent" && e.action == "exec").unwrap();
     assert_eq!(exec.fields["cmd"], command);

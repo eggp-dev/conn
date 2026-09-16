@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.0 — Preview · 2026-09-16
+
+- Prevent mode changes from stranding shell input; restore real Co-pilot interrupts and withdraw entrusted control when the human returns.
+- Enforce reviewed-shell approval limits in the core, including CLI requests.
+- Expose configured/effective modes to MCP clients and distinguish command approval, proposal acceptance and grace co-signing in the timeline.
+- Show connection counts and idle activity separately from local integration configuration.
+- Explicitly release integration setup locks even when a concurrently launched shell inherits a file descriptor.
+- Add a shared external automation service, macOS AppleScript dictionary, session-scoped input requests, Automation settings, and an example PAM launcher. Native Mac/PAM acceptance testing remains unverified in this preview.
+- Correct locale/readline-sensitive PTY fixtures and symlinked temporary-path release tests.
+- Limit future macOS builds to Apple Silicon; keep existing Intel release assets available.
+
+한국어: 입력·제어권 관련 버그와 타임라인·연결 진단을 수정했습니다. 외부 앱용 AppleScript 연동과 자동화 설정을 추가했으며 실제 Mac/PAM 연동은 이 프리뷰에서 아직 검증하지 못했습니다. 향후 Mac 배포는 Apple Silicon을 대상으로 합니다.
+
 ## 0.4.1 — Preview · 2026-09-16
 
 - Add Check for Updates to the app menu, with preview selection, release notes, platform downloads, retry and English/Korean UI.

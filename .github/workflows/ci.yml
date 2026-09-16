@@ -71,8 +71,19 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           desktop: 'true'
-      - run: npm run tauri build -- --debug --no-bundle
+      - name: Build Linux or Windows desktop
+        if: runner.os != 'macOS'
+        run: npm run tauri build -- --debug --no-bundle
         working-directory: frontends/tauri
+      - name: Build ad-hoc macOS app with scripting resources
+        if: runner.os == 'macOS'
+        env:
+          APPLE_SIGNING_IDENTITY: '-'
+        run: npm run tauri build -- --debug --bundles app
+        working-directory: frontends/tauri
+      - name: Check macOS scripting metadata and compile PAM example
+        if: runner.os == 'macOS'
+        run: python3 scripts/check_macos_scripting.py --app frontends/tauri/src-tauri/target/debug/bundle/macos/Conn.app
   required:
     name: Required checks
     if: always()

@@ -29,7 +29,6 @@ REPOSITORY_SLUG = "eggplantiny/conn"
 TARGETS = {
     "x86_64-unknown-linux-gnu": (".deb", ".AppImage"),
     "aarch64-apple-darwin": (".dmg",),
-    "x86_64-apple-darwin": (".dmg",),
     "x86_64-pc-windows-msvc": (".exe",),
 }
 SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?")
@@ -307,7 +306,6 @@ validation on every operating system.
 | Your computer | Download |
 |---|---|
 | Mac — Apple Silicon (M1 or newer) | [Conn for Apple Silicon]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'aarch64-apple-darwin')[1]}) |
-| Mac — Intel | [Conn for Intel Mac]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-apple-darwin')[1]}) |
 | Windows — x64 | [Windows installer]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-pc-windows-msvc')[1]}) |
 | Ubuntu — x64 | [Ubuntu .deb]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-unknown-linux-gnu')[1]}) · [Linux AppImage]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-unknown-linux-gnu')[2]}) |
 
@@ -315,6 +313,13 @@ Installers include the app and its Conn CLI sidecar; Rust and Node.js are not
 required to use these binaries. Windows preview installers are unsigned, so a
 SmartScreen or unknown-publisher prompt may appear. Native CLI startup is checked
 in CI; full interactive GUI installation/collaboration checks remain pending.
+
+## External automation preview
+
+AppleScript support is experimental and disabled by default. Its macOS bundle
+metadata and example compilation are checked in CI; native permission dialogs
+and real PAM integration have not been manually validated. See the
+[automation guide]({REPOSITORY}/blob/{tag}/docs/external-automation.md) before enabling it.
 
 ## Getting started
 
@@ -324,7 +329,6 @@ in CI; full interactive GUI installation/collaboration checks remain pending.
 
 For a standalone terminal or MCP workflow, download the CLI for
 [Apple Silicon]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'aarch64-apple-darwin')[0]}),
-[Intel Mac]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-apple-darwin')[0]}),
 [Windows x64]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-pc-windows-msvc')[0]}) or
 [Linux x64]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-unknown-linux-gnu')[0]}).
 Linux x64 assets are built on Ubuntu 24.04 and target
@@ -336,8 +340,9 @@ signed with hardened runtime and secure timestamps. Apple notarization is
 Accepted for the final DMGs and standalone CLI submissions; app and DMG tickets
 are stapled and verified. Apple does not support stapling a standalone CLI or
 its archive, so its notarization ticket is retrieved online when needed.
-The two `-signing.json` assets record native runner checks and final asset hashes;
-they are evidence of this build, not independent cryptographic attestations.
+The Apple Silicon `-signing.json` asset records native runner checks and final asset hashes;
+it is evidence of this build, not an independent cryptographic attestation.
+Intel Mac packages are paused for new releases; previously published assets remain available.
 Native interactive installation and collaboration coverage remains limited for this preview.
 See the [platform policy]({REPOSITORY}/blob/{tag}/docs/platform-support.md).
 Follow the installation guide for platform trust prompts; never disable system
@@ -359,12 +364,14 @@ not that the command completed successfully. Start with a disposable project.
 Read the [security model]({REPOSITORY}/blob/{tag}/docs/security.md) and
 [report security issues privately]({REPOSITORY}/security/advisories/new).
 
-한국어: 이 릴리스는 프리뷰입니다. 명령은 사용자 계정 권한으로 실행되며, 승인 기능은
+한국어: AppleScript는 기본적으로 꺼진 실험적 기능입니다. macOS 사전·예제 컴파일은 CI에서 검사하지만 실제 권한 대화상자와 PAM 연동은 수동 검증하지 못했습니다.
+이 릴리스는 프리뷰입니다. 명령은 사용자 계정 권한으로 실행되며, 승인 기능은
 운영체제 샌드박스가 아닙니다. 실행 기록은 입력 전달을 뜻하며 명령의 성공을 보장하지
 않습니다. macOS 앱·내장 CLI·별도 CLI는 Developer ID로 서명하며 hardened runtime과
 보안 타임스탬프를 검증합니다. DMG와 별도 CLI의 Apple 공증이 승인되었고 앱·DMG에는
 티켓을 첨부했습니다. 별도 CLI와 아카이브에는 티켓을 첨부할 수 없어 필요 시 온라인으로
-조회합니다. 두 서명 보고서는 해당 빌드의 검증 기록이며 독립적인 암호학적 증명은 아닙니다.
+조회합니다. Apple Silicon 서명 보고서는 해당 빌드의 검증 기록이며 독립적인 암호학적 증명은 아닙니다.
+새 릴리스의 Intel Mac 배포는 중단하며 기존 공개 파일은 유지합니다.
 Windows 프리뷰는 무서명으로 배포하며 인증서가 필수 조건은 아닙니다. Linux는
 Ubuntu 24.04 빌드를 24.04·26.04 대상으로 제공합니다. CI에서 각 운영체제의 별도 CLI
 시작을 확인하며, 네이티브 GUI 설치·협업의 전체 대화형 검증은 아직 완료되지 않았습니다.

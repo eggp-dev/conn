@@ -5,7 +5,7 @@
   import { st, cur, toast } from "../lib/store.svelte";
   import { cmd } from "../lib/bridge";
   import { agentColor } from "../lib/themes";
-  import { visibleTimeline, timelineSteps, controlFor, isCommand, isProblem, isPolicyBlocked, policyBlockLabel, type TimelineItem, type TimelineFilter, type TimelineStep } from "../lib/timeline";
+  import { visibleTimeline, timelineSteps, controlFor, commandDecisions, isExternalAutomation, isCommand, isProblem, isPolicyBlocked, policyBlockLabel, type TimelineItem, type TimelineFilter, type TimelineStep } from "../lib/timeline";
   const history = $derived(cur().timeline);
   const all = $derived(visibleTimeline(history, "all"));
   const strip = $derived(all.slice(-200));
@@ -19,7 +19,7 @@
   const actor = (it: TimelineItem) => it.actor === "human" ? t("tl.you") : it.actor;
   const fmt = (ms: number) => new Date(ms).toLocaleTimeString();
   const kind = (it: TimelineItem) => t(`tl.kind.${it.kind}`);
-  const status = (it: TimelineItem) => t(isPolicyBlocked(it) ? "tl.policyBlocked" : `tl.status.${it.status}`);
+  const status = (it: TimelineItem) => t(isPolicyBlocked(it) ? "tl.policyBlocked" : it.kind === "control" && it.status === "granted" ? "tl.step.control_granted" : `tl.status.${it.status}`);
   function blockReason(it: TimelineItem) {
     const label = policyBlockLabel(it);
     const keys: Record<string, string> = { "run dangerous commands alone": "tl.block.isolation", "protected path": "tl.block.protected", "delete root": "tl.block.root", "fork bomb": "tl.block.fork" };
@@ -28,7 +28,6 @@
   const name = (it: TimelineItem) => [actor(it), kind(it), it.text, status(it)].filter(Boolean).join(" · ");
   const canRetype = (it: TimelineItem) => isCommand(it) && !!it.text && !["pending", "scheduled", "granted"].includes(it.status);
   const grace = (it: TimelineItem) => it.steps.find(s => s.type === "scheduled")?.ms;
-  const hasApproval = (it: TimelineItem) => !!controlFor(history, it)?.steps.some(s => s.type === "control_granted") || it.steps.some(s => s.type === "approval_granted" || s.type === "proposal_committed");
   function detailText(detail: TimelineStep) {
     if (!detail.text) return "";
     if (detail.type === "control_returned" || detail.type === "cancelled") {
@@ -52,8 +51,8 @@
 
 {#if target && !st.timelineOpen}
   <div class="card" style:left="{Math.max(12, Math.min(window.innerWidth - 312, hoverX - 40))}px" style:--c={color(target)}>
-    <div class="meta"><b>{actor(target)}</b><span>{kind(target)}</span><time>{fmt(target.t)}</time></div>
-    <span class="outcome" class:problem={isProblem(target)}>{status(target)}</span>
+    <div class="meta"><b>{actor(target)}</b><span>{kind(target)}</span>{#if isExternalAutomation(history, target)}<span>{t("tl.external")}</span>{/if}<time>{fmt(target.t)}</time></div>
+    <div class="results"><span class="outcome" class:problem={isProblem(target)}>{status(target)}</span>{#each commandDecisions(target) as decision}<span class="muted">{t(`tl.${decision}`)}</span>{/each}</div>
     {#if target.text}{#if isCommand(target)}<code>{target.text}</code>{:else}<div>{target.text}</div>{/if}{/if}
     {#if isPolicyBlocked(target)}<div class="block-reason">{blockReason(target)}</div>{/if}
     {#if target.intent}<div class="muted">{target.intent}</div>{/if}
@@ -80,12 +79,12 @@
             <summary>
               <span class="marker" class:collab={!isCommand(it)} class:problem={isProblem(it)} style:--c={color(it)} aria-hidden="true"></span>
               <div class="entry">
-                <div class="meta"><b>{actor(it)}</b><span>{kind(it)}</span><time>{fmt(it.t)}</time>{#if it.saved}<span>{t("tl.saved")}</span>{/if}</div>
+                <div class="meta"><b>{actor(it)}</b><span>{kind(it)}</span>{#if isExternalAutomation(history, it)}<span>{t("tl.external")}</span>{/if}<time>{fmt(it.t)}</time>{#if it.saved}<span>{t("tl.saved")}</span>{/if}</div>
                 {#if it.text}{#if isCommand(it)}<code>{it.text}</code>{:else}<div class="text">{it.text}</div>{/if}{/if}
                 {#if isPolicyBlocked(it)}<div class="block-reason">{blockReason(it)}</div>{/if}
                 <div class="results">
                   <span class="outcome" class:problem={isProblem(it)}>{status(it)}</span>
-                  {#if isCommand(it) && hasApproval(it)}<span class="muted">{t("tl.approved")}</span>{/if}
+                  {#each commandDecisions(it) as decision}<span class="muted">{t(`tl.${decision}`)}</span>{/each}
                   {#if grace(it)}<span class="muted">{t("tl.wait", { seconds: grace(it)! / 1000 })}</span>{/if}
                   <span class="disclose muted">{selected === it.id ? t("tl.less") : t("tl.more")}</span>
                 </div>

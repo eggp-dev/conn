@@ -1,9 +1,17 @@
 {
   "name": "conn",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Conn — one shell, one hand on it. Registers the conn MCP server and a skill that teaches the agent how to work in a shell a human is watching.",
-  "author": { "name": "eggp" },
-  "keywords": ["terminal", "shell", "mcp", "handoff", "approval"],
+  "author": {
+    "name": "eggp"
+  },
+  "keywords": [
+    "terminal",
+    "shell",
+    "mcp",
+    "handoff",
+    "approval"
+  ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {

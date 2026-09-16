@@ -66,6 +66,17 @@ export function timelineSteps(s: TimelineState, it: TimelineItem): TimelineStep[
   return [...(control?.steps ?? []), ...it.steps].sort((a, b) => a.t - b.t);
 }
 export function controlFor(s: TimelineState, it: TimelineItem) { return find(s, it.controlId); }
+export function isExternalAutomation(s: TimelineState, it: TimelineItem): boolean {
+  return it.actor.startsWith("AppleScript · ") || (it.originalRequest ?? controlFor(s, it)?.originalRequest)?.params.origin === "external_automation";
+}
+
+/** Human acts on this command only. A control grant authorizes input, not execution. */
+export function commandDecisions(it: TimelineItem): ("approved" | "accepted" | "cosigned")[] {
+  if (!isCommand(it)) return [];
+  const types = new Set(it.steps.map(s => s.type));
+  return ([ ["approval_granted", "approved"], ["proposal_committed", "accepted"], ["exec_cosigned", "cosigned"] ] as const)
+    .filter(([type]) => types.has(type)).map(([, label]) => label);
+}
 
 /** Correlate by backend request/approval/proposal/execution IDs, never by rendered labels. */
 export function recordTimeline(s: TimelineState, ev: Record<string, any>, t = Date.now()) {
@@ -137,6 +148,11 @@ export function recordTimeline(s: TimelineState, ev: Record<string, any>, t = Da
       if (it) finish(s, it, "cancelled", t, ev.reason);
       break;
     }
+    case "exec_cosigned": {
+      const it = find(s, s.refs[`exec:${ev.execId}`]);
+      if (it && !it.steps.some(s => s.type === "exec_cosigned")) step(it, t, "exec_cosigned");
+      break;
+    }
     case "agent_exec": {
       // ApprovalResolved/ProposalResolved is followed by AgentExec for that command.
       const resolved = find(s, s.awaitingResult[ev.agentId]);
@@ -169,6 +185,10 @@ export function importSavedActivity(s: TimelineState, entries: Record<string, an
     const it = add(s, e.actor, "exec", e.cmd, Date.parse(e.ts) || Date.now());
     it.saved = true; it.intent = e.intent;
     it.policy = `${e.policy ?? "allow"}${e.policy === "deny" && e.label ? `:${e.label}` : e.approval ? `:${e.approval}` : ""}`;
+    // Restore explicit audit facts only; never infer approval from policy or a lease.
+    if (e.approval === "granted") step(it, it.t, "approval_granted");
+    if (e.by === "human_commit") step(it, it.t, "proposal_committed");
+    if (e.by === "human_cosign") step(it, it.t, "exec_cosigned");
     it.status = policyOutcome(it.policy); step(it, it.t, it.status);
   }
 }

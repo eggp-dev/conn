@@ -4,7 +4,7 @@
   // touch while working — mode, ask-first, grace, who is here and what they may do.
   import { fade } from "svelte/transition";
   import { st, cur, toast } from "../lib/store.svelte";
-  import { cmd } from "../lib/bridge";
+  import { cmd, changeMode } from "../lib/bridge";
   import { agentColor } from "../lib/themes";
   import { t, fmtMs } from "../lib/i18n.svelte";
   let { onclose, onpalette, onsettings }: { onclose: () => void; onpalette: () => void; onsettings: () => void } = $props();
@@ -35,7 +35,7 @@
 
   <div class="seg">
     {#each MODES as m}
-      <button class:on={tb.mode === m} onclick={() => cmd("set_mode", { mode: m })} title={t(`mode.${m}.desc`)}>{t(`mode.${m}`)}</button>
+      <button class:on={tb.mode === m} onclick={() => changeMode(m)} title={t(`mode.${m}.desc`)}>{t(`mode.${m}`)}</button>
     {/each}
   </div>
   {#if tb.effectiveMode !== tb.mode}<p class="muted note">→ {t(`mode.${tb.effectiveMode}`)} · {t("badge.entrusted")}</p>{/if}

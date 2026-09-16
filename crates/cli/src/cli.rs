@@ -1,6 +1,7 @@
 //! Human-facing subcommands: status / take / approve / log.
 
 use std::path::Path;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Value};
 
@@ -27,8 +28,9 @@ pub fn status(socket: &Path) -> Result<(), ClientError> {
     }
     println!("process      {}", if s["processAlive"].as_bool().unwrap_or(false) { "alive" } else { "exited" });
     println!("screen       {}x{} rev {}", s["size"]["cols"], s["size"]["rows"], s["revision"]);
-    let agents: Vec<&str> = s["connectedAgents"].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect()).unwrap_or_default();
-    println!("agents       {}", if agents.is_empty() { "-".to_string() } else { agents.join(", ") });
+    let agents = agent_connection_lines(&s);
+    println!("agents       {}", agents.first().map(String::as_str).unwrap_or("-"));
+    for agent in agents.iter().skip(1) { println!("             {agent}"); }
     if let Some(p) = s["policyPath"].as_str() {
         println!("policy       {p}");
     }
@@ -83,6 +85,51 @@ pub fn status(socket: &Path) -> Result<(), ClientError> {
         }
     }
     Ok(())
+}
+
+fn agent_connection_lines(status: &Value) -> Vec<String> {
+    let Some(connections) = status["agentConnections"].as_array() else {
+        // Older servers expose identities only; don't fabricate socket or idle data.
+        return status["connectedAgents"].as_array().into_iter().flatten()
+            .filter_map(Value::as_str).collect::<BTreeSet<_>>().into_iter().map(str::to_owned).collect();
+    };
+    let mut groups: BTreeMap<&str, BTreeMap<u64, Option<u64>>> = BTreeMap::new();
+    for connection in connections {
+        if let (Some(agent), Some(id)) = (connection["agentId"].as_str(), connection["connId"].as_u64()) {
+            groups.entry(agent).or_default().insert(id, connection["idleSecs"].as_u64());
+        }
+    }
+    groups.into_iter().map(|(agent, sockets)| {
+        let details = sockets.iter().map(|(id, idle)| match idle {
+            Some(secs) => format!("#{id} last request {secs}s ago"),
+            None => format!("#{id}"),
+        }).collect::<Vec<_>>().join("; ");
+        format!("{agent} ({} connection{}; {details})", sockets.len(), if sockets.len() == 1 { "" } else { "s" })
+    }).collect()
+}
+
+#[cfg(test)]
+mod status_tests {
+    use super::*;
+
+    #[test]
+    fn duplicate_names_show_distinct_sockets_and_activity_without_discarding_idle_connections() {
+        let status = json!({"agentConnections":[
+            {"agentId":"copilot","connId":3,"idleSecs":720},
+            {"agentId":"claude","connId":1,"idleSecs":2},
+            {"agentId":"copilot","connId":2,"idleSecs":0},
+        ]});
+        assert_eq!(agent_connection_lines(&status), vec![
+            "claude (1 connection; #1 last request 2s ago)",
+            "copilot (2 connections; #2 last request 0s ago; #3 last request 720s ago)",
+        ]);
+    }
+
+    #[test]
+    fn older_servers_keep_identity_only_output_without_duplicate_labels() {
+        assert_eq!(agent_connection_lines(&json!({"connectedAgents":["copilot","claude","copilot"]})), vec!["claude", "copilot"]);
+        assert!(agent_connection_lines(&json!({"agentConnections":[]})).is_empty());
+    }
 }
 
 pub fn take(socket: &Path) -> Result<(), ClientError> {

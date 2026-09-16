@@ -144,3 +144,10 @@ When a connection drops, the lease it held and its pending approvals are cleaned
 The shared frontend owns local MCP/skill setup through a client registry, lossless
 config editors and a guarded file transaction layer. Terminal and permission
 semantics remain in the core. See [the adapter contract](agent-integrations.md#adapter-contract).
+
+## External automation (unreleased)
+
+The [external automation contract](external-automation.md) ([한국어](external-automation.ko.md))
+covers an external PAM or launcher opening Conn and sending terminal input, with
+macOS AppleScript as the first adapter. The shared service and macOS adapter are implemented for the next release;
+native Apple Event and PAM acceptance tests remain required.

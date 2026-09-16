@@ -125,7 +125,7 @@ fn protected_paths_deny_even_when_the_rule_would_only_confirm() {
 fn copilot_proposal_needs_intent_and_honours_isolation() {
     let mut h = strict();
     h.agent(1, "claude");
-    h.session.set_mode(conn_core::session::AgentMode::Copilot);
+    h.session.set_mode(conn_core::session::AgentMode::Copilot).unwrap();
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "cd / && rm -rf tmp").unwrap();
     assert!(matches!(h.session.agent_send_key(1, "ENTER"), Err(SessionError::IntentRequired)));

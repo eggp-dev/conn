@@ -27,7 +27,7 @@ import uuid
 
 import release
 
-MAC_TARGETS = ("aarch64-apple-darwin", "x86_64-apple-darwin")
+MAC_TARGETS = tuple(target for target in release.TARGETS if target.endswith("apple-darwin"))
 SECRET_NAMES = ("APPLE_CERTIFICATE", "APPLE_CERTIFICATE_PASSWORD", "APPLE_SIGNING_IDENTITY",
                 "APPLE_ID", "APPLE_PASSWORD", "APPLE_TEAM_ID")
 PROFILE = "conn-release-notary"

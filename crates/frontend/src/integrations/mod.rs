@@ -18,6 +18,14 @@ use std::{
 use storage::{read, Change};
 
 const SKILL: &str = include_str!("../../../../plugin/skills/conn/SKILL.md");
+struct SetupLock(fs::File);
+impl Drop for SetupLock {
+    fn drop(&mut self) {
+        // A concurrently spawned PTY can briefly inherit the descriptor before
+        // exec. Explicit unlock releases the shared lock even while that copy lives.
+        let _ = self.0.unlock();
+    }
+}
 fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -188,6 +196,7 @@ fn update(
         .open(&lock_path)
         .map_err(|_| "file_io")?;
     lock.try_lock().map_err(|_| "setup_busy")?;
+    let _lock = SetupLock(lock);
     let manifest = config_dir.join("integrations.json");
     let before_registry = read(&manifest)?;
     let mut registry = registry(before_registry.as_deref())?;
