@@ -104,7 +104,7 @@ human_input(bytes):
 
 `terminal_type` is not checked. `terminal_send_key(ENTER)` treats the accumulated input line as the command and checks it.
 
-The line is reconstructed by `input::InputTracker` from the bytes written to the PTY (human and agent alike). Input that makes the shell redraw the line — tab completion, history (↑/↓), cursor movement — marks it `dirty`, and at ENTER the value is taken from the VT model's cursor row with the prompt prefix (the cursor column at the first keystroke) removed. Clean tracked input remains authoritative even when the terminal wraps it. On the agent path, dirty input gives the echo 60 ms to settle before using the VT fallback. This fallback covers only the cursor row and can be incomplete for wrapped edited commands; see [the trust model](security.md).
+The line is reconstructed by `input::InputTracker` from agent-submitted bytes written to the PTY. Human bytes are never fed into this tracker; only a content-free unfinished-input flag prevents unsafe appends. Input that makes the shell redraw the line — tab completion, history (↑/↓), cursor movement — marks it `dirty`, and at ENTER the value is taken from the VT model's cursor row with the prompt prefix (the cursor column at the first keystroke) removed. Clean tracked input remains authoritative even when the terminal wraps it. On the agent path, dirty input gives the echo 60 ms to settle before using the VT fallback. This fallback covers only the cursor row and can be incomplete for wrapped edited commands; see [the trust model](security.md).
 
 Per verdict:
 
@@ -161,7 +161,8 @@ revocation invalidates the external writer. Upgrades require one explicit
 re-enable of old permissions. Native Apple Event and external-launcher acceptance
 checks remain release gates.
 
-Sharing an external private session with an AI agent, Windows/Linux external
-adapters, and replacement of ordinary-session human-input history are later work,
-not features of this increment. See [the design](automation-design.md) for those
-separate transitions and [the trust model](security.md) for limits.
+Sharing an external private session with an AI agent and a Windows external adapter
+remain future work. Linux external automation is implemented behind explicit
+permissions. Local Bash/Zsh [shell integration](shell-integration.md) supplies
+command boundaries for ordinary sessions; it is never installed in private sessions.
+See [the design](automation-design.md) and [the trust model](security.md) for limits.

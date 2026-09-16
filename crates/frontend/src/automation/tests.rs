@@ -254,3 +254,26 @@ fn renderer_timeout_aborts_the_provisional_tab_without_running_the_command() {
     assert_eq!(opened.1["session"],aborted.1["session"]);assert_eq!(aborted.1["window"],"main");
     assert!(events.iter().all(|(_,value)|!value.to_string().contains("timeout-must-not-start")));
 }
+
+#[test]
+fn legacy_automation_config_does_not_authorize_linux_callers() {
+    let (_tmp, h) = harness();
+    enable(&h);
+    let settings = h.invoke("automation_settings", json!({})).unwrap();
+    assert_eq!(settings["config"]["linuxExecutables"], json!([]));
+    let before = std::fs::read(h.state.config_dir.join("automation.json")).unwrap();
+    assert!(h.invoke("automation_save", json!({"config":{"enabled":true,"profiles":["test-shell"],"linuxExecutables":["relative-launcher"]}})).is_err());
+    assert_eq!(before, std::fs::read(h.state.config_dir.join("automation.json")).unwrap());
+}
+
+#[test]
+fn linux_executable_permission_is_explicit_and_revocable() {
+    let (_tmp, h) = harness();
+    enable(&h);
+    let exe = std::fs::canonicalize("/bin/sh").unwrap();
+    assert!(!h.linux_automation_allowed(&exe));
+    h.invoke("automation_save", json!({"config":{"enabled":true,"profiles":["test-shell"],"linuxExecutables":["/bin/sh"]}})).unwrap();
+    assert!(h.linux_automation_allowed(&exe));
+    h.invoke("automation_save", json!({"config":{"enabled":false,"profiles":["test-shell"],"linuxExecutables":["/bin/sh"]}})).unwrap();
+    assert!(!h.linux_automation_allowed(&exe));
+}

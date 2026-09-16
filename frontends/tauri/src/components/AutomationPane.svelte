@@ -3,8 +3,8 @@
   import { invoke } from '../lib/transport';
   import { t } from '../lib/i18n.svelte';
   import { toast } from '../lib/store.svelte';
-  type Config = { enabled: boolean; profiles: string[] };
-  type Info = { config: Config; nativeSupported: boolean; requiresReenable: boolean };
+  type Config = { enabled: boolean; profiles: string[]; linuxExecutables: string[] };
+  type Info = { config: Config; nativeSupported: boolean; linuxSupported: boolean; requiresReenable: boolean };
   let info = $state<Info | null>(null);
   let profiles = $state<{id: string; name: string}[]>([]);
   let busy = $state(false);
@@ -68,6 +68,11 @@
     {#if info.requiresReenable}<p class="notice" role="status">{t('automation.reenable')}</p>{/if}
     <label class="toggle"><input type="checkbox" checked={info.config.enabled} disabled={busy || !info.nativeSupported} onchange={toggle} />{t('automation.enable')}</label>
     <p class="hint">{t('automation.permission')}</p>
+    {#if info.linuxSupported}
+      <label for="linux-callers">{t('automation.callers')}</label>
+      <textarea id="linux-callers" rows="3" disabled={busy} value={info.config.linuxExecutables.join('\n')} onchange={e => info && save({...info.config, linuxExecutables: e.currentTarget.value.split('\n').map(p => p.trim()).filter(Boolean)})}></textarea>
+      <p class="hint">{t('automation.callersHint')}</p>
+    {/if}
     <h3>{t('automation.profiles')}</h3>
     {#each profiles as item}
       <label class="profile"><input type="checkbox" checked={info.config.profiles.includes(item.id)} disabled={busy || !info.nativeSupported} onchange={e => profile(item.id, e)} /><span>{item.name}<small>{item.id}</small></span></label>
@@ -88,5 +93,7 @@
   input { accent-color: var(--agent); } .revoke { justify-self: start; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); cursor: pointer; }
   .revoke:disabled { cursor: default; opacity: .5; }
   .revoke:focus-visible, input:focus-visible { outline: 2px solid var(--agent); outline-offset: 3px; }
+  textarea { width: 100%; box-sizing: border-box; resize: vertical; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); font: inherit; }
+  textarea:focus-visible { outline: 2px solid var(--agent); outline-offset: 3px; }
   .profile span { min-width: 0; overflow-wrap: anywhere; }
 </style>

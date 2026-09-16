@@ -75,8 +75,10 @@ crash dumps remain separate surfaces. Same-user processes may still use other
 tools to access the OS; these API gates are not an OS sandbox. There is no password
 detector or automatic proof that login has finished.
 
-The general raw human-input tracking problem in ordinary sessions is **not fixed
-by this change**. Existing audit files, saved timeline records and backups also
+Ordinary sessions also stop reconstructing commands from raw human keystrokes.
+Only a content-free unfinished-input flag is retained; agent writes cannot append
+to that input until it is completed or explicitly interrupted. Human typing no
+longer creates command audit events, timeline rows or command-derived tab titles. Existing audit files, saved timeline records and backups also
 remain; no automatic historical cleanup or credential classification is performed.
 
 ## Stored data
@@ -122,9 +124,67 @@ Conn은 신뢰하는 사람과 에이전트가 터미널을 공유하도록 돕�
 - 메모리 스크롤백·네이티브 문자열·PTY/OS 버퍼·자식/셸 기록·argv·환경·클립보드·충돌
   덤프는 별도 경로입니다. 메모리 잔존이 없다는 약속이나 같은 사용자 프로세스의 OS
   격리가 아니며 비밀번호·인증 완료 탐지 기능도 아닙니다.
-- 일반 세션의 원시 사람 입력 기록은 이번 변경으로 해결되지 않습니다. 이전 감사 로그·
+- 일반 세션에서도 사람의 원시 입력으로 명령을 추정·기록하지 않습니다. 내용 없는 입력 중
+  상태만 유지하고, 완료·중단 전에는 에이전트가 명령을 덧붙일 수 없습니다. 이전 감사 로그·
   타임라인·백업도 자동 삭제하지 않습니다.
 
 [외부 자동화 사용법](external-automation.ko.md)에 전체 계약과 검증 조건을 정리했습니다.
 
 보안 제보 방법은 [보안 정책](../SECURITY.md)을 참고하세요.
+
+
+## Secret exposure scenarios (unreleased hardening)
+
+| Surface | Protection and remaining boundary |
+| --- | --- |
+| Human password, pasted key or editor input | No raw-input command reconstruction or payload-bearing debug trace, including ordinary tabs. Local Bash/Zsh hooks can record shell-started commands; application input does not become a command. |
+| Partially typed human input | Only an unfinished flag is retained. Agent typing/Enter and proposal commits are blocked; human Return, Ctrl-C or Ctrl-U, or an authorized agent interrupt clears it. This is not shell-prompt detection. |
+| Echoed values and child errors | Still visible to the human. Ordinary agent snapshots can expose them if permitted; Observe allows reading. Disabling snapshots does not erase existing output or copies already sent. |
+| Explicit agent commands, intents and request parameters | Remain in review UI and audit history to support reviewing decisions. No secret detector or redaction guarantee. Never embed credentials in these fields. |
+| Audit files | On Unix, newly opened logs use owner-only permissions, existing log permissions are tightened and symlink log destinations are rejected. This does not protect against same-user tools. Windows ACL behavior needs native verification. |
+| Startup argv, environment, shell tracing/history | Outside Conn's input-history protection. Profile environment values remain plaintext. Prefer the target tool's credential mechanism over secrets embedded in arguments. |
+| Clipboard, screenshots, crash dumps, old backups | Separate exposure surfaces. Explicit copying and historical data are not automatically cleared. |
+| Private external session | Public IPC/MCP isolation remains enforced before startup; no transition to AI sharing exists. |
+
+The synthetic tests in `crates/core/tests/input_privacy.rs` cover hidden PTY input,
+pasted/Unicode input, human/agent mixing, snapshot permission transitions and Unix
+log permissions. They do not establish safety of every child program or external
+model provider. A snapshot permission restored later exposes the current screen;
+use a fresh private external session for work that must not be sent to agents.
+
+### 민감정보 경로 점검
+
+일반 탭의 원시 사람 입력은 명령 기록·타임라인·입력 기반 제목으로 만들지 않습니다.
+로컬 Bash·Zsh의 실행 경계 훅으로 확인한 명령만 타임라인에 기록하며, 앱 내부 입력은 제외합니다. 에이전트가 명시적으로 보낸
+명령·사유·요청 원문은 검토를 위해 유지하므로 민감정보를 넣지 않아야 합니다.
+Observe도 화면을 읽을 수 있으며 화면 조회를 다시 켜면 이전 출력이 보일 수 있습니다.
+Unix 로그 권한을 소유자 전용으로 제한했지만 같은 사용자 프로세스, Windows ACL,
+자식 프로그램 기록·실행 인자·환경·클립보드·과거 백업까지 보호하는 것은 아닙니다.
+
+### Linux external automation
+
+The native D-Bus adapter is disabled by default and requires an explicit executable
+allowlist in addition to profile permission. Bus-provided UID/PID, the executable
+and process start time identify the caller; the unique D-Bus connection owns the
+handles. Other connections cannot adopt them. Interpreter authorization applies to
+all scripts that interpreter runs. This is not binary signing, a same-user sandbox
+or protection against privileged bus monitoring. Native Linux acceptance runs use
+a separate session bus and X11 display; Wayland-specific input is not yet verified.
+
+### Shell command integration (unreleased)
+
+Local Bash/Zsh emit command start and completion through a bounded per-session
+mailbox (0700 directory, 0600 event files). Only complete records with the initial
+shell PID and expected sequence are accepted. Files are removed after processing
+and the directory on normal shutdown; a crash can leave temporary command data.
+This is observation within the same-user trust boundary, not authentication of an
+untrusted child process or tamper-proof auditing. Terminal escape sequences and
+screen contents cannot create these events. Private sessions never install hooks.
+
+History suppression, conflicting startup hooks, an unsupported shell, a missing
+completion, or mailbox overflow never enables raw-input reconstruction. Missing
+completion is explicitly unknown. Bash history is a shell-provided representation
+and may normalize multiline commands; commands omitted from history are skipped.
+Command arguments, including secrets deliberately placed in a command, remain
+recordable. Redaction policy is separate work. See the [English](shell-integration.md)
+and [Korean](shell-integration.ko.md) guides.

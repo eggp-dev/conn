@@ -27,3 +27,7 @@ parking_lot = "0.12"
 conn-core = { path = "../../../crates/core" }
 
 conn-frontend = { path = "../../../crates/frontend" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = "5"
+libc = "0.2"

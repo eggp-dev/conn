@@ -14,7 +14,7 @@ are **not present in v0.5.1**. This work has not been released.
 External applications may open Conn and supply a startup program or terminal
 input. Conn must not turn those operations into AI-agent activity or retain an
 automation activity history. The first adapter is AppleScript on macOS Apple
-Silicon. Windows/Linux adapters can later use the same internal contract.
+Silicon. Linux D-Bus also uses this internal contract; a Windows adapter remains future work.
 
 Use the existing native window, PTY engine and terminal UI. No separate terminal
 implementation, credential vault, inspection of another application, password-pattern classifier,
@@ -240,17 +240,16 @@ was ever shown.
 
 ## 8. Human password input outside automation
 
-`Session::track_human` currently treats raw Enter-terminated input as a command.
-The external-origin path must disable this before the first byte, for its entire
-lifetime. Forward human input to the PTY without storing a parallel input copy.
+The raw human-input tracker has now been removed from both ordinary and private
+sessions. Human typing is delivered without generating command history or a
+payload-bearing debug trace. A content-free unfinished-input flag prevents agents
+from appending to human input; Return, Ctrl-C or Ctrl-U ends that flag. These are
+input semantics, not proof that the child is at a shell prompt.
 
-Ordinary sessions have a related, separate security defect. Do not advertise a
-global password fix from the automation change. For a general correction, stop
-using arbitrary raw keystrokes as the source of persisted command history. Keep
-agent-submitted command records; recover human command history only from an
-explicit command-boundary integration with a documented trust model. There is
-currently no such integration in this checkout. Unknown input must not be stored.
-This changes human timeline coverage and needs its own implementation increment.
+Agent-submitted commands and original requests still have their explicit review
+and audit records. Ordinary local Bash/Zsh sessions now restore human command
+history through [shell execution hooks](shell-integration.md). Unsupported contexts
+never fall back to reconstructing input. See [the exposure matrix](security.md#secret-exposure-scenarios-unreleased-hardening).
 
 Checking ECHO alone is insufficient: raw terminal applications also disable ECHO,
 and an outer SSH/tmux terminal does not reliably identify inner password entry.
@@ -290,7 +289,7 @@ password-looking prompt nor a regular expression proves the input is safe to log
 | C: private boundary and UI | Agent discovery/read/write gates, owner-only rendering, no recent activity, upgrade opt-in, EN/KO copy | Multiwindow/caller races, existing agent cannot attach, no effect on other sessions |
 | D: native acceptance | Update `.sdef`, examples, public docs and release notes | Signed Apple Silicon app: first consent allow/deny, real Apple Events with dummy launcher; platform CI |
 | E: later sharing | Generation boundary and local screen reset described above | Buffered output, stale events, UI failure, re-sharing and subscription race tests |
-| F: ordinary human tracking | Replace unconditional raw-input history separately | SSH/tmux/nested raw-mode/password fixtures; explicit timeline coverage decision |
+| F: ordinary human tracking (implemented, unreleased) | Remove raw-input history; retain only an unfinished-input flag | Hidden-password PTY, paste/Unicode, mixed input and snapshot-permission tests; no new human timeline entries |
 
 A–D are one releasable unit. Do not ship partial log removal as credential-safe
 automation. E and F are separately visible changes, not hidden prerequisites for
@@ -310,7 +309,7 @@ Release gates for A–D:
 4. Direct child exit does not spawn a fallback shell; retries never duplicate a
    command after an uncertain outcome. Existing non-automation agent policy tests pass.
 5. macOS tests execute Apple Events; `osacompile` and green Linux tests alone do not
-   establish native behavior. Windows/Linux external adapters remain unimplemented.
+   establish native behavior. The Linux D-Bus adapter uses native sender credentials; the Windows adapter remains unimplemented.
 
 ## 11. Documentation and publication language
 

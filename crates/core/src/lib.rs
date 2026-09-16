@@ -30,6 +30,7 @@ pub mod paths;
 pub mod policy;
 pub mod screen;
 pub mod session;
+pub mod shell_integration;
 
 pub use config::Pacing;
 pub use engine::{Engine, EngineConfig, LaunchSpec};

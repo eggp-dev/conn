@@ -171,6 +171,10 @@ impl Engine {
                 ShellKind::Custom => return Err("Startup commands require a known shell dialect".into()),
             };
         }
+        #[cfg(unix)]
+        let integration = if !cfg.external_private && cfg.command.is_empty() && profile.backend == crate::backend::BackendKind::Local {
+            crate::shell_integration::Integration::prepare(&mut plan, &cfg.env).ok().flatten()
+        } else { None };
         let shell = profile.program.clone();
         let mut cmd = CommandBuilder::new(&plan.program);
         cmd.args(&plan.args);
@@ -215,6 +219,10 @@ impl Engine {
         }));
 
         session.lock().set_execution_profile(profile);
+        #[cfg(unix)]
+        let integration = Arc::new(parking_lot::Mutex::new(integration));
+        #[cfg(unix)]
+        if integration.lock().is_some() { session.lock().shell_integration_starting(); }
 
         let exited = Arc::new(AtomicBool::new(false));
 
@@ -240,10 +248,14 @@ impl Engine {
         {
             let session = session.clone();
             let exited = exited.clone();
+            #[cfg(unix)]
+            let integration = integration.clone();
             let tick = cfg.tick.max(Duration::from_millis(5));
             std::thread::Builder::new().name("ss-tick".into()).spawn(move || {
                 while !exited.load(Ordering::SeqCst) {
                     std::thread::sleep(tick);
+                    #[cfg(unix)]
+                    if let Some(hook) = integration.lock().as_mut() { hook.drain(&mut session.lock(), pid); }
                     session.lock().tick(Instant::now());
                 }
             })?;
@@ -259,6 +271,11 @@ impl Engine {
                 let deadline = Instant::now() + Duration::from_millis(300);
                 while !pty_done.load(Ordering::SeqCst) && Instant::now() < deadline {
                     std::thread::sleep(Duration::from_millis(10));
+                }
+                #[cfg(unix)]
+                { let mut integration = integration.lock();
+                  if let Some(hook) = integration.as_mut() { hook.drain(&mut session.lock(), pid); }
+                  *integration = None;
                 }
                 session.lock().process_exited(code);
                 exited.store(true, Ordering::SeqCst);

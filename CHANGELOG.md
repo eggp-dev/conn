@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Restore human command history through local Bash/Zsh execution hooks, without collecting application input or changing user dotfiles. SSH and editor sessions remain usable; only the outer local command is recorded.
+- Join shell start/completion to agent review records by submission ID; show working directory, exit code, duration, and unconfirmed completion. Keep private external sessions excluded and show unavailable integration explicitly.
+
+- Scope native frontend event subscriptions to their owning window, preventing other windows from receiving private tab events.
+- Linux: add a default-off D-Bus external automation adapter with explicit caller executable permissions, shared private-session handling, and native-window acceptance coverage.
+
+- Stop reconstructing ordinary human commands from raw keystrokes. Password, paste and editor input no longer create command history or payload-bearing traces; unfinished human input blocks agent appends until completed or interrupted.
+- Restrict Unix audit files to owner-only permissions and reject symlink destinations. Add English/Korean notices explaining agent screen access and retained request details.
+
+
 - Replace recorded, agent-based external automation with private, owner-scoped native sessions. A startup command launches the supplied program directly on the PTY and replaces the allowed local profile's executable and arguments.
 - Route external writes through a dedicated input source, without agent control approval, policy review, proposals or Grace. Ordinary AI-agent collaboration keeps its existing rules.
 - Exclude private external activity, raw human input and payload-derived titles from Conn recording; block MCP/public IPC discovery and access. No private-to-agent sharing is implemented.
@@ -9,7 +19,7 @@
 - Require one explicit re-enable of previous automation permissions; keep the allowed profile selection. Earlier audit/timeline files and backups are not automatically removed.
 - Rename launcher examples generically and update the scripting dictionary and English/Korean guides. Native Apple Event and external-launcher acceptance testing remains required before release.
 
-한국어: 외부 자동화를 비공유 세션과 전용 입력 경로로 교체하는 **미배포 변경**입니다. 시작 프로그램은 기본 셸에 입력하지 않고 직접 실행하며, 에이전트 승인·정책·Grace를 거치지 않습니다. 비공유 활동과 원시 사람 입력은 Conn 기록에 남기지 않고 MCP·공개 IPC 접근을 차단합니다. 이전 허용은 한 번 다시 켜야 합니다. AI 공유와 일반 세션의 사람 입력 기록 개선은 아직 구현하지 않았으며, 과거 기록도 자동 삭제하지 않습니다. 실제 Mac 검증은 배포 전 별도로 필요합니다.
+한국어: 외부 자동화를 비공유 세션과 전용 입력 경로로 교체하는 **미배포 변경**입니다. 시작 프로그램은 기본 셸에 입력하지 않고 직접 실행하며, 에이전트 승인·정책·Grace를 거치지 않습니다. 비공유 활동과 원시 사람 입력은 Conn 기록에 남기지 않고 MCP·공개 IPC 접근을 차단합니다. 이전 허용은 한 번 다시 켜야 합니다. 일반 세션의 원시 사람 입력 기록도 제거했습니다. AI 공유는 아직 구현하지 않았으며, 과거 기록도 자동 삭제하지 않습니다. 실제 Mac 검증은 배포 전 별도로 필요합니다.
 
 ## 0.5.1 — Preview · 2026-09-16
 

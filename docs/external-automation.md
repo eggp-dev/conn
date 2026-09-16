@@ -5,14 +5,14 @@
 **UNRELEASED — private external automation.** This guide describes the replacement
 contract under implementation, not protections available in v0.5.1. That release
 uses the earlier recorded, agent-based automation path. The first replacement
-adapter targets macOS Apple Silicon; Windows/Linux external adapters are not
+adapters target macOS Apple Silicon and Linux D-Bus; the Windows adapter is not
 implemented. Native Apple Event and external-launcher acceptance checks remain
 release gates.
 
 ## Enable once, choose profiles
 
 In **Settings → Automation**, choose the saved profiles an external application may
-use, then enable AppleScript. It is off by default. Upgrading from the previous
+use, then enable external automation. It is off by default. Upgrading from the previous
 adapter retains the profile selection but requires one explicit re-enable
 (`requiresReenable` in settings metadata). An earlier approval must not silently
 become permission for direct execution.
@@ -155,7 +155,7 @@ clipboard, crash dumps and external-application logs are separate surfaces. Ther
 is no password detector, authentication-success detector or credential vault.
 Same-user tools may use their own shells and files outside Conn's API gates.
 
-The change does **not** fix raw human-input history in ordinary sessions. Existing
+This checkout also disables raw human-input command history in ordinary sessions. Existing
 audit files, saved timeline records and backups are not automatically erased.
 Review historical data separately before sharing it. See the
 [trust model](security.md#private-external-sessions-unreleased).
@@ -216,6 +216,42 @@ Before release, test the signed Apple Silicon build with a disposable launcher:
 - Metadata-only status, ignored `intent`, no private activity recording, and upgrade re-enable.
 - The external application's actual permitted template, with synthetic input.
 
-Later AI sharing and a general correction to ordinary human-input tracking remain
-separate implementation work. The [design document](automation-design.md) describes
-those future transitions; this guide does not claim they are available.
+Later AI sharing remains separate work. Ordinary local Bash/Zsh sessions now have
+[shell command integration](shell-integration.md). External private sessions never
+install it and remain unrecorded, including after human takeover.
+
+## Linux D-Bus adapter (unreleased)
+
+The native Linux app exports `dev.eggp.Conn` on the user session bus, object
+`/dev/eggp/Conn/Automation`, interface `dev.eggp.Conn.Automation1`.
+`Call(operation: string, payload: string) → string` takes the same JSON parameters
+and returns JSON. Supported operations are `window.create`, `session.create`,
+`session.write`, `session.status`, `session.release`, `request.status`, and
+`request.cancel`. Both create operations open a dedicated native window on Linux.
+
+Enable external automation and select profiles in Settings → Automation, then add
+absolute caller executable paths under **Allowed Linux executables**. An empty
+list denies all callers. Keep one D-Bus connection open for the lifetime of your
+session; separate `gdbus` commands have different owners and cannot reuse handles.
+Start Conn normally before connecting; automatic D-Bus service activation is not
+installed by this change. A launcher may start Conn and wait for its bus name.
+
+The adapter obtains UID/PID from the bus and checks `/proc` executable and process
+start time. It never accepts a caller identity from JSON. Session ownership includes
+the unique bus connection; disconnect, process exit and executable change invalidate
+its authority. Profile/permission changes use the shared service's revocation path.
+Requests are bounded to 64 KiB and eight concurrent operations; the shared service
+also bounds sessions, queued input and payload size.
+
+Allowing Python, a shell or another interpreter authorizes scripts run through that
+executable, not a particular script. Path authorization is not code signing or a
+sandbox against other processes under the same user. D-Bus and the OS transport
+may temporarily hold payloads; do not treat this as protection against session-bus
+monitoring by privileged tools. No automation payload is intentionally persisted
+by Conn. Authorization is off by default and is separate from MCP permissions.
+
+For an isolated native acceptance run, the desktop adapter accepts
+`CONN_CONFIG_DIR` for its config/data directory and `CONN_SOCKET` for its agent socket.
+Use a private `dbus-run-session` and virtual display, never the user's live settings.
+The external `terminal-auth-fixtures` project drives the real native windows and
+common automation service; it does not bypass renderer readiness or authorization.

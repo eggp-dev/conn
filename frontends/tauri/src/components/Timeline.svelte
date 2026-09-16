@@ -16,7 +16,7 @@
   const items = $derived(visibleTimeline(history, filter).reverse());
   const target = $derived(strip.find(it => it.id === hover));
   const color = (it: TimelineItem) => it.actor === "human" ? "var(--muted)" : agentColor(it.actor);
-  const actor = (it: TimelineItem) => it.actor === "human" ? t("tl.you") : it.actor;
+  const actor = (it: TimelineItem) => it.actor === "human" ? t("tl.you") : it.actor === "shell" ? t("tl.shell") : it.actor;
   const fmt = (ms: number) => new Date(ms).toLocaleTimeString();
   const kind = (it: TimelineItem) => t(`tl.kind.${it.kind}`);
   const status = (it: TimelineItem) => t(isPolicyBlocked(it) ? "tl.policyBlocked" : it.kind === "control" && it.status === "granted" ? "tl.step.control_granted" : `tl.status.${it.status}`);
@@ -26,7 +26,7 @@
     return keys[label] ? t(keys[label]) : label ? t("tl.block.rule", { label }) : t("tl.block.unknown");
   }
   const name = (it: TimelineItem) => [actor(it), kind(it), it.text, status(it)].filter(Boolean).join(" · ");
-  const canRetype = (it: TimelineItem) => isCommand(it) && !!it.text && !["pending", "scheduled", "granted"].includes(it.status);
+  const canRetype = (it: TimelineItem) => isCommand(it) && !!it.text && !["pending", "scheduled", "granted", "running"].includes(it.status);
   const grace = (it: TimelineItem) => it.steps.find(s => s.type === "scheduled")?.ms;
   function detailText(detail: TimelineStep) {
     if (!detail.text) return "";
@@ -72,6 +72,7 @@
       {/each}
       <span class="scope muted">{t("tl.scope")}</span>
     </div>
+    <p class="privacy-note muted">{t(`shell.integration.${cur().shellIntegration.state}`, { shell: cur().shellIntegration.shell ?? "" })} {t("privacy.history")}</p>
     <ol aria-label={t("tl.title")}>
       {#each items as it (it.id)}
         <li>
@@ -95,7 +96,9 @@
                 <RequestDetails request={it.originalRequest ?? controlFor(history, it)?.originalRequest} />
               {/if}
               {#if it.intent}<p class="intent">{it.intent}</p>{/if}
-              {#if isCommand(it)}<p class="muted execution-note">{t("tl.execution.note")}</p>{/if}
+              {#if isCommand(it) && !it.commandId}<p class="muted execution-note">{t("tl.execution.note")}</p>{/if}
+              {#if it.cwd}<p class="muted">{t("tl.cwd")}: <code>{it.cwd}</code></p>{/if}
+              {#if it.commandId}<p class="muted">{t("tl.exit")}: {it.exitCode ?? t("tl.status.unknown")}{#if it.durationMs != null} · {t("tl.duration", { seconds: (it.durationMs / 1000).toFixed(2) })}{/if}</p>{/if}
               <ol class="steps" aria-label={t("tl.more")}>
                 {#each timelineSteps(history, it) as detail}
                   <li><time>{fmt(detail.t)}</time><div><b>{t(detail.type === "denied" && isPolicyBlocked(it) ? "tl.policyBlocked" : `tl.step.${detail.type}`)}</b>{#if detail.ms}<span> · {detail.ms / 1000}s</span>{/if}{#if detail.text}<p>{detailText(detail)}</p>{/if}</div></li>
@@ -126,6 +129,7 @@
 </div>
 
 <style>
+  .privacy-note { margin: 0; padding: 8px 16px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
   .tl { position: absolute; left: 0; right: 0; bottom: 0; height: 22px; z-index: 15; }
   .hit { position: absolute; inset: 0; background: transparent; border: 0; cursor: pointer; }
   .strip { position: absolute; left: 16px; right: 170px; bottom: 3px; display: flex; gap: 2px; height: 12px; align-items: flex-end; pointer-events: none; }

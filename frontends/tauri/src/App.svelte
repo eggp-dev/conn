@@ -56,6 +56,7 @@
   async function syncStatus(id: string) {
     const t = tab(id); if (!t) return;
     const s = await invoke<any>("status", { session: id });
+    t.shellIntegration = s.shellIntegration ?? { state: "unavailable" };
     t.externalPrivate = s.externalPrivate === true;
     t.externalStarting = s.externalStarting === true;
     t.externalInputAvailable = s.externalInputAvailable === true;
@@ -330,6 +331,7 @@
 
           if (String(ev.policy).startsWith("deny")) { t.policyBlockedUntil = performance.now() + 2400; toast(tr("policy.blocked", { cmd: ev.cmd }) + sfx, "danger"); }
           break;
+        case "shell_integration_changed": t.shellIntegration = ev.status; break;
         case "human_exec": t.title = ev.cmd.length > 24 ? ev.cmd.slice(0, 24) + "…" : ev.cmd; break;
         case "process_exited": t.processAlive = false; setController(t, "human"); announce(tr("shell.exited") + sfx, "var(--danger)", "warn"); break;
         case "pacing_changed": t.pacing = ev.pacing as Pacing; break;

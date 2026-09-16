@@ -22,10 +22,10 @@ pub struct Caller {
 }
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Config { pub enabled: bool, pub profiles: Vec<String> }
+pub struct Config { pub enabled: bool, pub profiles: Vec<String>, #[serde(default)] pub linux_executables: Vec<String> }
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SavedConfig { version: u32, enabled: bool, profiles: Vec<String> }
+struct SavedConfig { version: u32, enabled: bool, profiles: Vec<String>, #[serde(default)] linux_executables: Vec<String> }
 
 struct Payload(Vec<u8>);
 impl Drop for Payload {
@@ -94,12 +94,19 @@ impl Automation {
         let mut digest_key = [0; 32];
         digest_key[..16].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
         digest_key[16..].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
-        Self { config: Mutex::new(Config { enabled: current && enabled, profiles }),
+        Self { config: Mutex::new(Config { enabled: current && enabled, profiles, linux_executables: serde_json::from_value(value["linuxExecutables"].clone()).unwrap_or_default() }),
             requires_reenable: AtomicBool::new(!current && enabled), bindings: Default::default(),
             requests: Default::default(), digest_key }
     }
+    pub(crate) fn allows_linux_executable(&self, executable: &std::path::Path) -> bool {
+        let config = self.config.lock();
+        config.enabled && config.linux_executables.iter().any(|p| {
+            std::path::Path::new(p).is_absolute()
+                && std::fs::canonicalize(p).ok().as_deref() == Some(executable)
+        })
+    }
     pub(crate) fn settings(&self) -> Value {
-        json!({"config":self.config.lock().clone(),"nativeSupported":cfg!(target_os="macos"),
+        json!({"config":self.config.lock().clone(),"nativeSupported":cfg!(any(target_os="macos", target_os="linux")),"linuxSupported":cfg!(target_os="linux"),
             "requiresReenable":self.requires_reenable.load(Ordering::Acquire)})
     }
     pub(crate) fn stop_all(&self) {
@@ -122,6 +129,10 @@ impl Automation {
 
 pub(crate) fn save(state: &AppState, config: Config) -> Result<Value, String> {
     crate::cancel_all_pending(state);
+    if config.linux_executables.len() > 32 || config.linux_executables.iter().any(|p| {
+        let path = std::path::Path::new(p);
+        !path.is_absolute() || !path.is_file() || p.len() > 4096
+    }) { return Err("Choose at most 32 existing absolute executable paths".into()); }
     let mut current = state.automation.config.lock();
     let profiles = conn_core::profiles::Profiles::load(&state.config_dir.join("profiles.json"))?;
     if config.profiles.iter().any(|id| !profiles.profiles.iter().any(|p| &p.id == id)) {
@@ -130,7 +141,7 @@ pub(crate) fn save(state: &AppState, config: Config) -> Result<Value, String> {
     std::fs::create_dir_all(&state.config_dir).map_err(|_| "Cannot save automation settings")?;
     let mut file = tempfile::NamedTempFile::new_in(&state.config_dir).map_err(|_| "Cannot save automation settings")?;
     use std::io::Write;
-    let saved = SavedConfig { version: 2, enabled: config.enabled, profiles: config.profiles.clone() };
+    let saved = SavedConfig { version: 2, enabled: config.enabled, profiles: config.profiles.clone(), linux_executables: config.linux_executables.clone() };
     file.write_all(&serde_json::to_vec(&saved).map_err(|_| "Cannot save automation settings")?)
         .map_err(|_| "Cannot save automation settings")?;
     file.persist(state.config_dir.join("automation.json")).map_err(|_| "Cannot save automation settings")?;
@@ -231,7 +242,7 @@ pub(crate) fn dispatch(app: &AppHandle, state: &Arc<AppState>, window: &str, cal
                 std::thread::sleep(Duration::from_millis(20));
             }
             let config = state.automation.config.lock();
-            if !config.enabled { return Err("Enable AppleScript in Settings → Automation first".into()); }
+            if !config.enabled { return Err("Enable external automation in Settings → Automation first".into()); }
             let _startup = state.startup.lock();
             let profiles = conn_core::profiles::Profiles::load(&state.config_dir.join("profiles.json"))
                 .map_err(|_| "Profile unavailable")?;

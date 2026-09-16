@@ -190,3 +190,42 @@ test('restoration excludes old external automation payloads while keeping normal
   assert.deepEqual(s.items.map(item => item.text), ['pwd']);
   assert.equal(JSON.stringify(s).includes('private-marker'), false);
 });
+
+
+test('shell execution updates the approved agent item by submission ID', () => {
+  const s = newTimeline();
+  recordTimeline(s, {event:'approval_requested',request:{id:'a1',agentId:'codex',cmd:'pwd',label:'review'}});
+  recordTimeline(s, {event:'approval_resolved',approvalId:'a1',state:'granted',by:'human'});
+  recordTimeline(s, {...exec(), submissionId:'sub-1'});
+  recordTimeline(s, {event:'shell_command_started',commandId:'cmd-1',submissionId:'sub-1',actor:'codex',cmd:'pwd',cwd:'/workspace'});
+  assert.equal(s.items.length,1); assert.equal(s.items[0].status,'running');
+  recordTimeline(s, {event:'shell_command_finished',commandId:'cmd-1',exitCode:0,durationMs:250});
+  assert.equal(s.items.length,1); assert.equal(s.items[0].status,'completed');
+  assert.deepEqual(commandDecisions(s.items[0]),['approved']);
+  assert.equal(s.items[0].cwd,'/workspace'); assert.equal(s.items[0].durationMs,250);
+});
+test('same-text human commands stay separate and unconfirmed completion is explicit', () => {
+  const s = newTimeline();
+  for (const id of ['one','two']) recordTimeline(s,{event:'shell_command_started',commandId:id,actor:'human',cmd:'pwd',cwd:'/tmp'});
+  recordTimeline(s,{event:'shell_command_finished',commandId:'one',exitCode:1,durationMs:20});
+  recordTimeline(s,{event:'shell_command_finished',commandId:'two',exitCode:null,durationMs:30});
+  assert.deepEqual(s.items.map(i=>i.status),['failed','unknown']);
+});
+test('saved shell lifecycle joins by ID and a missing finish never implies success', () => {
+  const s = newTimeline();
+  importSavedActivity(s,[
+    {action:'exec',actor:'codex',cmd:'pwd',submissionId:'s1',policy:'allow'},
+    {action:'shell_command_started',actor:'codex',commandId:'c1',submissionId:'s1',cmd:'pwd',cwd:'/tmp'},
+    {action:'shell_command_finished',commandId:'c1',exitCode:0,durationMs:10},
+    {action:'shell_command_started',actor:'human',commandId:'c2',cmd:'sleep 10',cwd:'/tmp'},
+  ]);
+  assert.deepEqual(s.items.map(i=>i.status),['completed','unknown']);
+  assert.ok(s.items.every(i=>i.saved));
+});
+test('private lifecycle events and saved records are ignored', () => {
+  const s = newTimeline(true);
+  recordTimeline(s,{event:'shell_command_started',commandId:'c1',actor:'human',cmd:'private'});
+  recordTimeline(s,{event:'shell_command_finished',commandId:'c1',exitCode:0,durationMs:1});
+  importSavedActivity(s,[{action:'shell_command_started',commandId:'c1',actor:'human',cmd:'private'}]);
+  assert.equal(s.items.length,0);
+});

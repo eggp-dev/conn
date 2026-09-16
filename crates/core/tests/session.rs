@@ -34,7 +34,7 @@ fn preemptive_takeover_order() {
     h.session.human_input(b"x");
 
     let t = trace.lock().unwrap().clone();
-    assert_eq!(t, vec!["revoke", "pty_write:x", "event", "audit"], "revoke must precede the PTY write");
+    assert_eq!(t, vec!["revoke", "pty_write", "event", "audit"], "revoke must precede the PTY write");
     assert!(h.session.controller().is_human());
     assert_eq!(h.pty_str(), "x");
 
@@ -263,17 +263,16 @@ fn type_rejects_newlines() {
 }
 
 #[test]
-fn mixed_human_and_agent_input_is_tracked() {
+fn human_takeover_discards_command_tracking_without_recording_input() {
     let mut h = Harness::new();
     h.agent(1, "copilot");
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "echo ").unwrap();
     h.session.human_input(b"hi"); // takeover, line continues
-    assert_eq!(h.session.input_line(), "echo hi");
+    assert_eq!(h.session.input_line(), "");
     h.session.human_input(b"\r");
     let ev = h.audit_events();
-    let exec = ev.iter().find(|e| e.actor == "human" && e.action == "exec").unwrap();
-    assert_eq!(exec.fields["cmd"], "echo hi");
+    assert!(!ev.iter().any(|e| e.actor == "human" && e.action == "exec"));
 }
 
 #[test]

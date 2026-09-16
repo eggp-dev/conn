@@ -265,10 +265,10 @@ fn full_flow() {
         events.iter().any(|e| e.actor == actor && e.action == action && pred(&Value::Object(e.fields.clone())))
     };
     assert!(find("system", "session_start", &|_| true));
-    assert!(find("human", "exec", &|f| f["cmd"] == "echo READY-$((2+3))"));
+    assert!(!find("human", "exec", &|f| f["cmd"] == "echo READY-$((2+3))"), "raw human commands must not be persisted");
     assert!(find("copilot", "exec", &|f| f["cmd"] == "echo agent-$((1+1))" && f["policy"] == "allow"));
     assert!(find("human", "takeover", &|f| f["revoked"] == "lease#1"));
-    assert!(find("human", "exec", &|f| f["cmd"] == "echo human-$((5+5))"));
+    assert!(!find("human", "exec", &|_| true), "interactive human input has no command audit entries");
     assert!(find("copilot", "exec", &|f| f["cmd"] == "rm -rf ./tmp-zzz" && f["policy"] == "confirm" && f["approval"] == "denied"));
     assert!(find("copilot", "exec", &|f| f["policy"] == "confirm" && f["approval"] == "granted" && f["by"] == "cli"));
     assert!(find("copilot", "exec", &|f| f["policy"] == "deny"));

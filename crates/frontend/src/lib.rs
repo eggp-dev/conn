@@ -142,6 +142,10 @@ impl Harness {
         let _startup = self.state.startup.lock();
         for id in ids { let _ = close_tab(&self.state, id); }
     }
+    /// Native adapters authorize OS-resolved executables independently of window focus.
+    pub fn linux_automation_allowed(&self, executable: &std::path::Path) -> bool {
+        self.state.automation.allows_linux_executable(executable)
+    }
     /// Narrow external adapter boundary. Never exposes trusted UI dispatch.
     pub fn automate(&self, caller: automation::Caller, operation: &str, args: Value) -> Result<Value, String> {
         self.automate_in_window("main", caller, operation, args)

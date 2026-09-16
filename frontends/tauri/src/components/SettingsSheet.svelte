@@ -181,6 +181,7 @@
       {:else if st.settingsTab === "automation"}
         <AutomationPane />
       {:else if st.settingsTab === "agents"}
+        <p class="muted">{t("privacy.sharing")}</p>
         <AgentConnections />
         <details class="agent-setup"><summary>{t("agents.other")}</summary>
           <h3>{t("s.connect.title")}</h3>

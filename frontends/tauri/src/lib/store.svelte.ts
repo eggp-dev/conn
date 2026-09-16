@@ -14,6 +14,7 @@ export type TabState = {
   title: string;
   /** Privacy is resolved before the terminal subscribes to output. */
   statusReady: boolean;
+  shellIntegration: { state: string; shell?: string; reason?: string };
   externalPrivate: boolean;
   externalStarting: boolean;
   externalInputAvailable: boolean;
@@ -51,7 +52,7 @@ export type TabState = {
 
 export function newTab(id: string, n: number): TabState {
   return {
-    id, title: `Terminal ${n}`, statusReady: false, externalPrivate: false, externalStarting: false, externalInputAvailable: false, profileId: null, profileName: null, reviewRequired: false, processAlive: true, policyBlockedUntil: 0, attended: false, entrustedTo: null, attention: null, openedBy: null,
+    id, title: `Terminal ${n}`, statusReady: false, shellIntegration: { state: "unavailable" }, externalPrivate: false, externalStarting: false, externalInputAvailable: false, profileId: null, profileName: null, reviewRequired: false, processAlive: true, policyBlockedUntil: 0, attended: false, entrustedTo: null, attention: null, openedBy: null,
     controller: { type: "human" }, mode: "autopilot", effectiveMode: "autopilot", gate: false,
     pacing: { minWriteIntervalMs: 0, enterGraceMs: 0, leaseTtlSecs: 60, approvalTtlSecs: 300 },
     mask: null, allows: [], agents: [], typing: false, proposal: null, approval: null, grace: null, ctlReq: null,
