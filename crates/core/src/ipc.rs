@@ -78,6 +78,10 @@ impl From<SessionError> for RpcError {
     }
 }
 
+fn session_unavailable() -> RpcError {
+    RpcError { code: "not_found".into(), message: "session unavailable".into() }
+}
+
 fn str_param(params: &Value, key: &str) -> Option<String> {
     params.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
 }
@@ -91,6 +95,12 @@ fn bytes_param(params: &Value, key: &str) -> Result<Vec<u8>, RpcError> {
 
 /// Synchronous dispatch. Runs under the session lock; must not block.
 pub fn dispatch(session: &SharedSession, conn: ConnId, method: &str, params: &Value) -> Result<Value, RpcError> {
+    if session.lock().is_private() { return Err(session_unavailable()); }
+    dispatch_trusted(session, conn, method, params)
+}
+
+/// In-process native UI only. Never route a socket or browser client here.
+pub fn dispatch_trusted(session: &SharedSession, conn: ConnId, method: &str, params: &Value) -> Result<Value, RpcError> {
     let mut s = session.lock();
     s.note_connection_activity(conn);
     let kind = s.conn_kind(conn).unwrap_or(ConnKind::Human);
@@ -303,8 +313,8 @@ impl Hub {
     pub fn open_tab(&self, agent_id: &str, reason: Option<&str>) -> Result<SessionId, RpcError> {
         let opener = self.opener.lock().clone().ok_or_else(|| RpcError { code: "unsupported".into(), message: "this host cannot open tabs".into() })?;
         let id = opener(agent_id, reason).map_err(|m| RpcError { code: "open_failed".into(), message: m })?;
-        if self.get(&id).is_none() {
-            return Err(RpcError { code: "open_failed".into(), message: "opener did not register the session".into() });
+        if self.get_public(&id).is_none() {
+            return Err(RpcError { code: "open_failed".into(), message: "opener did not register an available session".into() });
         }
         Ok(id)
     }
@@ -377,6 +387,38 @@ impl Hub {
             s.lock().set_attended(i == id);
         }
         true
+    }
+
+    /// Public clients cannot enumerate or attach to private native sessions.
+    pub fn public_ids(&self) -> Vec<SessionId> {
+        self.sessions.lock().iter().filter(|(_, s)| !s.lock().is_private()).map(|(id, _)| id.clone()).collect()
+    }
+
+    pub fn get_public(&self, id: &str) -> Option<SharedSession> {
+        self.get(id).filter(|s| !s.lock().is_private())
+    }
+
+    pub fn public_attended_id(&self) -> Option<SessionId> {
+        self.attended_id().filter(|id| self.get_public(id).is_some())
+    }
+
+    fn public_index_of(&self, id: &str) -> Option<usize> {
+        self.public_ids().iter().position(|candidate| candidate == id).map(|i| i + 1)
+    }
+
+    fn find_public_tab(&self, tab: &Value) -> Option<(SessionId, SharedSession)> {
+        let ids = self.public_ids();
+        let id = match tab {
+            Value::Number(n) => ids.get(n.as_u64()?.checked_sub(1)? as usize),
+            Value::String(id) => ids.iter().find(|i| *i == id).or_else(|| id.parse::<usize>().ok().and_then(|i| ids.get(i.checked_sub(1)?))),
+            _ => None,
+        }?;
+        self.get_public(id).map(|session| (id.clone(), session))
+    }
+
+    fn resolve_public(&self, session: Option<&str>) -> Option<(SessionId, SharedSession)> {
+        let id = session.map(str::to_string).or_else(|| self.public_attended_id())?;
+        self.get_public(&id).map(|s| (id, s))
     }
 
     /// Resolve a request's target: the named session, else the attended one.
@@ -530,9 +572,11 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
             }
         };
         for sid in &registered {
-            if let Some(s) = hub.get(sid) { s.lock().note_connection_activity(conn); }
+            if let Some(s) = hub.get_public(sid) { s.lock().note_connection_activity(conn); }
         }
-        let result = if req.method == "hello" {
+        let result = if req.method == "hello" && str_param(&req.params, "session").is_some_and(|id| hub.get_public(&id).is_none()) {
+            Err(session_unavailable())
+        } else if req.method == "hello" {
             let name = str_param(&req.params, "agentId").or_else(|| str_param(&req.params, "name")).unwrap_or_else(|| "client".into());
             let kind = match str_param(&req.params, "kind").as_deref() {
                 Some("agent") => ConnKind::Agent,
@@ -542,30 +586,30 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
             identity = ConnIdentity { kind, name, stream_output: req.params.get("streamOutput").and_then(|v| v.as_bool()).unwrap_or(false) };
             // Frontends hear every session; agents and humans attach lazily where they act.
             if kind == ConnKind::Frontend {
-                for sid in hub.ids() {
-                    if let Some(s) = hub.get(&sid) {
+                for sid in hub.public_ids() {
+                    if let Some(s) = hub.get_public(&sid) {
                         register(&sid, &s, &identity, &mut registered);
                     }
                 }
-            } else if let Some((sid, s)) = hub.resolve(None) {
+            } else if let Some((sid, s)) = hub.resolve_public(None) {
                 register(&sid, &s, &identity, &mut registered);
                 bound = Some(sid);
             }
-            let target = bound.clone().or_else(|| hub.attended_id());
-            let modes = target.as_deref().and_then(|id| hub.get(id)).map(|s| { let s = s.lock(); (s.mode(), s.effective_mode()) });
-            Ok(json!({ "conn": conn, "kind": match kind { ConnKind::Agent => "agent", ConnKind::Frontend => "frontend", ConnKind::Human => "human" }, "attended": hub.attended_id(), "session": target, "mode": modes.map(|m| m.0), "effectiveMode": modes.map(|m| m.1) }))
+            let target = bound.clone().or_else(|| hub.public_attended_id());
+            let modes = target.as_deref().and_then(|id| hub.get_public(id)).map(|s| { let s = s.lock(); (s.mode(), s.effective_mode()) });
+            Ok(json!({ "conn": conn, "kind": match kind { ConnKind::Agent => "agent", ConnKind::Frontend => "frontend", ConnKind::Human => "human" }, "attended": hub.public_attended_id(), "session": target, "mode": modes.map(|m| m.0), "effectiveMode": modes.map(|m| m.1) }))
         } else if req.method == "sessions" || req.method == "list_tabs" {
-            let list: Vec<Value> = hub.ids().into_iter().enumerate().filter_map(|(i, sid)| {
-                let s = hub.get(&sid)?;
+            let list: Vec<Value> = hub.public_ids().into_iter().enumerate().filter_map(|(i, sid)| {
+                let s = hub.get_public(&sid)?;
                 let g = s.lock();
                 let st = g.status();
                 Some(json!({ "tab": i + 1, "id": sid, "current": bound.as_deref() == Some(sid.as_str()), "attended": st.attended, "controller": st.controller, "pending": st.pending.len(), "entrustedTo": st.entrusted_to, "attentionRequest": st.attention_request, "openedBy": st.opened_by, "processAlive": st.process_alive, "mode": st.mode, "effectiveMode": st.effective_mode }))
             }).collect();
-            Ok(json!({ "sessions": list, "tabs": list.len(), "attended": hub.attended_id(), "current": bound }))
+            Ok(json!({ "sessions": list, "tabs": list.len(), "attended": hub.public_attended_id(), "current": bound }))
         } else if req.method == "open_tab" {
             // Agent: open a tab. It starts unattended; the human sees it knock.
             let reason = str_param(&req.params, "reason");
-            let cur = bound.clone().and_then(|b| hub.get(&b).map(|s| (b, s))).or_else(|| hub.resolve(None));
+            let cur = bound.clone().and_then(|b| hub.get_public(&b).map(|s| (b, s))).or_else(|| hub.resolve_public(None));
             match cur {
                 _ if !hub.tabs_supported() => Err(RpcError { code: "unsupported".into(), message: "this host cannot open tabs".into() }),
                 Some((from, s)) => {
@@ -575,11 +619,11 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
                         Ok(()) => match hub.open_tab(&identity.name, reason.as_deref()) {
                             Err(e) => Err(e),
                             Ok(sid) => {
-                                let ns = hub.get(&sid).expect("checked");
+                                let ns = hub.get_public(&sid).expect("checked");
                                 register(&sid, &ns, &identity, &mut registered);
                                 ns.lock().agent_opened_tab(conn, reason);
                                 bound = Some(sid.clone());
-                                Ok(json!({ "session": sid, "tab": hub.index_of(&sid), "attended": false, "note": "the human is not looking at this tab yet; request_attention is queued — wait for attention or entrust" }))
+                                Ok(json!({ "session": sid, "tab": hub.public_index_of(&sid), "attended": false, "note": "the human is not looking at this tab yet; request_attention is queued — wait for attention or entrust" }))
                             }
                         },
                     }
@@ -588,10 +632,10 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
             }
         } else if req.method == "switch_tab" {
             let want = req.params.get("tab").cloned().or_else(|| req.params.get("session").cloned()).unwrap_or(Value::Null);
-            let cur = bound.clone().and_then(|b| hub.get(&b).map(|s| (b, s))).or_else(|| hub.resolve(None));
-            match (cur, hub.find_tab(&want)) {
+            let cur = bound.clone().and_then(|b| hub.get_public(&b).map(|s| (b, s))).or_else(|| hub.resolve_public(None));
+            match (cur, hub.find_public_tab(&want)) {
                 (None, _) => Err(RpcError { code: "not_found".into(), message: "no session".into() }),
-                (_, None) => Err(RpcError { code: "not_found".into(), message: format!("no tab {want}") }),
+                (_, None) => Err(session_unavailable()),
                 (Some((from, s)), Some((to, ts))) => {
                     let allowed = { register(&from, &s, &identity, &mut registered); s.lock().agent_can(conn, Affordance::SwitchTab) };
                     match allowed {
@@ -604,17 +648,17 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
                                 bound = Some(to.clone());
                             }
                             let attended = ts.lock().status().attended;
-                            Ok(json!({ "session": to, "tab": hub.index_of(&to), "attended": attended }))
+                            Ok(json!({ "session": to, "tab": hub.public_index_of(&to), "attended": attended }))
                         }
                     }
                 }
             }
         } else if req.method == "set_attended" {
             let sid = str_param(&req.params, "session").unwrap_or_default();
-            if hub.set_attended(&sid) { Ok(json!({ "attended": sid })) } else { Err(RpcError { code: "not_found".into(), message: format!("session {sid}") }) }
+            if hub.get_public(&sid).is_some() && hub.set_attended(&sid) { Ok(json!({ "attended": sid })) } else { Err(session_unavailable()) }
         } else {
             let target = str_param(&req.params, "session").or_else(|| bound.clone());
-            match hub.resolve(target.as_deref()) {
+            match hub.resolve_public(target.as_deref()) {
                 Some((sid, s)) => {
                     register(&sid, &s, &identity, &mut registered);
                     if bound.is_none() {
@@ -622,7 +666,7 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
                     }
                     call_with_pacing(&s, conn, &req.method, &req.params).await
                 }
-                None => Err(RpcError { code: "not_found".into(), message: "no such session".into() }),
+                None => Err(session_unavailable()),
             }
         };
         let resp = match result {
@@ -634,7 +678,7 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
         }
     }
     for sid in registered {
-        if let Some(s) = hub.get(&sid) {
+        if let Some(s) = hub.get_public(&sid) {
             s.lock().connection_closed(conn);
         }
     }

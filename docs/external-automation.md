@@ -2,14 +2,34 @@
 
 [한국어](external-automation.ko.md)
 
-**Experimental in v0.5.0; disabled by default.** The first
-native adapter is macOS AppleScript. Windows/Linux share the internal contract;
-their external launch adapters are not implemented yet. Actual PAM compatibility
-and macOS permission behavior require a Mac acceptance test.
+**UNRELEASED — private external automation.** This guide describes the replacement
+contract under implementation, not protections available in v0.5.1. That release
+uses the earlier recorded, agent-based automation path. The first replacement
+adapters target macOS Apple Silicon and Linux D-Bus; the Windows adapter is not
+implemented. Native Apple Event and external-launcher acceptance checks remain
+release gates.
 
-## PAM window command (v0.5.1)
+## Enable once, choose profiles
 
-Starting with v0.5.1, Conn supports this iTerm-style launch statement.
+In **Settings → Automation**, choose the saved profiles an external application may
+use, then enable external automation. It is off by default. Upgrading from the previous
+adapter retains the profile selection but requires one explicit re-enable
+(`requiresReenable` in settings metadata). An earlier approval must not silently
+become permission for direct execution.
+
+This grant allows local AppleScript callers to launch supplied programs with an
+allowed local profile; it is **not an executable allowlist**. Authorized external
+operations have no agent control request, proposal, command-policy approval or
+Grace card. Actual AI-agent operations in ordinary sessions keep their existing
+mode, policy and takeover rules.
+
+macOS may also ask whether the sender may control Conn. Session ownership comes
+from the native sender and its process lifetime, not its displayed application
+name. Create, write, poll and release in the **same sender process**. Separate
+`osascript` invocations cannot reuse a previous invocation's session handles. If a
+launcher uses `osascript`, that process is the sender Conn can identify.
+
+## Start a program in a new window
 
 ```applescript
 tell application "Conn"
@@ -17,162 +37,221 @@ tell application "Conn"
 end tell
 ```
 
-[Copy the complete template](../examples/applescript/pam-window.applescript).
-PAM must replace `__RUN_COMMAND__`; Conn does not expand it. In Script Editor,
-replace the placeholder with `pwd` for a harmless test.
+[Complete window template](../examples/applescript/external-window.applescript).
+The external application replaces `__RUN_COMMAND__`; Conn does not expand it.
+For a local demonstration, substitute `pwd`.
 
-Enable the **default profile** in Settings → Automation. This creates a real
-native window using that profile, then queues the exact command through the
-existing control gate, policy and grace path. Omitting `command` opens only the
-shell. Existing windows and tabs remain available.
+The `command` replaces the allowed local profile's program and arguments for this
+session. It is **started on the new PTY**, not typed into a profile shell. The
+profile's cwd and environment remain in effect; the temporary executable and argv
+are not saved back into the profile.
 
-Input waits until this window's frontend is ready. After input delivery, control
-returns to the human automatically so they can interact with the connection.
-Delivery does not mean the command completed or authentication succeeded.
-The supplied `echo` and `read` implement the message and Enter wait. Afterwards,
-the profile shell remains open; Conn does not automatically close the window.
+Conn tokenizes POSIX words, quotes and escapes. It does not expand variables,
+substitute commands, glob paths or insert an implicit shell. Unquoted shell
+operators and malformed quoting are rejected with a payload-free error. Use an
+explicit `/bin/sh -c '…'` argument when shell syntax is required. Command override
+is supported only for local macOS profiles, not SSH, WSL or Docker profiles.
 
-Each native window owns its tabs, output and session commands. Closing one window
-cancels its queued automation and terminates its shells, without closing other
-windows. A launch failure cleans up its new session.
+The window's private renderer must be ready before the child starts. Omitting
+`command` starts the allowed default profile privately. A successful reply means
+the process was spawned; it does not establish command completion or successful
+authentication. A lost reply may follow a successful spawn, so do not automatically
+retry an uncertain creation request.
 
-This is compatibility for the launch statement only. The return value is an opaque
-session ID, **not** iTerm's `window` object. `tell current session`, split panes and
-iTerm's complete object model are not supported. The existing `create session`,
-`write text` and request-status API remain available.
-See [iTerm's original scripting documentation](https://iterm2.com/documentation-scripting.html).
+In this example, `echo` and `read` provide the message and Enter wait. After Enter,
+`/bin/sh` may exit. Conn retains the finished terminal view until the human closes
+it; no fallback shell is started. Closing the window terminates its child and
+cancels its queue while leaving other windows alone.
 
-## Connect an external application
+The return value is an opaque session handle, not a window object. Only the
+commands below are supported; current-session object scripting and split-pane
+object models are not implemented.
 
-A PAM client or launcher can open Conn, create a tab from a saved profile and send
-its connection command to that session. The application owns the AppleScript;
-Conn receives Apple Events. An already-running Conn follows the same path.
-
-1. In **Settings → Automation**, select allowed profiles and enable AppleScript.
-2. Use the [example script](../examples/applescript/pam-connect.applescript) in the
-   external application's script template. Run `osascript pam-connect.applescript`
-   for a harmless `pwd` demonstration, or supply one SSH connection command as its
-   argument. The default terminal profile must be among those allowed.
-3. macOS may request permission for the sender to control Conn. Then approve the
-   session's control request inside Conn. Command policy and Co-pilot proposals
-   still apply after control is granted.
-4. The script polls its request and releases control after input delivery. The
-   terminal stays open for the human.
-
-**Create, write, poll and release must run in the same sender process.** Separate
-`osascript` invocations have different identities. When a PAM app uses osascript,
-Conn identifies the intermediary, not the PAM vendor. No persistent per-vendor
-trust is inferred from an application name. Settings grant profile access to local
-AppleScript callers, while each new session requires control approval.
-
-A minimal source template:
+## Write to the caller's private session
 
 ```applescript
 tell application "Conn"
     activate
     set sessionID to create session
-    set requestID to write text "pwd" to session sessionID intent "Show the current directory"
+    set requestID to write text "pwd" to session sessionID
     -- Poll request state requestID; see the complete example for timeout handling.
 end tell
 ```
 
-This is Conn's dictionary, not drop-in iTerm2 or Terminal compatibility. A PAM
-product that permits script templates can use it; a fixed bundle ID or compiled
-vendor script may need a vendor adapter. Check the actual product and sanitized
-script before claiming compatibility. The window launch statement above is the
-only iTerm-style compatibility entry point; split-pane/object scripting is not supported.
+[Complete input and polling example](../examples/applescript/external-connect.applescript).
+Run `osascript external-connect.applescript` for a `pwd` demonstration, or provide
+one terminal input line as its argument. The default profile must be allowed.
+
+`write text` uses a dedicated external-input path. Conn does not reconstruct the
+input as a command, analyze it against agent policy or add an echo. The child may
+echo received bytes normally. Input is serialized in order and stays bound to the
+exact private session the caller created; switching tabs never redirects it.
+PTY readiness does not identify a password prompt or prove authentication has
+finished. The external application determines when its next input is appropriate.
 
 ## Script commands
 
 | Command | Result |
 | --- | --- |
-| `create session [profile "profile-id"]` | Stable session ID; creates and selects a tab. Omitted profile uses the default. |
-| `write text "text" to session id [newline true] [intent "reason"] [request id "unique-id"]` | Request ID immediately; queues one line. Return goes through command policy. |
-| `request state requestID` | Plain state string, suitable for polling. |
-| `request status requestID` | JSON with request ID, session, state and result detail. |
-| `session status sessionID` | JSON mode, effectiveMode, processAlive and attended. |
-| `cancel request requestID` | Whether cancellation was requested; revokes that automation session and its remaining queue. |
-| `release session sessionID` | Revokes automation access; leaves the tab open. |
+| `create window with default profile [command "program and arguments"]` | New private window and opaque session handle after successful spawn. |
+| `create session [profile "profile-id"]` | New private session using the allowed profile; omitted profile uses the default. |
+| `write text "text" to session id [newline true] [intent "reason"] [request id "unique-id"]` | Request ID; queues one line and optional Return. `intent` is accepted only for compatibility, ignored and discarded. |
+| `request state requestID` | Plain state string. |
+| `request status requestID` | Metadata-only JSON: `requestId`, opaque `session`, `state`, optional generic `error` code. |
+| `session status sessionID` | Metadata-only JSON: opaque `session`, `processAlive`, `externalPrivate: true`, `inputAvailable`. |
+| `cancel request requestID` | Cancellation result; revokes this session's external writer and cancels its remaining queued writes. |
+| `release session sessionID` | Revokes the external writer; leaves the terminal available to the human. |
 
-States: `queued`, `awaiting_permission`, `delivering`, `grace`,
-`awaiting_acceptance`, `awaiting_approval`, then `delivered`, `denied`, `cancelled`
-or `failed`. A non-newline write in Co-pilot remains a proposal; inspect result
-`detail.proposed` / `detail.inputDelivered` for that distinction.
+Write states are `queued`, `delivering`, `delivered`, `cancelled` and `failed`.
+`delivered` means the PTY accepted the input, not that a command or login succeeded.
+There are no approval, proposal or Grace states, and no `detail.proposed`, raw
+error details, input text, intent, paths or terminal output in status results.
 
-`delivered` means Conn processed the requested input, not that the shell command
-succeeded or SSH completed authentication. PTY/UI readiness is not prompt or login
-readiness. Do not blindly queue follow-up commands after an SSH connection command.
-Scripts cannot read terminal output through this first adapter.
+A request contains one UTF-8 line, at most 16 KiB, without NUL or embedded control
+characters. Send Return with the `newline` option. An explicit request ID may be
+repeated with the same payload/options during the same app run; a conflicting
+reuse is rejected. Deduplication uses an in-memory per-run keyed digest, not a
+saved copy of the input or a persisted password hash. Never retry automatically
+after a crash or an unknown timeout outcome.
 
-Text is limited to one line (16 KiB), without embedded control characters. Use the
-newline option to send Return. Repeating an explicit request ID with the same
-payload returns the existing request; another payload is rejected. This applies
-only within one app instance. Never automatically retry after a crash or an
-unknown timeout outcome.
+Limits: 16 waiting writes per session, 32 live owner bindings, 256 request IDs per
+app run and a 120-second write deadline including queue time. Completed polling
+entries contain metadata only. Payload buffers are released on delivery, failure,
+cancellation or timeout. Bytes already sent to the child cannot be recalled.
 
-Limits: 16 waiting writes per session, 32 active automation sessions, 256 retained
-requests per app run, and a 120-second request deadline including queue time.
-Request IDs remain retained for deduplication; restart Conn after reaching that
-limit. Cancellation cannot undo bytes already delivered.
+## Private sessions and human takeover
 
-## Shared architecture and safety
+External sessions are private from creation. They are absent from MCP/public IPC
+tab lists, and explicit public access cannot reveal their screen, input, events,
+status details, titles or cwd. Only the owning native window receives their output.
+**Sharing a private external session with an AI agent is not implemented.** A
+normal manually opened Conn session retains its existing collaboration behavior.
 
-```text
-PAM → AppleScript → native Cocoa command adapter
-                             ↓
-             shared automation service (crates/frontend)
-         caller/session ownership · bounded queue · request state
-                             ↓
-              existing Hub / Engine / Session
-       control gate · policy · takeover · the same UI/timeline
-```
+Human input, explicit takeover, cancellation, release, disabling automation,
+removing the permitted profile or closing the session revokes the external writer
+and cancels queued writes. Human input proceeds in the private terminal. Later
+requests cannot reacquire the writer or target an existing human tab; the caller
+must create a new session. Launcher exit does not kill a successfully started
+terminal, but an unverifiable caller cannot deliver pending writes.
+Released session handles become unavailable; status cannot be used to reacquire
+input access.
 
-The `.sdef` dictionary and Objective-C command class are bundled on macOS. Commands
-suspend and resume Apple Event replies while work runs off the Cocoa main loop.
-The Rust FFI exposes only the narrow automation service, never trusted UI dispatch.
-The sender is derived from the Apple Event PID and process start time. It cannot
-select an existing human tab by passing its ID.
+xterm terminal-protocol replies (for example cursor/status responses) are not
+human input. They must not revoke the external writer or create activity records.
 
-Runtime startup is idempotent and shared with the UI. External creation before
-frontend startup is adopted by the frontend's startup snapshot. Pre-attachment
-terminal output is buffered with a size limit. If normal UI startup has already
-created a default tab, an external create opens another tab. It does not replace
-the user's existing tab or retarget subsequent writes when focus changes.
+## Recording and limits
 
-External automation uses a dedicated connection through existing agent permission
-checks; it is never submitted as human keystrokes. Its name and timeline badge
-identify AppleScript/external automation. Human takeover, policy denial, scope
-revocation, session close or request cancellation stops remaining queued work.
-After losing control it cannot silently reacquire through a later queued write.
-Settings changes revoke existing automation connections. No external approval or
-policy-editing command is exposed. Existing MCP behavior is preserved.
+Conn does not record activity for private external sessions: no private-session
+or AppleScript audit events, timeline rows, recent-activity settings, raw input
+history, payload-derived titles or persisted request results. This applies to
+human typing in that external-origin session for its entire lifetime. Settings
+store permissions only, and restart restores no owner handles, queued payloads,
+processes or requests. Programmatic clipboard writes from private terminal output
+are disabled; explicit human copy remains possible.
 
-Conn retains its [same-user trust boundary](security.md); this is not OS isolation.
-Ordinary commands and intents can be stored in audit/timeline records. **Credential
-text injection and automatic secret redaction are not supported.** Use SSH keys,
-SSH agents or PAM-managed authentication without inline secrets. A request marked
-sensitive is rejected by the shared API before queueing; the scripting dictionary
-does not offer a password input command. Shell history and echoed output are
-separate storage surfaces.
+This is not a zero-retention or OS-isolation claim. The terminal view and scrollback
+exist in memory. The child, shell history/tracing, argv, environment, OS buffers,
+clipboard, crash dumps and external-application logs are separate surfaces. There
+is no password detector, authentication-success detector or credential vault.
+Same-user tools may use their own shells and files outside Conn's API gates.
 
-## Verification
+This checkout also disables raw human-input command history in ordinary sessions. Existing
+audit files, saved timeline records and backups are not automatically erased.
+Review historical data separately before sharing it. See the
+[trust model](security.md#private-external-sessions-unreleased).
 
-Shared tests exercise real disposable PTYs: disabled/profile scope, cold startup,
-control approval, delivery, duplicate IDs, foreign callers, cancellation, human
-takeover during grace, and rejection of multiline/control/sensitive input.
+## Validation and release gates
 
-macOS CI builds an ad-hoc debug app and checks its Info.plist, dictionary and
-example compilation. This does **not** establish Apple Event delivery or macOS
-consent behavior. Before release, test the signed/notarized Apple Silicon app:
+### Quick check on an Apple Silicon Mac
 
-- Cold and warm launch from one osascript invocation.
-- First-time macOS consent accepted and denied.
-- Conn control approval, policy approval/denial, Co-pilot acceptance and grace.
-- Unicode, quotation marks, newline false, request status and release.
-- Concurrent callers, tab switching, human takeover, close, timeout and cancel.
-- Actual PAM template, sender lifetime and SSH-managed authentication.
+Use a **new build containing this unreleased change**, not the v0.5.1 download.
+Use synthetic markers only and confirm which Conn app your script targets.
 
-References: [Cocoa scripting](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/ScriptableCocoaApplications/SApps_intro/SAppsIntro.html)
-(archived conceptual guide), [deferred command replies](https://developer.apple.com/documentation/foundation/nsscriptcommand),
-[Tauri macOS bundles](https://v2.tauri.app/distribute/macos-application-bundle/),
-[iTerm2 terminology](https://iterm2.com/documentation-scripting.html).
+1. Open **Settings → Automation**, keep a local default profile selected and
+   explicitly re-enable the migrated permission. The pane should show permissions,
+   not recent request history.
+2. Run this in Script Editor. Expect a new private window, both markers, and no
+   Conn approval/Grace card. Press Enter: the child exits and the finished view
+   remains, without starting another shell. Repeat with Conn already running.
+
+   ```applescript
+   tell application "Conn"
+       create window with default profile command "/bin/sh -c 'echo CONN_PRIVATE_START; echo Press-Enter-to-finish; read answer'"
+   end tell
+   ```
+
+3. Run the [complete input example](../examples/applescript/external-connect.applescript)
+   in **one** process with `echo CONN_PRIVATE_WRITE` as its argument. In its success
+   branch, put `set resultJSON to request status requestID` before `release session`
+   and return `resultJSON`. It must contain metadata only, never the marker or command.
+   Check the marker on the terminal screen; `delivered` alone is not command success.
+4. For takeover, run a copy of that script with `delay 10` and then
+   `write text "echo CONN_MUST_NOT_RUN" to session sessionID` inserted immediately
+   **before** `release session sessionID`. During the delay, type Ctrl-C in the
+   private terminal. The late write must be rejected and its marker must not appear.
+   Query `session status sessionID` before that late write: expect
+   `inputAvailable: false` or a generic unavailable error if the revoked handle has
+   already been removed. Catch that expected error to continue to the write check.
+   Terminal-protocol replies by themselves must not trigger this takeover.
+5. Confirm there are no new private command/control rows in the timeline and no
+   markers in Conn-managed saved activity. From a separate existing MCP connection,
+   `terminal_list_tabs` must omit the private session and snapshots must not expose
+   its marker. Keep ordinary sessions open to check they still collaborate normally.
+
+These are manual acceptance checks, not a claim that they passed on your Mac.
+
+The intended checks cover exact argv and Unicode/quotes, launch before renderer
+readiness, child exit without fallback, caller identity, request bounds,
+revocation during queued input and private data exclusion from every Conn-managed
+recording/public-IPC route. Actual agent policy tests must continue to pass.
+
+macOS CI checks bundle metadata, the scripting dictionary and example compilation.
+Compiling a script does not execute Apple Events or establish consent behavior.
+Before release, test the signed Apple Silicon build with a disposable launcher:
+
+- Cold and warm launch; first macOS consent accepted and denied.
+- Direct startup program, explicit shell syntax, Unicode and quote boundaries.
+- Private output visible to the human and unavailable to MCP/public IPC.
+- Human takeover, cancel, disable, profile removal, close and two concurrent callers.
+- Metadata-only status, ignored `intent`, no private activity recording, and upgrade re-enable.
+- The external application's actual permitted template, with synthetic input.
+
+Later AI sharing remains separate work. Ordinary local Bash/Zsh sessions now have
+[shell command integration](shell-integration.md). External private sessions never
+install it and remain unrecorded, including after human takeover.
+
+## Linux D-Bus adapter (unreleased)
+
+The native Linux app exports `dev.eggp.Conn` on the user session bus, object
+`/dev/eggp/Conn/Automation`, interface `dev.eggp.Conn.Automation1`.
+`Call(operation: string, payload: string) → string` takes the same JSON parameters
+and returns JSON. Supported operations are `window.create`, `session.create`,
+`session.write`, `session.status`, `session.release`, `request.status`, and
+`request.cancel`. Both create operations open a dedicated native window on Linux.
+
+Enable external automation and select profiles in Settings → Automation, then add
+absolute caller executable paths under **Allowed Linux executables**. An empty
+list denies all callers. Keep one D-Bus connection open for the lifetime of your
+session; separate `gdbus` commands have different owners and cannot reuse handles.
+Start Conn normally before connecting; automatic D-Bus service activation is not
+installed by this change. A launcher may start Conn and wait for its bus name.
+
+The adapter obtains UID/PID from the bus and checks `/proc` executable and process
+start time. It never accepts a caller identity from JSON. Session ownership includes
+the unique bus connection; disconnect, process exit and executable change invalidate
+its authority. Profile/permission changes use the shared service's revocation path.
+Requests are bounded to 64 KiB and eight concurrent operations; the shared service
+also bounds sessions, queued input and payload size.
+
+Allowing Python, a shell or another interpreter authorizes scripts run through that
+executable, not a particular script. Path authorization is not code signing or a
+sandbox against other processes under the same user. D-Bus and the OS transport
+may temporarily hold payloads; do not treat this as protection against session-bus
+monitoring by privileged tools. No automation payload is intentionally persisted
+by Conn. Authorization is off by default and is separate from MCP permissions.
+
+For an isolated native acceptance run, the desktop adapter accepts
+`CONN_CONFIG_DIR` for its config/data directory and `CONN_SOCKET` for its agent socket.
+Use a private `dbus-run-session` and virtual display, never the user's live settings.
+The external `terminal-auth-fixtures` project drives the real native windows and
+common automation service; it does not bypass renderer readiness or authorization.

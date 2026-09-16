@@ -26,7 +26,19 @@ use crate::session::{EventSink, Session, SessionConfig, SharedSession};
 mod child_killer;
 use child_killer::ChildKiller;
 
+/// Move-owned startup specification for trusted native callers. Never serialized.
+#[derive(Default)]
+pub enum LaunchSpec {
+    #[default]
+    ProfileDefault,
+    Program { executable: String, argv: Vec<String> },
+}
+
 pub struct EngineConfig {
+    /// Immutable private origin, established before opening any log or spawning.
+    pub external_private: bool,
+    /// Direct process launch; an override is restricted to private local sessions.
+    pub launch: LaunchSpec,
     /// Resolved execution profile. None preserves the embedders' default shell.
     pub profile: Option<crate::backend::Profile>,
     /// Shell to spawn. Default: `$SHELL`, else `/bin/zsh`.
@@ -51,6 +63,8 @@ pub struct EngineConfig {
 impl Default for EngineConfig {
     fn default() -> Self {
         Self {
+            external_private: false,
+            launch: LaunchSpec::ProfileDefault,
             profile: None,
             shell: None,
             command: vec![],
@@ -92,9 +106,18 @@ pub fn default_shell() -> String {
 
 impl Engine {
     pub fn spawn(cfg: EngineConfig) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let audit = match cfg.audit {
-            Some(a) => a,
-            None => Audit::open(&crate::paths::audit_path())?,
+        let private = cfg.external_private;
+        Self::spawn_inner(cfg).map_err(|e| if private { "External session could not start".into() } else { e })
+    }
+
+    fn spawn_inner(cfg: EngineConfig) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let audit = if cfg.external_private {
+            Audit::null()
+        } else {
+            match cfg.audit {
+                Some(a) => a,
+                None => Audit::open(&crate::paths::audit_path())?,
+            }
         };
         let policy = match cfg.policy {
             Some(p) => p,
@@ -113,6 +136,22 @@ impl Engine {
 
         let profile = cfg.profile.clone().unwrap_or_else(|| crate::backend::Profile::local("local-default".into(), cfg.shell.clone().unwrap_or_else(default_shell)));
         let mut plan = profile.prepare()?;
+        if cfg.external_private && !cfg.command.is_empty() {
+            return Err("External sessions require a direct launch specification".into());
+        }
+        if let LaunchSpec::Program { executable, argv } = cfg.launch {
+            if !cfg.external_private || profile.backend != crate::backend::BackendKind::Local {
+                return Err("Direct startup requires a private local session".into());
+            }
+            if executable.is_empty() || executable.chars().any(char::is_control)
+                || argv.iter().any(|arg| arg.chars().any(char::is_control))
+                || executable.len() + argv.iter().map(String::len).sum::<usize>() > 16384
+            {
+                return Err("Invalid startup program".into());
+            }
+            plan.program = executable;
+            plan.args = argv;
+        }
         if !cfg.command.is_empty() {
             if profile.backend != crate::backend::BackendKind::Local { return Err("Startup commands with -- are supported for local profiles only".into()); }
             use crate::backend::{ShellKind,quote_posix};
@@ -132,6 +171,10 @@ impl Engine {
                 ShellKind::Custom => return Err("Startup commands require a known shell dialect".into()),
             };
         }
+        #[cfg(unix)]
+        let integration = if !cfg.external_private && cfg.command.is_empty() && profile.backend == crate::backend::BackendKind::Local {
+            crate::shell_integration::Integration::prepare(&mut plan, &cfg.env).ok().flatten()
+        } else { None };
         let shell = profile.program.clone();
         let mut cmd = CommandBuilder::new(&plan.program);
         cmd.args(&plan.args);
@@ -148,16 +191,16 @@ impl Engine {
         let pid = child.process_id();
         let killer = parking_lot::Mutex::new(ChildKiller::new(child.as_ref())?);
 
-        audit.record(
+        if !cfg.external_private { audit.record(
             "system",
             "session_start",
             json!({ "pid": pid, "shell": shell, "profileId": profile.id, "backend": profile.backend, "command": cfg.command, "rows": rows, "cols": cols }),
-        );
+        ); }
         if !cfg.command.is_empty() {
             audit.record("human", "exec", json!({ "cmd": cfg.command.join(" "), "via": "argv" }));
         }
 
-        let session: SharedSession = Arc::new(parking_lot::Mutex::new(Session::new(SessionConfig {
+        let session_cfg = SessionConfig {
             rows,
             cols,
             audit,
@@ -168,9 +211,18 @@ impl Engine {
             pacing: cfg.pacing,
             render_prompt: cfg.render_prompt,
             shell_pid: pid,
-        })));
+        };
+        let session: SharedSession = Arc::new(parking_lot::Mutex::new(if cfg.external_private {
+            Session::new_external_private(session_cfg)
+        } else {
+            Session::new(session_cfg)
+        }));
 
         session.lock().set_execution_profile(profile);
+        #[cfg(unix)]
+        let integration = Arc::new(parking_lot::Mutex::new(integration));
+        #[cfg(unix)]
+        if integration.lock().is_some() { session.lock().shell_integration_starting(); }
 
         let exited = Arc::new(AtomicBool::new(false));
 
@@ -183,6 +235,7 @@ impl Engine {
                 let mut buf = [0u8; 16384];
                 loop {
                     match pty_reader.read(&mut buf) {
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(1)),
                         Ok(0) | Err(_) => break,
                         Ok(n) => session.lock().pty_output(&buf[..n]),
                     }
@@ -195,10 +248,14 @@ impl Engine {
         {
             let session = session.clone();
             let exited = exited.clone();
+            #[cfg(unix)]
+            let integration = integration.clone();
             let tick = cfg.tick.max(Duration::from_millis(5));
             std::thread::Builder::new().name("ss-tick".into()).spawn(move || {
                 while !exited.load(Ordering::SeqCst) {
                     std::thread::sleep(tick);
+                    #[cfg(unix)]
+                    if let Some(hook) = integration.lock().as_mut() { hook.drain(&mut session.lock(), pid); }
                     session.lock().tick(Instant::now());
                 }
             })?;
@@ -214,6 +271,11 @@ impl Engine {
                 let deadline = Instant::now() + Duration::from_millis(300);
                 while !pty_done.load(Ordering::SeqCst) && Instant::now() < deadline {
                     std::thread::sleep(Duration::from_millis(10));
+                }
+                #[cfg(unix)]
+                { let mut integration = integration.lock();
+                  if let Some(hook) = integration.as_mut() { hook.drain(&mut session.lock(), pid); }
+                  *integration = None;
                 }
                 session.lock().process_exited(code);
                 exited.store(true, Ordering::SeqCst);
@@ -253,6 +315,11 @@ impl Engine {
     /// Human keyboard input. Revokes any agent lease first.
     pub fn write_input(&self, bytes: &[u8]) {
         self.session.lock().human_input(bytes);
+    }
+
+    /// Deliver one bounded native external-input chunk. No command tracking.
+    pub fn write_external(&self, bytes: &[u8]) -> Result<(), crate::session::SessionError> {
+        self.session.lock().write_external(bytes)
     }
 
     pub fn resize(&self, rows: u16, cols: u16) {

@@ -1,0 +1,280 @@
+#![cfg(unix)]
+mod common;
+use common::{Buf, SharedBuf};
+use conn_core::{
+    audit::{Audit, Event},
+    backend::Profile,
+    policy::{Policy, PolicyStore},
+    Engine, EngineConfig,
+};
+use std::{
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
+
+struct Shell {
+    engine: Engine,
+    events: Arc<Mutex<Vec<Event>>>,
+    output: Buf,
+    _dir: tempfile::TempDir,
+}
+impl Shell {
+    fn new(shell: &str, private: bool) -> Self {
+        Self::with_prompt(shell, private, "")
+    }
+    fn with_prompt(shell: &str, private: bool, prompt: &str) -> Self {
+        let dir = tempfile::tempdir().unwrap();
+        let (audit, events) = Audit::memory();
+        let output = Buf::default();
+        let mut profile = Profile::local("test".into(), shell.into());
+        profile.args = if shell.ends_with("bash") {
+            vec!["--norc".into(), "-i".into()]
+        } else {
+            vec!["-i".into()]
+        };
+        profile.env.insert("PS1".into(), "conn-test$ ".into());
+        profile.env.insert("HISTFILE".into(), "/dev/null".into());
+        profile.env.insert("PROMPT_COMMAND".into(), prompt.into());
+        profile.env.insert("HISTCONTROL".into(), "".into());
+        let inputrc = dir.path().join("inputrc");
+        std::fs::write(
+            &inputrc,
+            "set editing-mode emacs\nset input-meta on\nset output-meta on\nset convert-meta off\n",
+        )
+        .unwrap();
+        profile
+            .env
+            .insert("INPUTRC".into(), inputrc.to_string_lossy().into());
+        profile
+            .env
+            .insert("ZDOTDIR".into(), dir.path().to_string_lossy().into());
+        let engine = Engine::spawn(EngineConfig {
+            external_private: private,
+            profile: Some(profile),
+            cwd: Some(dir.path().into()),
+            audit: Some(audit),
+            policy: Some(PolicyStore::from_policy(
+                Policy::parse("default: allow\nrequire_intent: false\n").unwrap(),
+            )),
+            output: Some(Box::new(SharedBuf(output.clone()))),
+            ..Default::default()
+        })
+        .unwrap();
+        let me = Self {
+            engine,
+            events,
+            output,
+            _dir: dir,
+        };
+        if !private {
+            me.until(|| me.engine.session().lock().status().shell_integration.state != "starting");
+        }
+        me
+    }
+    fn until(&self, f: impl Fn() -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(8);
+        while !f() {
+            assert!(
+                Instant::now() < deadline,
+                "timeout: {:?}\n{}\n{:?}",
+                self.engine.session().lock().status().shell_integration,
+                String::from_utf8_lossy(&self.output.lock().unwrap()),
+                self.events.lock().unwrap()
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+    fn send(&self, command: &str) {
+        self.engine.write_input(format!("{command}\r").as_bytes());
+    }
+    fn starts(&self) -> Vec<Event> {
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|e| e.action == "shell_command_started")
+            .cloned()
+            .collect()
+    }
+    fn ends(&self) -> Vec<Event> {
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|e| e.action == "shell_command_finished")
+            .cloned()
+            .collect()
+    }
+    fn run(&self, command: &str, count: usize) {
+        self.send(command);
+        self.until(|| self.ends().len() == count);
+    }
+}
+
+fn lifecycle(shell: &str) {
+    let h = Shell::new(shell, false);
+    assert_eq!(
+        h.engine.session().lock().status().shell_integration.state,
+        "active"
+    );
+    h.run("printf '%s\\n' '한글 🚀'; false", 1);
+    let starts = h.starts();
+    assert_eq!(starts.len(), 1);
+    assert_eq!(starts[0].actor, "human");
+    assert_eq!(starts[0].fields["cmd"], "printf '%s\\n' '한글 🚀'; false");
+    assert_eq!(
+        starts[0].fields["cwd"],
+        h._dir
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .as_ref()
+    );
+    assert_eq!(
+        starts[0].fields["commandId"],
+        h.ends()[0].fields["commandId"]
+    );
+    assert_eq!(h.ends()[0].fields["exitCode"], 1);
+    h.run("printf '%s\\n' '한글 🚀'; false", 2);
+    assert_ne!(
+        h.starts()[0].fields["commandId"],
+        h.starts()[1].fields["commandId"]
+    );
+    // read runs inside the shell. Its answer must not become another command.
+    h.send("printf 'AUTH_READY'; read -r -s answer; printf '\\nAUTH_DONE\\n'");
+    h.until(|| {
+        String::from_utf8_lossy(&h.output.lock().unwrap()).contains("AUTH_READY")
+            && h.starts().len() == 3
+    });
+    h.send("SYNTHETIC_PASSWORD");
+    h.until(|| h.ends().len() == 3);
+    assert!(!format!("{:?}", h.events.lock().unwrap()).contains("SYNTHETIC_PASSWORD"));
+    // A nested shell / REPL is one outer command, not its inner keystrokes.
+    h.send("/bin/sh");
+    h.until(|| h.starts().len() == 4);
+    h.send("echo SYNTHETIC_INNER_INPUT");
+    h.send("exit");
+    h.until(|| h.ends().len() == 4);
+    assert_eq!(h.starts().len(), 4);
+    assert!(!format!("{:?}", h.events.lock().unwrap()).contains("SYNTHETIC_INNER_INPUT"));
+    // A forced shell exit has no completion hook; never invent exit success.
+    h.send("exec /bin/sh -c 'exit 0'");
+    h.until(|| h.engine.has_exited());
+    assert_eq!(h.starts().len(), 5);
+    assert!(h.ends().last().unwrap().fields["exitCode"].is_null());
+}
+
+#[test]
+fn existing_prompt_command_and_exit_status_are_preserved() {
+    let h = Shell::with_prompt(
+        "/bin/bash",
+        false,
+        "printf 'USER_PROMPT_STATUS=%s\\n' \"$?\"",
+    );
+    h.run("false", 1);
+    assert_eq!(h.ends()[0].fields["exitCode"], 1);
+    h.until(|| String::from_utf8_lossy(&h.output.lock().unwrap()).contains("USER_PROMPT_STATUS=1"));
+    h.run("true", 2);
+    assert_eq!(h.ends()[1].fields["exitCode"], 0);
+}
+
+#[test]
+fn existing_debug_trap_is_not_replaced() {
+    let h = Shell::with_prompt("/bin/bash", false, "trap ':' DEBUG");
+    assert_eq!(
+        h.engine
+            .session()
+            .lock()
+            .status()
+            .shell_integration
+            .reason
+            .as_deref(),
+        Some("hook_conflict")
+    );
+    h.send("echo NO_RECORDING_WITH_CONFLICT");
+    h.until(|| {
+        String::from_utf8_lossy(&h.output.lock().unwrap()).contains("NO_RECORDING_WITH_CONFLICT")
+    });
+    assert!(h.starts().is_empty());
+}
+
+#[test]
+fn ignored_history_is_not_reconstructed_from_typed_input() {
+    let h = Shell::new("/bin/bash", false);
+    h.run("HISTCONTROL=ignorespace", 1);
+    h.send(" echo INTENTIONALLY_OMITTED");
+    h.until(|| {
+        String::from_utf8_lossy(&h.output.lock().unwrap()).contains("INTENTIONALLY_OMITTED")
+    });
+    h.run("true", 2);
+    assert!(!format!("{:?}", h.starts()).contains("INTENTIONALLY_OMITTED"));
+}
+
+#[test]
+fn agent_submission_links_to_shell_execution_without_human_attribution() {
+    use conn_core::session::ConnKind;
+    let h = Shell::new("/bin/bash", false);
+    {
+        let session = h.engine.session();
+        let mut s = session.lock();
+        s.register_conn(7, ConnKind::Agent, "test-agent", Box::new(|_| {}));
+        s.agent_request_control(7).unwrap();
+        s.agent_type(7, "pwd").unwrap();
+        s.agent_send_key(7, "ENTER").unwrap();
+    }
+    h.until(|| h.ends().len() == 1);
+    let starts = h.starts();
+    assert_eq!(starts.len(), 1);
+    assert_eq!(starts[0].actor, "test-agent");
+    let records = h.events.lock().unwrap();
+    let submitted = records.iter().find(|e| e.action == "exec").unwrap();
+    assert!(!submitted.fields["submissionId"].is_null());
+    assert_eq!(
+        submitted.fields["submissionId"],
+        starts[0].fields["submissionId"]
+    );
+}
+
+#[test]
+fn bash_lifecycle_and_authentication_input() {
+    lifecycle("/bin/bash");
+}
+#[test]
+fn zsh_lifecycle_and_authentication_input() {
+    if let Ok(path) = std::env::var("CONN_TEST_ZSH") {
+        lifecycle(&path);
+    } else if let Some(path) = conn_core::backend::executable("zsh") {
+        lifecycle(path.to_str().unwrap());
+    } else {
+        eprintln!("zsh is unavailable; set CONN_TEST_ZSH to exercise it");
+    }
+}
+#[test]
+fn private_shell_never_installs_integration() {
+    let h = Shell::new("/bin/bash", true);
+    h.send("echo PRIVATE_COMMAND");
+    h.until(|| String::from_utf8_lossy(&h.output.lock().unwrap()).contains("PRIVATE_COMMAND"));
+    assert_eq!(
+        h.engine
+            .session()
+            .lock()
+            .status()
+            .shell_integration
+            .reason
+            .as_deref(),
+        Some("private_session")
+    );
+    assert!(h.events.lock().unwrap().is_empty());
+}
+
+#[test]
+fn prompt_array_tail_does_not_disarm_human_command_recording() {
+    let h = Shell::with_prompt("/bin/bash", false,
+        r#"if [[ -z ${CONN_ARRAY_TEST-} ]]; then CONN_ARRAY_TEST=1; PROMPT_COMMAND[1]="printf ARRAY_HOOK_OK"; fi"#);
+    h.run("printf HUMAN_ARRAY_COMMAND", 1);
+    assert_eq!(h.starts()[0].fields["cmd"], "printf HUMAN_ARRAY_COMMAND");
+    h.run("false", 2);
+    assert_eq!(h.ends()[1].fields["exitCode"], 1);
+    h.until(|| String::from_utf8_lossy(&h.output.lock().unwrap()).contains("ARRAY_HOOK_OK"));
+}

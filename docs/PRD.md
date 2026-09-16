@@ -169,5 +169,5 @@ A rendering engine of our own, multiplexing, session persistence, scrollback man
 ## 9. Open questions
 
 - Q1 (v0.1) Whether the built-in shell tools of the Copilot/Claude harnesses can be disabled — needs checking per harness. Claude Code can be limited to MCP tools with `--allowedTools`.
-- Q4 Whether a Tauri app is acceptable instead of Terminal.app in access-controlled (PAM) environments. The session-lifetime principle (4) is unchanged, but product sign-off is needed.
+- Q4 Whether a Tauri app meets the requirements of external terminal integrations. The session-lifetime principle (4) is unchanged, but product sign-off is needed.
 - Q5 Human input mixed into the line during a grace window: today it only cancels and leaves the line as is. Whether an automatic Ctrl-U is better is to be judged from real use.

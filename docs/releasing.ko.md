@@ -6,7 +6,7 @@
 
 `eggplantiny/conn`의 통합 브랜치는 `main`입니다. Actions 토큰은 기본 읽기 전용으로 유지하고 비공개 보안 제보를 켜며 `main` 변경에 **Required checks**와 대화 해결을 요구합니다. [버전 관리되는 규칙](../.github/main-ruleset.json)은 PR·CI 요건과 소유자의 명시적인 복구 우회 권한을 제공합니다. 기존 규칙이 있으면 중복 생성하지 말고 수정하세요.
 
-CI는 버전 일치, 공개 파일 검사, 문서 상대 링크, 릴리스 도구, 프런트엔드 테스트와 Svelte 빌드를 확인합니다. Linux·macOS Apple Silicon·Windows에서 Rust 테스트와 네이티브 데스크톱 디버그 빌드를 실행합니다. 릴리스 패키징도 이 세 대상을 사용하며 v0.5.1 이후 Intel Mac 배포는 잠시 중단합니다. macOS 디버그 빌드는 PR CI에서 ad-hoc 서명한 앱으로 묶어 `plutil`·`sdef`로 확인하고, `osacompile`로 해당 앱의 사전을 사용해 PAM 예제를 컴파일합니다. 스크립트는 실행하지 않고 릴리스 자격 증명도 사용하지 않습니다. 이 검사는 설치 프로그램이나 데스크톱 실제 조작 검증을 대신하지 않습니다.
+CI는 버전 일치, 공개 파일 검사, 문서 상대 링크, 릴리스 도구, 프런트엔드 테스트와 Svelte 빌드를 확인합니다. Linux·macOS Apple Silicon·Windows에서 Rust 테스트와 네이티브 데스크톱 디버그 빌드를 실행합니다. 릴리스 패키징도 이 세 대상을 사용하며 v0.6.0 이후 Intel Mac 배포는 잠시 중단합니다. macOS 디버그 빌드는 PR CI에서 ad-hoc 서명한 앱으로 묶어 `plutil`·`sdef`로 확인하고, `osacompile`로 해당 앱의 사전을 사용해 외부 자동화 예제를 컴파일합니다. 스크립트는 실행하지 않고 릴리스 자격 증명도 사용하지 않습니다. 이 검사는 설치 프로그램이나 데스크톱 실제 조작 검증을 대신하지 않습니다.
 
 Actions는 커밋 SHA로 고정합니다. PR에는 서명 secrets를 제공하지 않고 초안 업로드 작업만 `contents: write` 권한을 가집니다. Mac 릴리스 작업은 [macOS 서명 안내](macos-signing.ko.md)의 자격 증명 6개를 사용하며 임시 키체인 암호는 작업 중 생성합니다.
 
@@ -16,7 +16,7 @@ Actions는 커밋 SHA로 고정합니다. PR에는 서명 secrets를 제공하�
 2. 사용자 관점의 [CHANGELOG](../CHANGELOG.md) 항목을 적고 정확한 릴리스 버전으로 확인합니다.
 
    ```sh
-   python3 scripts/release.py check --tag v0.5.1
+   python3 scripts/release.py check --tag v0.6.0
    python3 scripts/check_repo.py
    python3 -m unittest discover -s tests/release -v
    cargo test --workspace --locked
@@ -30,8 +30,8 @@ Actions는 커밋 SHA로 고정합니다. PR에는 서명 secrets를 제공하�
 4. 의도적으로 버전 태그를 생성하고 푸시합니다.
 
    ```sh
-   git tag -a v0.5.1 -m "Conn v0.5.1 preview"
-   git push origin v0.5.1
+   git tag -a v0.6.0 -m "Conn v0.6.0 preview"
+   git push origin v0.6.0
    ```
 
 태그 생성과 공개는 관리자의 릴리스 작업입니다. 공개된 태그를 옮기지 마세요.
@@ -54,10 +54,10 @@ Actions는 커밋 SHA로 고정합니다. PR에는 서명 secrets를 제공하�
 
 1. 각 네이티브 러너에서 같은 버전의 CLI와 데스크톱 패키지를 빌드합니다.
 2. Mac에서는 [서명 안내](macos-signing.ko.md)에 따라 앱, 내장 CLI, 독립 CLI, DMG의 서명·공증을 수행합니다. Apple Silicon의 승인 결과와 최종 파일 해시가 담긴 보고서를 만듭니다.
-3. `release.py package`가 파일명을 정리합니다. `finalize`는 바이너리·설치 파일 7개와 유효한 Apple Silicon 보고서 한 개를 모두 확인한 뒤 `SHA256SUMS`와 영·한 안내를 만듭니다.
-4. 해당 커밋의 CI와 모든 빌드·서명 작업이 통과하면 `draft`가 **9개 자산**을 업로드합니다. 바이너리·설치 파일 7개, 서명 보고서 1개, `SHA256SUMS`입니다. 미공개 프리릴리스를 생성하거나 갱신하며 이미 공개한 릴리스는 수정하지 않습니다.
+3. `release.py package`가 파일명을 정리합니다. `finalize`는 설치 파일·업데이트 파일·서명과 유효한 Apple Silicon 보고서를 모두 확인한 뒤 `SHA256SUMS`와 영·한 안내를 만듭니다.
+4. 해당 커밋의 CI와 모든 빌드·서명 작업이 통과하면 `draft`가 **14개 자산**을 업로드합니다. 바이너리·설치 파일 7개, Mac 업데이트 아카이브, 업데이트 서명 3개, `latest.json`, 서명 보고서, `SHA256SUMS`입니다. 미공개 프리릴리스를 생성하거나 갱신하며 이미 공개한 릴리스는 수정하지 않습니다.
 
-재실행으로 미완성 초안을 보완할 수 있습니다. 자동 공개는 하지 않습니다. Actions 임시 산출물은 7일간 보관하며 업로드한 릴리스 파일은 유지됩니다. CLI 압축 파일에는 라이선스와 설치 안내가 들어갑니다. 이번 프리뷰에는 자동 업데이트가 없습니다.
+재실행으로 미완성 초안을 보완할 수 있습니다. 자동 공개는 하지 않습니다. Actions 임시 산출물은 7일간 보관하며 업로드한 릴리스 파일은 유지됩니다. CLI 압축 파일에는 라이선스와 설치 안내가 들어갑니다. 플랫폼별 서명 업데이트 메타데이터도 같은 릴리스에 게시합니다.
 
 ## 검토와 공개
 
@@ -77,3 +77,12 @@ CI 빌드 통과만으로 모든 설치·조작이 검증되지는 않습니다.
 ## 실패와 복구
 
 빌드·서명 실패 시 릴리스는 미공개 상태로 남습니다. 원인을 고치고 초안 워크플로를 다시 실행하세요. 미공개 태그를 바꾸는 결정은 명시적으로 기록해야 합니다. 공개한 릴리스라면 태그와 바이너리를 보존하고 문제를 기록한 뒤 패치 버전을 배포합니다. 공개 파일을 조용히 교체하지 않습니다.
+
+
+## 앱 내 업데이트 배포
+
+GitHub repository variable `TAURI_SIGNING_PUBLIC_KEY`와 secrets `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`가 필요합니다. 개인키는 암호화하여 소유자 전용 백업으로 보관하고, 암호는 승인된 비밀 관리 도구로 관리합니다. 키를 분실하면 기존 앱이 이후 업데이트를 신뢰할 수 없습니다. 키·암호를 로그나 소스에 남기지 마세요.
+
+공증과 최종 패키징 뒤 Mac 앱 아카이브·AppImage·Windows 설치 파일에 서명을 붙입니다. CI는 실제 파일을 공개키로 검증하고 플랫폼별 `latest.json`을 생성합니다. 앱은 다운로드 서명이 확인된 경우에만 설치를 제공합니다. 공개된 릴리스를 GitHub API로 검색하므로 프리뷰도 별도 서버 없이 지원하며 정식 채널은 프리뷰로 자동 전환되지 않습니다.
+
+v0.6.0 이전에는 한 번 직접 설치해야 합니다. deb는 패키지 관리자/수동 업데이트를 사용합니다. Mac·Windows·AppImage의 실제 설치 상태에서 버전 간 업그레이드, 권한, 재실행, 활성 셸 종료 확인은 빌드 통과와 별도로 검증해야 합니다. 전체 설정은 [영문 배포 절차](releasing.md#updater-signing)를 참고하세요.

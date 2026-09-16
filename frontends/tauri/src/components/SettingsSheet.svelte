@@ -3,26 +3,48 @@
   import AgentConnections from "./AgentConnections.svelte";
   import DiagnosticConnections from "./DiagnosticConnections.svelte";
   import ProfilesPane from "./ProfilesPane.svelte";
-  import { fly } from "svelte/transition";
-  import { st, cur, toast, type Analysis } from "../lib/store.svelte";
+  import { tick } from "svelte";
+  import { fade } from "svelte/transition";
+  import { st, cur, tab, toast, type Analysis } from "../lib/store.svelte";
   import { cmd, changeMode, type Mode } from "../lib/bridge";
   import { THEMES, agentColor } from "../lib/themes";
   import { t, fmtMs, i18n, setLang, LANGS } from "../lib/i18n.svelte";
   let { onclose }: { onclose: () => void } = $props();
   const NAV = ["profiles", "agents", "automation", "policy", "pacing", "appearance", "diagnostics"] as const;
 
+  let profileDirty = $state(false);
+  let pendingAction = $state<(() => void) | null>(null);
+  function guard(action: () => void) { if (profileDirty || policyDirty) pendingAction = action; else action(); }
+  function close() { guard(onclose); }
+  function navigate(id: typeof NAV[number]) { if (id !== st.settingsTab) guard(() => { profileDirty = false; policyDirty = false; st.settingsTab = id; void tick().then(() => navigation?.querySelector<HTMLButtonElement>('[aria-current="page"]')?.focus()); }); }
+  let navigation: HTMLElement;
+  let dialog = $state<HTMLElement>();
+  $effect(() => {
+    if (!dialog?.parentElement) return;
+    const siblings = Array.from(dialog.parentElement.children).filter(el => el !== dialog && !el.classList.contains("scrim"));
+    const previous = siblings.map(el => el.hasAttribute("inert"));
+    siblings.forEach(el => el.setAttribute("inert", ""));
+    return () => siblings.forEach((el, i) => { if (!previous[i]) el.removeAttribute("inert"); });
+  });
+  const categories = $derived(NAV.filter(id => !cur().externalPrivate || !["agents", "policy", "pacing"].includes(id)));
+  $effect(() => { if (!categories.includes(st.settingsTab as typeof NAV[number])) st.settingsTab = categories[0]; });
+  $effect(() => { queueMicrotask(() => navigation?.querySelector<HTMLButtonElement>('[aria-current="page"]')?.focus()); });
   // ---- scope: this tab or all tabs; plus stored defaults for new tabs ----
   let scope = $state<"tab" | "all">("tab");
+  const sharedTabs = $derived(st.order.filter(id => tab(id)?.statusReady && !tab(id)?.externalPrivate));
+  const privateSection = $derived(cur().externalPrivate && ["agents", "policy", "pacing"].includes(st.settingsTab));
   async function apply(name: string, args: Record<string, unknown>) {
+    if (cur().externalPrivate) return;
     if (name === "set_mode") {
-      for (const id of scope === "all" ? st.order : [st.active]) await changeMode(args.mode as Mode, id);
+      for (const id of scope === "all" ? sharedTabs : [st.active]) await changeMode(args.mode as Mode, id);
       return;
     }
-    if (scope === "all") { await Promise.all(st.order.map((id) => cmd(name, { ...args, session: id }))); }
+    if (scope === "all") { await Promise.all(sharedTabs.map((id) => cmd(name, { ...args, session: id }))); }
     else await cmd(name, args);
   }
   async function saveDefaults() {
     const c = cur();
+    if (c.externalPrivate) return;
     await cmd("set_defaults", { defaults: { mode: c.mode, gate: c.gate, pacing: c.pacing, mask: c.mask } });
     toast(t("s.defaults.saved"), "ok");
   }
@@ -50,7 +72,7 @@
   }
   type Live = { conn: number; agentId: string; affordances: string[] };
   let live = $state<Live[]>([]);
-  async function poll() { if (st.settingsTab !== "agents") return; try { live = await cmd<Live[]>("agents"); } catch { live = []; } }
+  async function poll() { if (st.settingsTab !== "agents" || cur().externalPrivate) { live = []; return; } try { live = await cmd<Live[]>("agents"); } catch { live = []; } }
   $effect(() => { void st.active; void st.settingsTab; poll(); const i = setInterval(poll, 2000); return () => clearInterval(i); });
 
   // ---- policy ----
@@ -71,10 +93,10 @@
     try { await cmd("policy_write", { text: policyText }); policyDirty = false; toast(t("s.policy.saved"), "ok"); setTimeout(loadPolicy, 300); }
     catch (e) { toast(t("s.policy.save_failed", { err: String(e) }), "danger"); }
   }
-  $effect(() => { if (st.settingsTab === "policy" && !rules) loadPolicy(); });
+  $effect(() => { if (!cur().externalPrivate && st.settingsTab === "policy" && !rules) loadPolicy(); });
   $effect(() => {
     const c = testCmd;
-    if (!c.trim()) { verdict = null; return; }
+    if (cur().externalPrivate || !c.trim()) { verdict = null; return; }
     const h = setTimeout(async () => { verdict = await cmd("policy_test", { cmd: c }); }, 120);
     return () => clearTimeout(h);
   });
@@ -135,7 +157,7 @@
     } catch (e) { setupError = t("s.connect.failed", { error: String(e) }); }
     finally { setupBusy = false; }
   }
-  $effect(() => { if (st.settingsTab === "agents") loadSetup(); });
+  $effect(() => { if (!cur().externalPrivate && st.settingsTab === "agents") loadSetup(); });
 
   // ---- diagnostics ----
   let diag = $state<any>(null);
@@ -148,33 +170,40 @@
     return () => clearInterval(timer);
   });
 
-  function key(e: KeyboardEvent) { if (e.key === "Escape") onclose(); }
+  function key(e: KeyboardEvent) {
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); if (pendingAction) pendingAction = null; else close(); }
+    if (e.key === "Tab") {
+      const controls = Array.from(dialog!.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]')).filter(el => { const closed = el.closest("details:not([open])"); return el.getClientRects().length > 0 && (!closed || el === closed.querySelector(":scope > summary")); });
+      const first = controls[0], last = controls[controls.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+    }
+  }
 </script>
 
-<aside class="sheet" transition:fly={{ x: 40, duration: 220 }} onkeydown={key} tabindex="-1">
+<div class="scrim" in:fade={{ duration: 120 }} onclick={close} role="presentation"></div>
+<aside bind:this={dialog} class="sheet palette-surface" role="dialog" aria-modal="true" aria-label={t("s.title")} onkeydown={key} tabindex="-1">
   <header>
     <span class="title">{t("s.title")}</span>
-    {#if st.settingsTab !== "profiles" && st.settingsTab !== "automation"}<span class="scope">
-      <button class:on={scope === "tab"} onclick={() => (scope = "tab")}><span class="dot" style:background={cur().controller.type === "agent" ? agentColor(cur().controller.agentId) : "var(--muted)"}></span>{cur().title}</button>
-      <button class:on={scope === "all"} onclick={() => (scope = "all")}>{t("s.scope.all")} · {st.order.length}</button>
-    </span>{/if}
-    <button class="btn ghost" onclick={onclose}>{t("close")} <kbd>esc</kbd></button>
+    <button class="btn ghost" onclick={close}>{t("close")} <kbd>esc</kbd></button>
   </header>
+  {#if pendingAction}<div class="discard" role="alert"><span>{t("s.discardQuestion")}</span><button class="btn ghost" onclick={() => pendingAction = null}>{t("cancel")}</button><button class="btn" onclick={async () => { const action = pendingAction; if (policyDirty) await loadPolicy(); pendingAction = null; profileDirty = false; policyDirty = false; action?.(); }}>{t("s.discard")}</button></div>{/if}
   <div class="body">
-    <nav>
-      {#each NAV as id}
-        <button class:on={st.settingsTab === id} onclick={() => (st.settingsTab = id)}>{t(`s.nav.${id}`)}</button>
-      {/each}
-      <span class="spacer"></span>
-      {#if st.settingsTab !== "profiles" && st.settingsTab !== "automation"}<p class="muted small">{t("s.scope.hint")}</p>
-      <button class="link" onclick={saveDefaults}>{t("s.defaults.use")}</button>{/if}
+    <nav bind:this={navigation} class="category-list" onkeydown={(e) => { if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return; const buttons = Array.from(e.currentTarget.querySelectorAll("button")); const index = buttons.indexOf(document.activeElement as HTMLButtonElement); e.preventDefault(); const next = e.key === "Home" ? 0 : e.key === "End" ? buttons.length - 1 : (index + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length; buttons[next]?.focus(); }} aria-label={t("s.title")}>
+      {#each categories as id}<button class:on={st.settingsTab === id} aria-current={st.settingsTab === id ? "page" : undefined} onclick={() => navigate(id)}>{t(`s.nav.${id}`)}</button>{/each}
     </nav>
-    <section>
-      {#if st.settingsTab === "profiles"}
-        <ProfilesPane />
+    {#key st.settingsTab}
+    <section class="settings-content" aria-label={t(`s.nav.${st.settingsTab}`)}>
+      <h2>{t(`s.nav.${st.settingsTab}`)}</h2>
+      {#if ["agents", "pacing", "appearance"].includes(st.settingsTab)}<p class="apply-note muted">{t("s.immediate")}</p>{/if}
+      {#if privateSection}
+        <p class="muted">{t("private.settings")}</p>
+      {:else if st.settingsTab === "profiles"}
+        <ProfilesPane ondirty={dirty => profileDirty = dirty} />
       {:else if st.settingsTab === "automation"}
         <AutomationPane />
       {:else if st.settingsTab === "agents"}
+        <details class="advanced"><summary>{t("s.sharing")}</summary><p class="muted">{t("privacy.sharing")}</p></details>
         <AgentConnections />
         <details class="agent-setup"><summary>{t("agents.other")}</summary>
           <h3>{t("s.connect.title")}</h3>
@@ -197,17 +226,18 @@
           {/if}
         </details>
         <h3>{t("mode")}</h3>
+        <div class="scope-row"><label>{t("s.applyTo")} <select bind:value={scope}><option value="tab">{t("s.currentTab")}</option><option value="all">{t("s.scope.all")}</option></select></label><details><summary>{t("s.defaults")}</summary><button class="btn ghost" onclick={saveDefaults}>{t("s.defaults.use")}</button></details></div>
         <div class="seg">
           {#each ["observe", "copilot", "autopilot"] as id}
-            <button class:on={cur().mode === id} onclick={() => apply("set_mode", { mode: id })}><b>{t(`mode.${id}`)}</b><span>{t(`mode.${id}.desc`)}</span></button>
+            <button class:on={cur().mode === id} aria-pressed={cur().mode === id} onclick={() => apply("set_mode", { mode: id })}><b>{t(`mode.${id}`)}</b><span>{t(`mode.${id}.desc`)}</span></button>
           {/each}
         </div>
         <label class="row"><input type="checkbox" checked={cur().gate} onchange={(e) => apply("set_control_gate", { ask: (e.target as HTMLInputElement).checked })} /> <span>{t("gate")} <em class="muted">{t("gate.desc")}</em></span></label>
 
-        <h3>{t("s.tools")} <em class="muted">{t("s.tools.hint")}</em></h3>
+<details class="advanced"><summary>{t("s.advancedPermissions")}</summary>
         <div class="presets">
           {#each PRESETS as [k, p]}
-            <button class="pill" class:on={presetOn(p)} onclick={() => apply("set_affordances", { allow: p })}>{t(k)}</button>
+            <button class="pill" class:on={presetOn(p)} aria-pressed={presetOn(p)} onclick={() => apply("set_affordances", { allow: p })}>{t(k)}</button>
           {/each}
         </div>
         <div class="tools">
@@ -234,10 +264,11 @@
           {#each cur().allows as l}<button class="chip" onclick={() => cmd("revoke_session_allow", { label: l })}>✓ {l} <span class="muted">×</span></button>{/each}
         {/if}
 
+        </details>
       {:else if st.settingsTab === "policy"}
         <h3>{t("s.policy.test")} <em class="muted">{t("s.policy.test.hint")}</em></h3>
         <div class="test">
-          <input placeholder="cd .. && rm -rf -- hello-mel" bind:value={testCmd} spellcheck="false" />
+          <input aria-label={t("s.policy.test")} placeholder={t("s.commandPlaceholder")} bind:value={testCmd} spellcheck="false" />
           {#if verdict}<span class="verdict {verdict.policy}">{verdict.policy}{#if verdict.label} · {verdict.label}{/if}</span>{/if}
         </div>
         {#if recentCmds.length}
@@ -260,8 +291,7 @@
             {#each rules.rules as r}
               <li class={r.kind} class:hit={matchedLabels.has(r.label)}>
                 <span class="kind">{r.kind}</span>
-                <code>{r.pattern ?? `${r.command}${r.args ? " " + r.args : ""}`}</code>
-                <span class="lbl">{r.label}</span>
+                <details><summary>{r.label}</summary><code>{r.pattern ?? `${r.command}${r.args ? " " + r.args : ""}`}</code></details>
               </li>
             {/each}
           </ol>
@@ -280,42 +310,43 @@
 
         <button class="disclose" onclick={() => (showSource = !showSource)}>{showSource ? "▾" : "▸"} {t("s.policy.source")} <em class="muted">{policyPath}</em></button>
         {#if showSource}
-          <textarea bind:value={policyText} oninput={() => (policyDirty = true)} spellcheck="false"></textarea>
+          <textarea aria-label={t("s.policy.source")} bind:value={policyText} oninput={() => (policyDirty = true)} spellcheck="false"></textarea>
           <div class="actions"><button class="btn ghost" onclick={loadPolicy}>{t("revert")}</button><button class="btn primary" disabled={!policyDirty} onclick={savePolicy}>{t("save")}</button></div>
           <p class="muted">{t("s.policy.source.hint")}</p>
         {/if}
 
       {:else if st.settingsTab === "pacing"}
-        <h3>{t("s.pacing.presets")}</h3>
+        <div class="scope-row"><label>{t("s.applyTo")} <select bind:value={scope}><option value="tab">{t("s.currentTab")}</option><option value="all">{t("s.scope.all")}</option></select></label><details><summary>{t("s.defaults")}</summary><button class="btn ghost" onclick={saveDefaults}>{t("s.defaults.use")}</button></details></div>
+        <h3>{t("s.pacing.presets")} {#if !PACE_PRESETS.some(([, patch, gate]) => cur().pacing.enterGraceMs === patch.enterGraceMs && cur().pacing.minWriteIntervalMs === patch.minWriteIntervalMs && (gate === null || cur().gate === gate))}<span class="v">{t("s.custom")}</span>{/if}</h3>
         <div class="seg">
           {#each PACE_PRESETS as [k, patch, gate]}
-            <button onclick={() => pacePreset(patch, gate)}><b>{t(`s.pacing.${k}`)}</b><span>{t(`s.pacing.${k}.desc`)}</span></button>
+            <button class:on={(cur().pacing.enterGraceMs === patch.enterGraceMs && cur().pacing.minWriteIntervalMs === patch.minWriteIntervalMs) && (gate === null || cur().gate === gate)} aria-pressed={(cur().pacing.enterGraceMs === patch.enterGraceMs && cur().pacing.minWriteIntervalMs === patch.minWriteIntervalMs) && (gate === null || cur().gate === gate)} onclick={() => pacePreset(patch, gate)}><b>{t(`s.pacing.${k}`)}</b><span>{t(`s.pacing.${k}.desc`)}</span></button>
           {/each}
         </div>
-        <h3>{t("s.grace")} <span class="v">{fmtMs(cur().pacing.enterGraceMs)}</span></h3>
+        <h3>{t("s.grace")} <label class="v numeric"><input aria-label={t("s.grace")} type="number" min="0" max="5000" step="1" value={cur().pacing.enterGraceMs} onchange={e => { const n = e.currentTarget.valueAsNumber; if (Number.isFinite(n)) pace({ enterGraceMs: Math.max(0, Math.min(5000, Math.round(n))) }); }} /> ms</label></h3>
         <p class="muted">{t("s.grace.hint")}</p>
-        <input type="range" min="0" max="5000" step="100" value={cur().pacing.enterGraceMs} onchange={(e) => pace({ enterGraceMs: +(e.target as HTMLInputElement).value })} />
-        <div class="gpreview" style:--g="{Math.max(300, cur().pacing.enterGraceMs)}ms"><span class="fill"></span></div>
-        <h3>{t("s.interval")} <span class="v">{cur().pacing.minWriteIntervalMs} ms</span></h3>
+        <input aria-label={t("s.grace")} type="range" min="0" max="5000" step="100" value={cur().pacing.enterGraceMs} onchange={(e) => pace({ enterGraceMs: +(e.target as HTMLInputElement).value })} />
+        <details class="advanced"><summary>{t("s.advanced")}</summary>
+        <h3>{t("s.interval")} <label class="v numeric"><input aria-label={t("s.interval")} type="number" min="0" max="500" step="1" value={cur().pacing.minWriteIntervalMs} onchange={e => { const n = e.currentTarget.valueAsNumber; if (Number.isFinite(n)) pace({ minWriteIntervalMs: Math.max(0, Math.min(500, Math.round(n))) }); }} /> ms</label></h3>
         <p class="muted">{t("s.interval.hint")}</p>
-        <input type="range" min="0" max="500" step="10" value={cur().pacing.minWriteIntervalMs} onchange={(e) => pace({ minWriteIntervalMs: +(e.target as HTMLInputElement).value })} />
-        <div class="preview" style:--iv="{Math.max(20, cur().pacing.minWriteIntervalMs)}ms"><span class="cur">$</span> <span class="typed">kubectl get pods -n prod</span></div>
-        <h3>{t("s.lease")} <span class="v">{cur().pacing.leaseTtlSecs} s</span></h3>
+        <input aria-label={t("s.interval")} type="range" min="0" max="500" step="10" value={cur().pacing.minWriteIntervalMs} onchange={(e) => pace({ minWriteIntervalMs: +(e.target as HTMLInputElement).value })} />
+        <h3>{t("s.lease")} <label class="v numeric"><input aria-label={t("s.lease")} type="number" min="10" max="600" step="1" value={cur().pacing.leaseTtlSecs} onchange={e => { const n = e.currentTarget.valueAsNumber; if (Number.isFinite(n)) pace({ leaseTtlSecs: Math.max(10, Math.min(600, Math.round(n))) }); }} /> s</label></h3>
         <p class="muted">{t("s.lease.hint")}</p>
-        <input type="range" min="10" max="600" step="10" value={cur().pacing.leaseTtlSecs} onchange={(e) => pace({ leaseTtlSecs: +(e.target as HTMLInputElement).value })} />
-        <h3>{t("s.approval")} <span class="v">{cur().pacing.approvalTtlSecs} s</span></h3>
+        <input aria-label={t("s.lease")} type="range" min="10" max="600" step="10" value={cur().pacing.leaseTtlSecs} onchange={(e) => pace({ leaseTtlSecs: +(e.target as HTMLInputElement).value })} />
+        <h3>{t("s.approval")} <label class="v numeric"><input aria-label={t("s.approval")} type="number" min="30" max="900" step="1" value={cur().pacing.approvalTtlSecs} onchange={e => { const n = e.currentTarget.valueAsNumber; if (Number.isFinite(n)) pace({ approvalTtlSecs: Math.max(30, Math.min(900, Math.round(n))) }); }} /> s</label></h3>
         <p class="muted">{t("s.approval.hint")}</p>
-        <input type="range" min="30" max="900" step="30" value={cur().pacing.approvalTtlSecs} onchange={(e) => pace({ approvalTtlSecs: +(e.target as HTMLInputElement).value })} />
+        <input aria-label={t("s.approval")} type="range" min="30" max="900" step="30" value={cur().pacing.approvalTtlSecs} onchange={(e) => pace({ approvalTtlSecs: +(e.target as HTMLInputElement).value })} />
 
+        </details>
       {:else if st.settingsTab === "appearance"}
         <h3>{t("s.language")}</h3>
         <div class="presets">
-          {#each LANGS as l}<button class="pill" class:on={i18n.lang === l.id} onclick={() => setLang(l.id)}>{l.name}</button>{/each}
+          {#each LANGS as l}<button class="pill" class:on={i18n.lang === l.id} aria-pressed={i18n.lang === l.id} onclick={() => setLang(l.id)}>{l.name}</button>{/each}
         </div>
         <h3>{t("s.theme")}</h3>
         <div class="themes">
           {#each Object.values(THEMES) as th}
-            <button class="tcard" class:on={st.theme === th.id} onclick={() => setTheme(th.id)} style:--tbg={th.tokens.bg} style:--tfg={th.tokens.fg} style:--ts={th.tokens.surface2}>
+            <button class="tcard" class:on={st.theme === th.id} aria-pressed={st.theme === th.id} onclick={() => setTheme(th.id)} style:--tbg={th.tokens.bg} style:--tfg={th.tokens.fg} style:--ts={th.tokens.surface2}>
               <span class="sw"><i></i><i></i><i></i></span><b>{th.name}</b><span class="muted">{t(th.blurb)}</span>
             </button>
           {/each}
@@ -323,11 +354,13 @@
         <label class="row"><input type="checkbox" checked={st.followSystem} onchange={(e) => { st.followSystem = (e.target as HTMLInputElement).checked; localStorage.setItem("ss:followSystem", st.followSystem ? "1" : "0"); }} /> {t("s.follow")} <em class="muted">{t("s.follow.hint")}</em></label>
         <label class="row"><input type="checkbox" checked={st.effects} onchange={(e) => { st.effects = (e.target as HTMLInputElement).checked; localStorage.setItem("ss:effects", st.effects ? "1" : "0"); }} /> {t("s.effects")}</label>
         <h3>{t("s.font")} <span class="v">{st.fontSize}px</span></h3>
-        <input type="range" min="10" max="20" step="1" value={st.fontSize} onchange={(e) => { st.fontSize = +(e.target as HTMLInputElement).value; localStorage.setItem("ss:fontSize", String(st.fontSize)); }} />
+        <input aria-label={t("s.font")} type="range" min="10" max="20" step="1" value={st.fontSize} onchange={(e) => { st.fontSize = +(e.target as HTMLInputElement).value; localStorage.setItem("ss:fontSize", String(st.fontSize)); }} />
 
       {:else}
         {#if diag}
-          <dl class="diag">
+          <div class="diag-summary"><span>Conn {diag.version}</span><span>{t("s.diag.tabs")}: {diag.sessions}</span><span>{t("s.diag.connected")}: {diag.agentConnections?.length ?? 0}</span></div>
+          <DiagnosticConnections compact connections={diag.agentConnections ?? []} />
+          <details class="advanced"><summary>{t("s.diag.details")}</summary><dl class="diag">
             <dt>{t("s.diag.version")}</dt><dd>Conn {diag.version}</dd>
             <dt>{t("s.diag.tabs")}</dt><dd>{diag.sessions}</dd>
             <dt>{t("s.diag.socket")}</dt><dd><code>{diag.socket}</code></dd>
@@ -337,7 +370,7 @@
             <dt>{t("s.diag.cli")}</dt>
             <dd class="rowdd">{#if diag.cli.onPath}<code>{diag.cli.onPath}</code>{:else}<span class="muted">{t("s.diag.cli.none")}</span>{/if}
               {#if diag.cli.canInstall}<button class="btn mini" onclick={async () => { try { toast(t("cli.installed", { path: await cmd<string>("install_cli") }), "ok"); loadDiag(); } catch (e) { toast(String(e), "danger"); } }}>{t("s.diag.cli.install")}</button>{/if}</dd>
-            {#if diag.cli.canConfigure}<dt>{t("s.connect.title")}</dt><dd><button class="btn mini" onclick={() => st.settingsTab = "agents"}>{t("s.connect.copy")}</button></dd>{/if}
+            {#if diag.cli.canConfigure}<dt>{t("s.connect.title")}</dt><dd><button class="btn mini" onclick={() => st.settingsTab = "agents"}>{t("agents.title")}</button></dd>{/if}
             <dt>{t("s.diag.plugins")}</dt>
             <dd class="plugins">
               {#each diag.clients ?? [] as client}
@@ -348,37 +381,61 @@
             </dd>
             <dt>{t("s.diag.connected")}</dt>
             <dd><DiagnosticConnections connections={diag.agentConnections ?? []} /></dd>
-          </dl>
+          </dl></details>
         {/if}
       {/if}
     </section>
+    {/key}
   </div>
+
 </aside>
 
 <style>
-  .sheet { position: absolute; top: 0; right: 0; bottom: 0; width: 600px; max-width: 92vw; z-index: 31; background: var(--surface); border-left: 1px solid var(--line); box-shadow: var(--shadow); display: flex; flex-direction: column; outline: 0; }
+  .apply-note { font-size: 11px; margin: -8px 0 14px; }
+  .discard { padding: 10px 16px; display: flex; gap: 8px; align-items: center; background: var(--surface2); font-size: 12px; flex-wrap: wrap; }
+  .discard span { flex: 1; }
+  .numeric { display: inline-flex; align-items: center; gap: 6px; }
+  .numeric input { width: 72px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); padding: 4px 6px; font: inherit; }
+  .diag-summary { display: flex; gap: 10px 20px; flex-wrap: wrap; padding: 12px 0 20px; font-size: 12px; }
+
+  .scope-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 12px 0; font-size: 12px; color: var(--muted); }
+  .scope-row select { background: var(--surface2); color: var(--fg); border: 1px solid var(--line); border-radius: 7px; padding: 6px; }
+  .advanced { border-top: 1px solid var(--line); padding: 12px 0; margin: 12px 0; }
+  .advanced > summary, .scope-row summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  .advanced p { line-height: 1.6; font-size: 12px; }
+  .rules summary { cursor: pointer; } .rules code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0; color: var(--muted); }
+
+  .scrim { position: absolute; inset: 0; z-index: 40; background: rgba(0,0,0,.25); }
+  .sheet { z-index: 41; display: flex; flex-direction: column; outline: 0; width: min(820px, 94vw); height: min(660px, calc(100dvh - 88px)); }
+  .category-list { padding: 12px 8px; overflow: auto; border-right: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 25%, transparent); }
+  .category-list button { display: block; width: 100%; padding: 10px 12px; margin-bottom: 3px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); text-align: left; cursor: pointer; font: 12.5px var(--font-ui); transition: background 160ms, color 160ms; }
+  .category-list button:hover, .category-list button.on { background: var(--surface2); color: var(--fg); }
+  .category-list button.on { font-weight: 600; }
+  .category-list button:focus-visible { outline: 2px solid var(--agent); outline-offset: -2px; }
+  .settings-content { animation: settings-content-in 220ms cubic-bezier(.22, 1, .36, 1) both; }
+  @keyframes settings-content-in { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }
+  h2 { margin: 0 0 18px; font-size: 15px; font-weight: 600; }
+  @media (prefers-reduced-motion: reduce) { .settings-content { animation: none; } }
+  @media (max-width: 560px) { .body { grid-template-columns: 112px minmax(0, 1fr); } .category-list { padding: 8px 4px; } .category-list button { padding: 9px 6px; font-size: 11.5px; } header { flex-wrap: wrap; } .scope { order: 3; flex-basis: 100%; } }
+  .title { flex: 1; }
+  footer { border-top: 1px solid var(--line); padding: 7px 14px; }
   header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
   .title { font-weight: 700; font-size: 14px; }
   .scope { flex: 1; display: inline-flex; gap: 2px; background: var(--surface2); padding: 3px; border-radius: 10px; max-width: 320px; }
   .scope button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; background: transparent; color: var(--muted); padding: 5px 8px; border-radius: 8px; cursor: pointer; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .scope button.on { background: var(--surface); color: var(--fg); font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,.18); }
   .scope .dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; }
-  .body { display: grid; grid-template-columns: 130px minmax(0, 1fr); flex: 1; min-height: 0; }
-  nav { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-right: 1px solid var(--line); }
-  nav button { text-align: left; background: transparent; border: 0; padding: 8px 10px; border-radius: 8px; cursor: pointer; color: var(--muted); font-size: 12.5px; }
-  nav button.on { background: var(--surface2); color: var(--fg); font-weight: 600; }
-  nav .spacer { flex: 1; }
-  nav .small { font-size: 10.5px; margin: 0 4px 6px; line-height: 1.4; }
-  nav .link { color: var(--agent); font-size: 11.5px; padding: 6px 8px; }
+  .body { display: grid; grid-template-columns: 154px minmax(0, 1fr); flex: 1; min-height: 0; overflow: hidden; }
+  @media (max-width: 560px) { .body { grid-template-columns: 112px minmax(0, 1fr); } }
   section { min-width: 0; padding: 14px 18px; overflow: auto; }
   h3 { margin: 18px 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); display: flex; gap: 8px; align-items: baseline; }
   h3:first-child { margin-top: 4px; }
   h3 em { text-transform: none; letter-spacing: 0; font-style: normal; font-weight: 400; }
   h3 .v { margin-left: auto; color: var(--fg); font-weight: 600; text-transform: none; letter-spacing: 0; font-variant-numeric: tabular-nums; }
-  .seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-  .seg button { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; background: var(--surface2); border: 1px solid var(--line); border-radius: 10px; padding: 10px; cursor: pointer; text-align: left; }
+  .seg { display: grid; grid-template-columns: 1fr; gap: 2px; }
+  .seg button { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; background: transparent; border: 1px solid transparent; border-radius: 9px; padding: 8px 10px; cursor: pointer; text-align: left; }
   .seg button span { color: var(--muted); font-size: 11px; }
-  .seg button.on { border-color: var(--agent); box-shadow: 0 0 0 1px var(--agent) inset; }
+  .seg button:hover, .seg button.on { background: var(--surface2); }
   .row { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
   .row em { font-style: normal; margin-left: 6px; }
   .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -399,12 +456,6 @@
   .sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: 0 0 10px; }
   .chip { background: color-mix(in srgb, var(--warn) 15%, var(--surface2)); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); border-radius: 999px; padding: 3px 10px; margin: 0 6px 6px 0; cursor: pointer; font-size: 12px; }
   input[type=range] { width: 100%; }
-  .preview { margin: 8px 0 4px; padding: 8px 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; font-family: var(--font-mono); font-size: 12px; }
-  .preview .typed { display: inline-block; overflow: hidden; white-space: nowrap; vertical-align: bottom; width: 0; animation: type calc(var(--iv) * 24) steps(24) infinite; }
-  @keyframes type { 0% { width: 0; } 85%, 100% { width: 24ch; } }
-  .gpreview { height: 3px; margin: 8px 0 2px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
-  .gpreview .fill { display: block; height: 100%; background: var(--warn); transform-origin: left; animation: drain var(--g) linear infinite; }
-  @keyframes drain { 0% { transform: scaleX(1); } 100% { transform: scaleX(0); } }
   .test { display: flex; gap: 10px; align-items: center; }
   .test input, textarea { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; color: var(--fg); padding: 8px 10px; font: 12.5px var(--font-mono); outline: 0; }
   .test input:focus, textarea:focus { border-color: var(--agent); }
@@ -421,7 +472,7 @@
   .verdict.confirm { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
   .verdict.deny { background: color-mix(in srgb, var(--danger) 20%, transparent); color: var(--danger); }
   .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-  .rules li { display: grid; grid-template-columns: 52px 1fr auto; gap: 8px; align-items: center; padding: 4px 8px; border-radius: 6px; font-size: 12px; border: 1px solid transparent; }
+  .rules li { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; align-items: center; padding: 4px 8px; border-radius: 6px; font-size: 12px; border: 1px solid transparent; }
   .rules li.hit { background: color-mix(in srgb, var(--warn) 12%, transparent); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
   .rules li.deny.hit { background: color-mix(in srgb, var(--danger) 12%, transparent); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
   .rules .kind { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--warn); }

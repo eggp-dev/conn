@@ -129,20 +129,25 @@ class SigningTests(unittest.TestCase):
             with self.assertRaises(release.ReleaseError):
                 signing.accepted_submission(invalid)
 
-    def test_dmg_license_prompt_is_answered_without_mutating_image_and_mount_is_detached(self):
+    def test_dmg_mounts_without_accepting_a_license_and_is_detached(self):
         dmg = Path(self.temporary.name) / "Conn.dmg"
         dmg.write_bytes(b"signed-dmg-fixture")
         expected = {key: {"cdhash": "1" * 40} for key in ("bundle", "desktop", "sidecar")}
 
         def native_command(args, **kwargs):
             if args[:2] == ["hdiutil", "attach"]:
-                # A licensed DMG refuses an unattended attach without an answer.
-                if kwargs.get("input") != "Y\n":
+                # An agreement-free image mounts with stdin closed.
+                if kwargs.get("input") != "":
                     return subprocess.CompletedProcess(args, 1, "License prompt", "")
                 self.assertIn("-plist", args)
                 self.assertIn("-readonly", args)
                 mount = Path(args[args.index("-mountpoint") + 1])
-                (mount / "Conn.app").mkdir()
+                (mount / "Conn.app/Contents/Resources").mkdir(parents=True)
+                (mount / "Conn.app/Contents/Resources/LICENSE").write_text("MIT License")
+                try:
+                    (mount / "Applications").symlink_to("/Applications")
+                except OSError:
+                    self.skipTest("symlinks unavailable on this runner")
             else:
                 self.assertEqual(args[:2], ["hdiutil", "detach"])
                 self.assertIsNone(kwargs.get("input"))

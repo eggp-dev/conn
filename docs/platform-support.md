@@ -2,7 +2,7 @@
 
 English · [한국어](platform-support.ko.md) · [Install](getting-started.md) · [Release](releasing.md)
 
-Conn provides its MIT-licensed source and native binaries through [GitHub Releases](https://github.com/eggplantiny/conn/releases/tag/v0.5.1). All desktop packages use the same Rust engine and Svelte UI. The browser harness is a development adapter.
+Conn provides its MIT-licensed source and native binaries through [GitHub Releases](https://github.com/eggplantiny/conn/releases/tag/v0.6.0). All desktop packages use the same Rust engine and Svelte UI. The browser harness is a development adapter.
 
 ## Targets for upcoming preview releases
 
@@ -56,6 +56,6 @@ SSH, Docker, WSL and Git Bash are profile options. Claim verified support only f
 
 ## Publication and updates
 
-The workflow prepares a **draft prerelease** with seven binaries/installers, one Mac signing report, and `SHA256SUMS`. It does not publish automatically. Missing or failed Mac signing evidence blocks the release draft upload; unsigned Windows assets are the explicit preview policy.
+The workflow prepares a **draft prerelease** with seven binaries/installers, a macOS updater archive, three updater signatures, `latest.json`, one Mac signing report, and `SHA256SUMS`. It does not publish automatically. Missing or failed Mac signing evidence blocks the release draft upload; unsigned Windows assets are the explicit preview policy.
 
-Before publishing, maintainers review the [release checks](releasing.md), record runtime results and limitations, and confirm that download links match the assets. Updates are manual downloads. Version 0.4.1 adds an on-demand update check and browser download links; it does not install updates. There is no automatic installer, updater signing key, app-store listing or hosted package repository.
+Before publishing, maintainers review the [release checks](releasing.md), record runtime results and limitations, and confirm that download links match the assets. Updates from v0.6.0 use the signed Tauri updater on macOS, Windows and AppImage. Debian packages remain manually/package-manager updated. Older installations need one manual upgrade. See [updates](getting-started.md#updates-v060-and-later). Native installed-app upgrades still require hands-on verification; CI verifies build and artifact contracts.

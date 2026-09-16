@@ -2,7 +2,7 @@
 
 [English](platform-support.md) · 한국어 · [설치](getting-started.ko.md) · [릴리스](releasing.ko.md)
 
-Conn은 MIT 라이선스 소스와 네이티브 바이너리를 [GitHub Releases](https://github.com/eggplantiny/conn/releases/tag/v0.5.1)로 제공합니다. 모든 데스크톱 패키지는 같은 Rust 엔진과 Svelte UI를 사용하며 브라우저 하네스는 개발용 어댑터입니다.
+Conn은 MIT 라이선스 소스와 네이티브 바이너리를 [GitHub Releases](https://github.com/eggplantiny/conn/releases/tag/v0.6.0)로 제공합니다. 모든 데스크톱 패키지는 같은 Rust 엔진과 Svelte UI를 사용하며 브라우저 하네스는 개발용 어댑터입니다.
 
 ## 다음 프리뷰 릴리스 대상
 
@@ -56,6 +56,6 @@ SSH·Docker·WSL·Git Bash는 프로필 옵션입니다. 실제 시험한 외부
 
 ## 공개와 업데이트
 
-워크플로는 바이너리·설치 파일 7개, Mac 서명 보고서 1개, `SHA256SUMS`를 담은 **Draft prerelease**를 준비하며 자동 공개하지 않습니다. Mac 서명 근거가 없거나 검사에 실패하면 초안 업로드를 막습니다. Windows 무서명은 명시적인 프리뷰 방침입니다.
+워크플로는 바이너리·설치 파일 7개, Mac 업데이트 아카이브, 업데이트 서명 3개, `latest.json`, Mac 서명 보고서, `SHA256SUMS`를 담은 **Draft prerelease**를 준비하며 자동 공개하지 않습니다. Mac 서명 근거가 없거나 검사에 실패하면 초안 업로드를 막습니다. Windows 무서명은 명시적인 프리뷰 방침입니다.
 
-관리자는 공개 전에 [릴리스 검사](releasing.ko.md)를 검토하고 실제 실행 결과와 한계를 기록하며 다운로드 링크가 파일과 일치하는지 확인합니다. 업데이트는 새 파일을 직접 받는 방식입니다. v0.4.1부터 요청 시 새 버전을 확인하고 브라우저에서 내려받을 수 있으며 앱이 직접 설치하지는 않습니다. 자동 설치·업데이터 서명 키·앱 스토어 등록·별도 패키지 저장소는 없습니다.
+관리자는 공개 전에 [릴리스 검사](releasing.ko.md)를 검토하고 실제 실행 결과와 한계를 기록하며 다운로드 링크가 파일과 일치하는지 확인합니다. v0.6.0부터 macOS·Windows·AppImage는 서명된 앱 내 업데이트를 지원합니다. deb는 수동 또는 패키지 관리자 업데이트를 사용합니다. 기존 버전은 한 번 직접 업그레이드해야 합니다. [업데이트 안내](getting-started.ko.md#업데이트-v060-이상)를 참고하세요.

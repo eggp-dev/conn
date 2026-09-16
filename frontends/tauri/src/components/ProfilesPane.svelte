@@ -1,4 +1,6 @@
 <script lang="ts">
+  let { ondirty = (_dirty: boolean) => {} } = $props<{ ondirty?: (dirty: boolean) => void }>();
+  $effect(() => ondirty(dirty));
   import { onMount } from "svelte";
   import { invoke } from "../lib/transport";
   import { t } from "../lib/i18n.svelte";
@@ -98,7 +100,7 @@
 </script>
 
 <div class="profiles">
-  <h3>{t("profiles.title")}</h3>
+
   <p class="muted">{t("profiles.description")}</p>
   <div class="actions">
     <button class="btn" disabled={busy || !config} onclick={()=>add()}>{t("profiles.add")}</button>
@@ -106,16 +108,11 @@
     <button class="btn ghost" disabled={busy} onclick={load}>{t("profiles.reload")}</button>
   </div>
   {#if config}
-    <label class="field">{t("profiles.default")}
-      <select bind:value={config.defaultProfile} onchange={()=>dirty=true} disabled={busy}>
-        {#each config.profiles.filter(p=>p.enabled) as p}<option value={p.id}>{p.name}</option>{/each}
-      </select>
-    </label>
     <div class="profile-list" aria-label={t("profiles.title")}>
       {#each config.profiles as p (p.id)}
         {@const availability=profileState.catalog?.availability[p.id]}
         <button class="profile-row" class:selected={selected===p.id} aria-pressed={selected===p.id} onclick={()=>select(p.id)} disabled={busy}>
-          <span class="profile-name">{p.name}{p.id===config.defaultProfile ? " ★" : ""}</span>
+          <span class="profile-name">{p.name}{p.id===config.defaultProfile ? ` · ${t("profiles.defaultBadge")}` : ""}</span>
           <small>{p.backend} · {p.shell}{!p.enabled ? ` · ${t("profiles.disabled")}` : availability && !availability.available ? ` · ${t("profiles.unavailable")}` : ""}</small>
         </button>
       {/each}
@@ -139,11 +136,15 @@
           <label class="field">{t("profiles.port")}<input type="number" min="1" max="65535" value={current.port ?? ""} oninput={e=>{current!.port=e.currentTarget.value ? Number(e.currentTarget.value) : null;}} placeholder="22" /></label>
           <p class="muted small">{t("profiles.sshHint")}</p>
         {/if}
+        <label class="field">{t("profiles.cwd")}<input bind:value={current.cwd} placeholder={t("profiles.inherit")} /></label>
+        <details class="advanced"><summary>{t("s.advanced")}</summary>
         <label class="field">{t("profiles.program")}<input bind:value={current.program} placeholder={current.backend==="ssh" ? t("profiles.serverDefault") : "pwsh.exe / /bin/bash"} /></label>
         <label class="field">{t("profiles.args")}<textarea bind:value={argsText} rows="3" spellcheck="false" placeholder="-l"></textarea></label>
-        <label class="field">{t("profiles.cwd")}<input bind:value={current.cwd} placeholder={t("profiles.inherit")} /></label>
+
         <label class="field">{t("profiles.env")}<textarea bind:value={envText} rows="3" spellcheck="false" placeholder="LANG=ko_KR.UTF-8"></textarea></label>
+        </details>
         <label class="enabled"><input type="checkbox" bind:checked={current.enabled} disabled={current.id===config.defaultProfile} />{t("profiles.enabled")}</label>
+        <label class="enabled"><input type="checkbox" checked={current.id===config.defaultProfile} disabled={!current.enabled || current.id===config.defaultProfile} onchange={() => { config!.defaultProfile = current!.id; dirty = true; }} />{t("profiles.makeDefault")}</label>
         {#if current.backend!=="local" || current.shell!=="posix"}<p class="review-note">{t("profiles.review")}</p>{/if}
         {#if !dirty && profileState.catalog?.availability[current.id]?.available===false}<p class="error">{profileState.catalog.availability[current.id].message}</p>{/if}
         <div class="actions">
@@ -152,11 +153,12 @@
         </div>
       </fieldset>
     {/if}
-    <button class="btn save" disabled={busy || !dirty} onclick={save}>{busy ? t("profiles.working") : t("profiles.save")}</button>
+    {#if dirty}<p class="muted">{t("s.unsaved")}</p><button class="btn save" disabled={busy || !dirty} onclick={save}>{busy ? t("profiles.working") : t("profiles.save")}</button>{/if}
   {/if}
   <div aria-live="polite">{#if error}<p class="error" role="alert">{error}</p>{/if}{#if notice}<p class="notice">{notice}</p>{/if}</div>
 </div>
 
 <style>
+ .advanced summary { cursor: pointer; color: var(--muted); font-size: 12px; } .advanced .field { margin-top: 12px; } .save { position: sticky; bottom: 0; z-index: 1; }
   .profiles{display:grid;gap:14px;min-width:0}.profiles h3,.profiles p{margin:0}.profiles p{line-height:1.5;font-size:12px}.actions{display:flex;gap:8px;flex-wrap:wrap}.field{display:grid;gap:6px;font-size:12px;min-width:0}input,select,textarea{width:100%;box-sizing:border-box;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:8px;font:inherit}textarea{resize:vertical;min-height:60px}.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}.profile-list{display:grid;gap:4px;max-height:185px;overflow:auto}.profile-row{text-align:left;display:grid;gap:4px;background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:10px;cursor:pointer}.profile-row.selected{border-color:var(--agent,#8b7cff);background:var(--surface2)}.profile-name{overflow-wrap:anywhere}small,.muted{color:var(--muted)}fieldset{border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:12px;min-width:0}legend{padding:0 6px;font-size:12px}.enabled{display:flex;align-items:center;gap:8px;font-size:12px}.enabled input{width:auto}.error{color:var(--danger);overflow-wrap:anywhere}.notice{color:var(--fg)}.review-note{border-left:2px solid var(--warn);padding-left:10px;color:var(--muted)}.save{justify-self:start}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--agent,#8b7cff);outline-offset:2px}button:disabled{opacity:.5;cursor:default}
 </style>

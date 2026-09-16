@@ -1,20 +1,21 @@
 /** Shared UI projection of backend events. The native event stream remains authoritative. */
 export type OriginalRequest = { method: string; params: Record<string, unknown> };
-export type Outcome = "pending" | "granted" | "scheduled" | "executed" | "denied" | "expired" | "cancelled" | "rejected" | "returned" | "info";
+export type Outcome = "pending" | "granted" | "scheduled" | "executed" | "denied" | "expired" | "cancelled" | "rejected" | "returned" | "info" | "running" | "completed" | "failed" | "unknown";
 export type TimelineStep = { t: number; type: string; text?: string; ms?: number };
 export type TimelineItem = {
   id: string; t: number; actor: string; kind: "exec" | "control" | "attention" | "tab";
   status: Outcome; text: string; intent?: string; policy?: string; steps: TimelineStep[];
+  commandId?: string; submissionId?: string; cwd?: string; exitCode?: number | null; durationMs?: number;
   originalRequest?: OriginalRequest;
   controlId?: string; requestId?: string; lease?: string; commands?: string[]; saved?: boolean;
 };
-export type TimelineState = { items: TimelineItem[]; seq: number; activeControl?: string; waiting: Record<string, string>; awaitingResult: Record<string, string>; refs: Record<string, string> };
-export const newTimeline = (): TimelineState => ({ items: [], seq: 0, waiting: {}, awaitingResult: {}, refs: {} });
+export type TimelineState = { externalPrivate?: boolean; items: TimelineItem[]; seq: number; activeControl?: string; waiting: Record<string, string>; awaitingResult: Record<string, string>; refs: Record<string, string> };
+export const newTimeline = (externalPrivate = false): TimelineState => ({ externalPrivate, items: [], seq: 0, waiting: {}, awaitingResult: {}, refs: {} });
 export type TimelineFilter = "all" | "commands" | "collaboration";
 export const isCommand = (it: TimelineItem) => it.kind === "exec";
 export const isPolicyBlocked = (it: TimelineItem) => it.policy === "deny" || it.policy?.startsWith("deny:") === true;
 export const policyBlockLabel = (it: TimelineItem) => isPolicyBlocked(it) ? it.policy?.slice(5) ?? "" : "";
-export const isProblem = (it: TimelineItem) => ["denied", "expired", "cancelled", "rejected"].includes(it.status);
+export const isProblem = (it: TimelineItem) => ["denied", "expired", "cancelled", "rejected", "failed"].includes(it.status);
 const find = (s: TimelineState, id?: string) => s.items.find(it => it.id === id);
 const step = (it: TimelineItem, t: number, type: string, text?: string, ms?: number) => { it.steps.push({ t, type, text, ms }); };
 function add(s: TimelineState, actor: string, kind: TimelineItem["kind"], text: string, t: number): TimelineItem {
@@ -80,6 +81,7 @@ export function commandDecisions(it: TimelineItem): ("approved" | "accepted" | "
 
 /** Correlate by backend request/approval/proposal/execution IDs, never by rendered labels. */
 export function recordTimeline(s: TimelineState, ev: Record<string, any>, t = Date.now()) {
+  if (s.externalPrivate || ev.externalPrivate) return;
   switch (ev.event) {
     case "control_requested": {
       const r = ev.request;
@@ -158,8 +160,23 @@ export function recordTimeline(s: TimelineState, ev: Record<string, any>, t = Da
       const resolved = find(s, s.awaitingResult[ev.agentId]);
       const it = resolved && resolved.text === ev.cmd ? resolved : command(s, ev.agentId, ev.cmd, t, ev.intent);
       delete s.awaitingResult[ev.agentId];
+      it.submissionId = ev.submissionId;
+      if (ev.submissionId) s.refs[`submission:${ev.submissionId}`] = it.id;
       it.policy = ev.policy; if (ev.intent) it.intent = ev.intent;
       finish(s, it, policyOutcome(ev.policy ?? ""), t); break;
+    }
+    case "shell_command_started": {
+      if (s.refs[`command:${ev.commandId}`]) break;
+      const it = find(s, s.refs[`submission:${ev.submissionId}`]) ?? add(s, ev.actor || "shell", "exec", ev.cmd, t);
+      it.commandId = ev.commandId; it.cwd = ev.cwd; it.status = "running";
+      s.refs[`command:${ev.commandId}`] = it.id;
+      step(it, t, "running"); break;
+    }
+    case "shell_command_finished": {
+      const it = find(s, s.refs[`command:${ev.commandId}`]);
+      if (!it) break;
+      it.exitCode = ev.exitCode; it.durationMs = ev.durationMs;
+      finish(s, it, ev.exitCode == null ? "unknown" : ev.exitCode === 0 ? "completed" : "failed", t); break;
     }
     case "human_exec": {
       const it = add(s, "human", "exec", ev.cmd, t); finish(s, it, "executed", t); break;
@@ -175,15 +192,24 @@ export function recordTimeline(s: TimelineState, ev: Record<string, any>, t = Da
 }
 /** Old audit entries have no reliable tab/lease identity. Label them explicitly, without guessing links. */
 export function importSavedActivity(s: TimelineState, entries: Record<string, any>[]) {
+  if (s.externalPrivate) return;
   for (const e of entries) {
+    if (e.externalPrivate || e.origin === "external_automation" || e.originalRequest?.params?.origin === "external_automation" || String(e.actor ?? "").startsWith("AppleScript · ")) continue;
     if (e.action === "control_request_resolved" && ["denied", "expired"].includes(e.state)) {
       const it = add(s, e.actor, "control", e.reason ?? "", Date.parse(e.ts) || Date.now());
       it.originalRequest = e.originalRequest;
       it.saved = true; it.status = e.state; step(it, it.t, e.state);
     }
+    if (e.action === "shell_command_started" || e.action === "shell_command_finished") {
+      recordTimeline(s, { ...e, event: e.action }, Date.parse(e.ts) || Date.now());
+      const it = find(s, s.refs[`command:${e.commandId}`]);
+      if (it) { it.saved = true; if (it.status === "running") it.status = "unknown"; }
+      continue;
+    }
     if (e.action !== "exec" || !e.cmd) continue;
     const it = add(s, e.actor, "exec", e.cmd, Date.parse(e.ts) || Date.now());
-    it.saved = true; it.intent = e.intent;
+    it.saved = true; it.intent = e.intent; it.submissionId = e.submissionId;
+    if (e.submissionId) s.refs[`submission:${e.submissionId}`] = it.id;
     it.policy = `${e.policy ?? "allow"}${e.policy === "deny" && e.label ? `:${e.label}` : e.approval ? `:${e.approval}` : ""}`;
     // Restore explicit audit facts only; never infer approval from policy or a lease.
     if (e.approval === "granted") step(it, it.t, "approval_granted");
@@ -191,4 +217,20 @@ export function importSavedActivity(s: TimelineState, entries: Record<string, an
     if (e.by === "human_cosign") step(it, it.t, "exec_cosigned");
     it.status = policyOutcome(it.policy); step(it, it.t, it.status);
   }
+}
+
+/** Partition persisted records before projection; missing identity is never guessed. */
+export function savedTimelines(entries: Record<string, any>[]): Record<string, TimelineState> {
+  const groups: Record<string, Record<string, any>[]> = Object.create(null);
+  for (const entry of entries) {
+    const id = typeof entry.session === "string" && entry.session ? entry.session : "legacy";
+    (groups[id] ??= []).push(entry);
+  }
+  const result: Record<string, TimelineState> = Object.create(null);
+  for (const [id, records] of Object.entries(groups)) {
+    const history = newTimeline();
+    importSavedActivity(history, records);
+    if (history.items.length) result[id] = history;
+  }
+  return result;
 }

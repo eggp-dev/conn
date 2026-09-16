@@ -104,7 +104,7 @@ human_input(bytes):
 
 `terminal_type` is not checked. `terminal_send_key(ENTER)` treats the accumulated input line as the command and checks it.
 
-The line is reconstructed by `input::InputTracker` from the bytes written to the PTY (human and agent alike). Input that makes the shell redraw the line — tab completion, history (↑/↓), cursor movement — marks it `dirty`, and at ENTER the value is taken from the VT model's cursor row with the prompt prefix (the cursor column at the first keystroke) removed. Clean tracked input remains authoritative even when the terminal wraps it. On the agent path, dirty input gives the echo 60 ms to settle before using the VT fallback. This fallback covers only the cursor row and can be incomplete for wrapped edited commands; see [the trust model](security.md).
+The line is reconstructed by `input::InputTracker` from agent-submitted bytes written to the PTY. Human bytes are never fed into this tracker; only a content-free unfinished-input flag prevents unsafe appends. Input that makes the shell redraw the line — tab completion, history (↑/↓), cursor movement — marks it `dirty`, and at ENTER the value is taken from the VT model's cursor row with the prompt prefix (the cursor column at the first keystroke) removed. Clean tracked input remains authoritative even when the terminal wraps it. On the agent path, dirty input gives the echo 60 ms to settle before using the VT fallback. This fallback covers only the cursor row and can be incomplete for wrapped edited commands; see [the trust model](security.md).
 
 Per verdict:
 
@@ -148,6 +148,21 @@ semantics remain in the core. See [the adapter contract](agent-integrations.md#a
 ## External automation (unreleased)
 
 The [external automation contract](external-automation.md) ([한국어](external-automation.ko.md))
-covers an external PAM or launcher opening Conn and sending terminal input, with
-macOS AppleScript as the first adapter. The shared service and macOS adapter are implemented for the next release;
-native Apple Event and PAM acceptance tests remain required.
+describes the **UNRELEASED replacement** for the recorded automation path in
+v0.5.1. The macOS AppleScript adapter binds a native caller to its own private
+session. A startup program replaces the allowed local profile's executable and
+argv; later input follows a dedicated external writer, not agent control or policy.
+
+Private origin is established before spawn. The existing native window and PTY
+renderer are reused, while private input/output is excluded from public IPC/MCP
+and Conn activity recording. Settings keep permissions only; request polling keeps
+bounded, volatile metadata with generic error codes. Human input, cancellation or
+revocation invalidates the external writer. Upgrades require one explicit
+re-enable of old permissions. Native Apple Event and external-launcher acceptance
+checks remain release gates.
+
+Sharing an external private session with an AI agent and a Windows external adapter
+remain future work. Linux external automation is implemented behind explicit
+permissions. Local Bash/Zsh [shell integration](shell-integration.md) supplies
+command boundaries for ordinary sessions; it is never installed in private sessions.
+See [the design](automation-design.md) and [the trust model](security.md) for limits.

@@ -20,3 +20,5 @@ node_modules/
 __pycache__/
 .DS_Store
 Thumbs.db
+
+/frontends/tauri/src-tauri/tauri.updater.release.json

@@ -13,9 +13,9 @@ st.active = 't1'; st.order = ['t1']; st.tabs.t1 = newTab('t1', 1);
 st.settingsTab = 'diagnostics'; st.timelineOpen = true;
 if (options.has('automation')) { st.settingsTab = 'automation'; st.settingsOpen = true; st.timelineOpen = false; }
 let automationConfig = {enabled:false,profiles:['local-zsh']};
-let automationState = 'awaiting_permission';
+let requiresReenable = options.has('reenable');
 let automationReads = 0;
-const automationInfo = () => ({config:structuredClone(automationConfig),nativeSupported:!options.has('unsupported'),recent:[{caller:'AppleScript · Example PAM',result:{requestId:'fixture-request',session:'952766d7-f65a-4718-a316-e41d2c0b9a16',tab:'t1',state:automationState}}]});
+const automationInfo = () => ({config:structuredClone(automationConfig),nativeSupported:!options.has('unsupported'),requiresReenable});
 const s = st.tabs.t1.timeline;
 const events = [
   {event:'control_granted',agentId:'codex',lease:'l1'},
@@ -29,7 +29,6 @@ const events = [
   {event:'approval_requested',request:{id:'a1',agentId:'codex',cmd:'rm sample',label:'delete'}},
   {event:'approval_resolved',approvalId:'a1',state:'granted',by:'human'},
   {event:'agent_exec',agentId:'codex',cmd:'rm sample',policy:'confirm:granted'},
-  {event:'agent_exec',agentId:'AppleScript · PAM',cmd:'ssh demo@example.invalid',policy:'allow'},
 ];
 events.forEach((e,i) => recordTimeline(s,e,Date.now()+i));
 mockIPC((name,args:any) => {
@@ -42,11 +41,11 @@ mockIPC((name,args:any) => {
   if (name === 'automation_save') {
     if(options.has('failSave')) throw new Error('Fixture: unable to save settings');
     // Native IPC serializes Svelte proxies before Rust receives them.
-    automationConfig = JSON.parse(JSON.stringify(args.config)); return automationInfo();
+    automationConfig = JSON.parse(JSON.stringify(args.config)); requiresReenable = false; return automationInfo();
   }
   if (name === 'automation_revoke') {
     if(options.has('failRevoke')) throw new Error('Fixture: unable to revoke access');
-    automationState = 'cancelled'; return null;
+    return null;
   }
   if (name === 'profiles_catalog') return {config:{profiles:[{id:'local-zsh',name:'Local zsh'},{id:'ssh-development',name:'Development SSH connection with a long profile name'}]}};
   if (name === 'diagnostics') return {

@@ -16,6 +16,7 @@ static ADAPTER: OnceLock<Adapter> = OnceLock::new();
 static WINDOW_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 extern "C" {
     fn conn_script_link();
+    fn conn_script_sender_alive(identity: *const c_char) -> bool;
 }
 pub fn install(app: &tauri::AppHandle, harness: &Arc<Harness>) {
     let _ = ADAPTER.set(Adapter {
@@ -55,25 +56,29 @@ pub unsafe extern "C" fn conn_automation_call(payload: *const c_char) -> *mut c_
         } else {
             crate::windows::active_label(&adapter.app)
         };
-        let result = harness.automate_in_window(
-            &label,
-            Caller {
-                identity: get("identity")?.into(),
-                name: get("name")?.into(),
-            },
-            operation,
-            request["params"].clone(),
-        )?;
+        let identity = get("identity")?.to_owned();
+        let owner = identity.clone();
+        let caller = Caller {
+            identity,
+            name: get("name")?.into(),
+            still_alive: Arc::new(move || CString::new(owner.as_str()).ok()
+                .is_some_and(|id| unsafe { conn_script_sender_alive(id.as_ptr()) })),
+        };
+        if new_window { harness.prepare_automation_window(&label)?; }
         if new_window || operation == "session.create" {
-            if let Err(error) = crate::windows::show(&adapter.app, &label) {
-                if new_window {
-                    crate::windows::discard(&adapter.app, &label);
-                    harness.close_window(&label);
-                }
-                return Err(error);
+            if crate::windows::show(&adapter.app, &label).is_err() {
+                if new_window { crate::windows::discard(&adapter.app, &label); harness.close_window(&label); }
+                return Err("Window unavailable".into());
             }
         }
-        // Existing PAM templates ignore the result. It is an opaque session ID,
+        let result = match harness.automate_in_window(&label, caller, operation, request["params"].clone()) {
+            Ok(value) => value,
+            Err(error) => {
+                if new_window { crate::windows::discard(&adapter.app, &label); harness.close_window(&label); }
+                return Err(error);
+            }
+        };
+        // Existing launcher templates ignore the result. It is an opaque session ID,
         // not iTerm's window object model.
         Ok(if new_window {
             result["session"].clone()

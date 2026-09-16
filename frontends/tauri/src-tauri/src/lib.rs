@@ -3,10 +3,15 @@ use conn_frontend::Harness;
 use serde_json::Value;
 use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
+mod updates;
+#[cfg(test)]
+mod update_tests;
 #[cfg(target_os = "macos")]
 mod macos;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod windows;
+#[cfg(target_os = "linux")]
+mod linux;
 
 #[tauri::command]
 async fn dispatch(
@@ -23,11 +28,13 @@ async fn dispatch(
 }
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![dispatch])
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updates::Updates::new())
+        .invoke_handler(tauri::generate_handler![dispatch, updates::app_update])
         .setup(|app| {
             let handle = app.handle().clone();
             let harness = Arc::new(Harness::new(
-                conn_core::paths::config_dir(),
+                std::env::var_os("CONN_CONFIG_DIR").map(std::path::PathBuf::from).unwrap_or_else(conn_core::paths::config_dir),
                 conn_core::paths::socket_path(),
                 Arc::new(move |name, value| {
                     if let Some(window) = value["window"].as_str().map(str::to_owned) {
@@ -39,6 +46,8 @@ pub fn run() {
             ));
             #[cfg(target_os = "macos")]
             macos::install(app.handle(), &harness);
+            #[cfg(target_os = "linux")]
+            linux::install(app.handle(), &harness);
             app.manage(harness);
             Ok(())
         })

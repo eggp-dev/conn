@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { newTimeline, recordTimeline, visibleTimeline, timelineSteps, importSavedActivity, commandDecisions, isExternalAutomation } from '../../src/lib/timeline.ts';
+import { newTimeline, recordTimeline, visibleTimeline, timelineSteps, importSavedActivity, savedTimelines, commandDecisions, isExternalAutomation } from '../../src/lib/timeline.ts';
 const request = (id = 'r1', actor = 'codex') => ({ event: 'control_requested', request: { requestId: id, agentId: actor, reason: 'Inspect a file' } });
 const grant = (actor = 'codex', lease = 'l1') => ({ event: 'control_granted', agentId: actor, lease, reason: 'Inspect a file' });
 const exec = (cmd = 'pwd', policy = 'allow') => ({ event: 'agent_exec', agentId: 'codex', cmd, policy });
@@ -167,13 +167,82 @@ test('saved commands preserve explicit human acts without guessing from policy o
   assert.deepEqual(s.items.map(commandDecisions), [['approved'],['accepted'],['cosigned'],[]]);
 });
 
-test('external automation remains identifiable on linked commands and saved audit records', () => {
+test('private sessions never collect live events or restored activity', () => {
+  const s = newTimeline(true);
+  recordTimeline(s, {event:'human_exec', cmd:'private-marker'});
+  recordTimeline(s, {event:'control_requested', request:{requestId:'r1', agentId:'caller', reason:'private-marker'}});
+  recordTimeline(s, exec('private-marker'));
+  importSavedActivity(s, [{action:'exec', actor:'human', cmd:'private-marker'}]);
+  assert.equal(s.items.length, 0);
+  assert.equal(JSON.stringify(s).includes('private-marker'), false);
+});
+
+test('restoration excludes old external automation payloads while keeping normal commands', () => {
   const s = newTimeline();
-  recordTimeline(s,{...grant(),originalRequest:{method:'request_control',params:{origin:'external_automation'}}});
-  recordTimeline(s,exec());
-  assert.equal(isExternalAutomation(s,s.items[1]),true);
-  importSavedActivity(s,[{action:'exec',actor:'AppleScript · PAM',cmd:'ssh example.invalid',policy:'allow'}]);
-  assert.equal(isExternalAutomation(s,s.items[2]),true);
-  recordTimeline(s,{event:'human_exec',cmd:'pwd'});
-  assert.equal(isExternalAutomation(s,s.items[3]),false);
+  importSavedActivity(s, [
+    {action:'exec', actor:'AppleScript · launcher', cmd:'private-marker'},
+    {action:'exec', actor:'human', cmd:'private-marker', externalPrivate:true},
+    {action:'exec', actor:'caller', cmd:'private-marker', origin:'external_automation'},
+    {action:'control_request_resolved', actor:'caller', reason:'private-marker', state:'denied', originalRequest:{method:'request_control',params:{origin:'external_automation'}}},
+    {action:'exec', actor:'human', cmd:'pwd'},
+  ]);
+  recordTimeline(s, {event:'human_exec', cmd:'private-marker', externalPrivate:true});
+  assert.deepEqual(s.items.map(item => item.text), ['pwd']);
+  assert.equal(JSON.stringify(s).includes('private-marker'), false);
+});
+
+
+test('shell execution updates the approved agent item by submission ID', () => {
+  const s = newTimeline();
+  recordTimeline(s, {event:'approval_requested',request:{id:'a1',agentId:'codex',cmd:'pwd',label:'review'}});
+  recordTimeline(s, {event:'approval_resolved',approvalId:'a1',state:'granted',by:'human'});
+  recordTimeline(s, {...exec(), submissionId:'sub-1'});
+  recordTimeline(s, {event:'shell_command_started',commandId:'cmd-1',submissionId:'sub-1',actor:'codex',cmd:'pwd',cwd:'/workspace'});
+  assert.equal(s.items.length,1); assert.equal(s.items[0].status,'running');
+  recordTimeline(s, {event:'shell_command_finished',commandId:'cmd-1',exitCode:0,durationMs:250});
+  assert.equal(s.items.length,1); assert.equal(s.items[0].status,'completed');
+  assert.deepEqual(commandDecisions(s.items[0]),['approved']);
+  assert.equal(s.items[0].cwd,'/workspace'); assert.equal(s.items[0].durationMs,250);
+});
+test('same-text human commands stay separate and unconfirmed completion is explicit', () => {
+  const s = newTimeline();
+  for (const id of ['one','two']) recordTimeline(s,{event:'shell_command_started',commandId:id,actor:'human',cmd:'pwd',cwd:'/tmp'});
+  recordTimeline(s,{event:'shell_command_finished',commandId:'one',exitCode:1,durationMs:20});
+  recordTimeline(s,{event:'shell_command_finished',commandId:'two',exitCode:null,durationMs:30});
+  assert.deepEqual(s.items.map(i=>i.status),['failed','unknown']);
+});
+test('saved shell lifecycle joins by ID and a missing finish never implies success', () => {
+  const s = newTimeline();
+  importSavedActivity(s,[
+    {action:'exec',actor:'codex',cmd:'pwd',submissionId:'s1',policy:'allow'},
+    {action:'shell_command_started',actor:'codex',commandId:'c1',submissionId:'s1',cmd:'pwd',cwd:'/tmp'},
+    {action:'shell_command_finished',commandId:'c1',exitCode:0,durationMs:10},
+    {action:'shell_command_started',actor:'human',commandId:'c2',cmd:'sleep 10',cwd:'/tmp'},
+  ]);
+  assert.deepEqual(s.items.map(i=>i.status),['completed','unknown']);
+  assert.ok(s.items.every(i=>i.saved));
+});
+test('private lifecycle events and saved records are ignored', () => {
+  const s = newTimeline(true);
+  recordTimeline(s,{event:'shell_command_started',commandId:'c1',actor:'human',cmd:'private'});
+  recordTimeline(s,{event:'shell_command_finished',commandId:'c1',exitCode:0,durationMs:1});
+  importSavedActivity(s,[{action:'shell_command_started',commandId:'c1',actor:'human',cmd:'private'}]);
+  assert.equal(s.items.length,0);
+});
+
+test('saved records stay in their own session, with legacy records separate', () => {
+  const entries = [
+    { action: 'exec', session: 'shell-a', actor: 'codex', cmd: 'pwd', policy: 'allow' },
+    { action: 'exec', session: 'shell-b', actor: 'codex', cmd: 'ls', policy: 'allow' },
+    { action: 'exec', actor: 'codex', cmd: 'date', policy: 'allow' },
+    { action: 'exec', session: 'private', actor: 'codex', cmd: 'secret', externalPrivate: true },
+  ];
+  const groups = savedTimelines(entries);
+  assert.deepEqual(Object.keys(groups), ['shell-a', 'shell-b', 'legacy']);
+  assert.equal(groups['shell-a'].items[0].text, 'pwd');
+  assert.equal(groups['shell-b'].items[0].text, 'ls');
+  assert.equal(groups.legacy.items[0].text, 'date');
+  assert.equal(groups['new-shell'], undefined);
+  recordTimeline(groups['shell-a'], exec('whoami'));
+  assert.equal(groups['shell-b'].items.length, 1);
 });

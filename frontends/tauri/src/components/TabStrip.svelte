@@ -1,12 +1,12 @@
 <script lang="ts">
   import { t, tabName } from "../lib/i18n.svelte";
-  import { st, tab } from "../lib/store.svelte";
+  import { st, tab, cur } from "../lib/store.svelte";
   import { agentColor } from "../lib/themes";
   import AppMenu from "./AppMenu.svelte";
   let { onselect, onclose, onnew, onsettings, onpalette, ontimeline }: { onpalette: () => void; ontimeline: () => void; onsettings: () => void; onselect: (id: string) => void; onclose: (id: string) => void; onnew: (profileId?: string) => void } = $props();
 </script>
 
-<div class="tabs">
+<div class="tabs" class:private={cur().externalPrivate}>
   <AppMenu onnew={() => onnew()} {onsettings} {onpalette} {ontimeline} />
   <div class="tablist" role="tablist" aria-label={t("g.tabs")}>
   {#each st.order as id, i (id)}
@@ -14,11 +14,12 @@
     {@const agent = tb.controller.type === "agent"}
     {@const waiting = tb.proposal?.ready ? tb.proposal : null}
     {@const c = agent ? agentColor(tb.controller.agentId) : tb.attention ? agentColor(tb.attention.agentId) : waiting ? agentColor(waiting.agentId) : "var(--muted)"}
-    <button class="tab" class:on={id === st.active} class:agent class:knock={!!tb.attention || !!tb.ctlReq || (!!waiting && id !== st.active)} class:paused={tb.paused} class:dead={!tb.processAlive}
+    <button class="tab" class:on={id === st.active} class:agent class:knock={!!tb.attention || !!tb.ctlReq || (!!waiting && id !== st.active)} class:paused={tb.paused} class:dead={!tb.processAlive && !tb.externalStarting}
             style:--c={c} role="tab" aria-selected={id === st.active} onmousedown={(e) => e.preventDefault()} onclick={() => onselect(id)} title={[tb.profileName, tb.title].filter(Boolean).join(" · ")}>
       <span class="dot"></span>
       <span class="n">{i + 1}</span>
       <span class="title">{tb.title}</span>
+      {#if tb.externalPrivate}<span class="badge" title={t("private.description")}>{t(tb.externalStarting ? "private.preparing" : "private.label")}</span>{/if}
       {#if tb.openedBy}<span class="by" style:--a={agentColor(tb.openedBy)} title={t("tab.opened.title", { agent: tb.openedBy })}>{tb.openedBy}</span>{/if}
       {#if tb.approval}<span class="badge warn">{t("badge.approval")}</span>{/if}
       {#if waiting && id !== st.active}<span class="badge prop" style:--a={agentColor(waiting.agentId)} title={t("badge.proposal.title", { agent: waiting.agentId })}>{t("badge.proposal", { agent: waiting.agentId })}</span>{/if}
@@ -28,12 +29,14 @@
     </button>
   {/each}
   </div>
-  <button class="new" onmousedown={(e) => e.preventDefault()} onclick={()=>onnew()} title={t("tab.new")}>+</button>
+  <button class="new" disabled={st.externalPending} onmousedown={(e) => e.preventDefault()} onclick={()=>onnew()} title={t("tab.new")}>+</button>
   <span class="spacer"></span>
 </div>
 
 <style>
   .tabs { position: absolute; top: 0; left: 0; right: 0; height: 44px; z-index: 18; display: flex; align-items: center; gap: 4px; padding: 8px 64px 6px 16px; }
+  .tabs.private { padding-right: min(380px, 56vw); }
+  .new:disabled { opacity: .4; cursor: default; }
   .tablist { display: flex; align-items: center; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
   .tab { flex-shrink: 0; display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 10px 0 9px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; max-width: 340px; transition: background .15s, color .15s, border-color .15s; }
   .tab:hover { background: var(--surface2); }

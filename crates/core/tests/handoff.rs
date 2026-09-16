@@ -147,6 +147,8 @@ fn hand_back_returns_control_to_last_agent() {
     assert_eq!(st.last_agent.as_ref().unwrap().last_cmd.as_deref(), Some("echo hi"));
     let info = h.session.hand_back().unwrap();
     assert_eq!(info.agent_id, "claude");
+    assert!(matches!(h.session.agent_type(1, "y"), Err(SessionError::InputPending)));
+    h.session.agent_interrupt(1).unwrap();
     assert!(h.session.agent_type(1, "y").is_ok());
     assert!(agent_events.lock().unwrap().iter().any(|e| matches!(e, ServerEvent::ControlHandedBack { last_cmd: Some(c), .. } if c == "echo hi")));
     assert!(names(&fe.lock().unwrap()).contains(&"control_handed_back".to_string()));

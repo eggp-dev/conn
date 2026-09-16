@@ -12,6 +12,12 @@ export type Analysis = { cwd: string | null; segments: SegmentVerdict[]; policy:
 export type TabState = {
   id: string;
   title: string;
+  /** Privacy is resolved before the terminal subscribes to output. */
+  statusReady: boolean;
+  shellIntegration: { state: string; shell?: string; reason?: string };
+  externalPrivate: boolean;
+  externalStarting: boolean;
+  externalInputAvailable: boolean;
   profileId: string | null;
   profileName: string | null;
   reviewRequired: boolean;
@@ -46,7 +52,7 @@ export type TabState = {
 
 export function newTab(id: string, n: number): TabState {
   return {
-    id, title: `Terminal ${n}`, profileId: null, profileName: null, reviewRequired: false, processAlive: true, policyBlockedUntil: 0, attended: false, entrustedTo: null, attention: null, openedBy: null,
+    id, title: `Terminal ${n}`, statusReady: false, shellIntegration: { state: "unavailable" }, externalPrivate: false, externalStarting: false, externalInputAvailable: false, profileId: null, profileName: null, reviewRequired: false, processAlive: true, policyBlockedUntil: 0, attended: false, entrustedTo: null, attention: null, openedBy: null,
     controller: { type: "human" }, mode: "autopilot", effectiveMode: "autopilot", gate: false,
     pacing: { minWriteIntervalMs: 0, enterGraceMs: 0, leaseTtlSecs: 60, approvalTtlSecs: 300 },
     mask: null, allows: [], agents: [], typing: false, proposal: null, approval: null, grace: null, ctlReq: null,
@@ -59,11 +65,13 @@ export type Announcement = { id: number; text: string; detail?: string; ms: numb
 
 export const st = $state({
   booted: false,
+  externalPending: false,
   backendOnline: false,
   socket: "",
   shell: "",
   tabs: {} as Record<string, TabState>,
   order: [] as string[],
+  pastTimelines: {} as Record<string, TimelineState>,
   active: "" as string,
   tabSeq: 0,
   toasts: [] as Toast[],
