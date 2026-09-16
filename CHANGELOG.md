@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 — Preview (release pending)
+## 0.3.0 — Preview · 2026-09-16
 
 First public preview of Conn, a shared terminal for humans and AI agents.
 
@@ -20,8 +20,10 @@ First public preview of Conn, a shared terminal for humans and AI agents.
 ### Correctness and distribution
 
 - Correct Windows shell termination reporting and tolerate a concurrent shell exit when closing a tab.
-- Document Ubuntu 24.04 release builds and 24.04/26.04 validation, unsigned Windows previews, and the Apple signing/notarization handoff in English and Korean.
-
+- Binary-first English and Korean onboarding with OS-specific download links and embedded collaboration videos.
+- Copy MCP JSON or Codex TOML from Settings using the bundled CLI and current endpoint; no Cargo installation or PATH setup required.
+- macOS release jobs use Developer ID signing and notarization for the app, sidecar, standalone CLI and disk image; Windows previews remain unsigned.
+- Keep the standard browser test launcher independent from manual recording port overrides.
 - Refuse to start a new shell when policy loading fails; preserve the last good rules on reload failure.
 - Preserve complete clean input for policy checks and audit even when long commands wrap across terminal rows.
 - English and Korean onboarding and contributor guides.
@@ -30,4 +32,4 @@ First public preview of Conn, a shared terminal for humans and AI agents.
 ### Preview limitations
 
 - Policy is a cooperative guard, not a sandbox. Completion/history edits still have reconstruction limits; see [the trust model](docs/security.md).
-- No detach/reattach or automatic updater. Release installers require platform smoke testing. Public macOS downloads await Developer ID signing/notarization; current ad-hoc builds are test artifacts. Windows previews intentionally ship without certificate signing. See [platform policy](docs/platform-support.md).
+- No detach/reattach or automatic updater. Release installers require platform smoke testing. Mac publication requires successful Developer ID signing and notarization checks. Windows previews intentionally ship without certificate signing. See [platform policy](docs/platform-support.md).

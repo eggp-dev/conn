@@ -1,57 +1,44 @@
-# macOS signing handoff
+# macOS release signing
 
-English · [한국어](macos-signing.ko.md) · [Platform policy](platform-support.md)
+English · [한국어](macos-signing.ko.md) · [Platform policy](platform-support.md) · [Release](releasing.md)
 
-**Status: preparation only.** Apple Developer enrollment and signing credentials
-are pending. The current workflow produces ad-hoc test packages; the steps below
-describe the work required to enable Developer ID distribution, not an already
-active signing integration.
+Public Mac packages must pass Developer ID signing and Apple notarization. This page defines the release pipeline and evidence required; it does not assert that a particular run has passed. Check that run's two `-signing.json` assets and release notes.
 
-## What the maintainer prepares
+GitHub-hosted `macos-15` and `macos-15-intel` runners build and sign the two architectures. The maintainer can operate this CI from Linux; a personal Mac is not required to execute each release job. Native first-run and GUI checks still need a Mac environment. See [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 
-1. Complete Apple Developer Program enrollment and locate the Team ID.
-2. On a Mac, generate a certificate signing request and create a **Developer ID
-   Application** certificate for distribution outside the Mac App Store. Keep its
-   private key, export the certificate/key as a password-protected `.p12`, and
-   record the full signing identity. App Store registration is not required for
-   GitHub downloads.
-3. Choose notarization credentials: Apple ID + an **app-specific password** +
-   Team ID is one option. An App Store Connect API key is an alternative.
-4. Create a protected GitHub Actions environment for release signing. Store
-   credentials directly in its secrets; do not paste them into an issue, PR,
-   chat, repository file or build log.
+## Six release secrets
 
-For the Apple ID route, the intended configuration is:
+Use the existing Apple ID notarization route. The macOS release jobs consume these six GitHub Actions secrets:
 
-| Name | Value |
+| Secret | Value |
 |---|---|
-| `APPLE_CERTIFICATE` | Base64-encoded `.p12`, including its private key |
-| `APPLE_CERTIFICATE_PASSWORD` | Password used to export the `.p12` |
+| `APPLE_CERTIFICATE` | Base64 `.p12` containing the Developer ID certificate and its private key |
+| `APPLE_CERTIFICATE_PASSWORD` | `.p12` export password |
 | `APPLE_SIGNING_IDENTITY` | Full Developer ID Application identity |
-| `KEYCHAIN_PASSWORD` | Separate temporary CI keychain password |
 | `APPLE_ID` | Apple account email |
 | `APPLE_PASSWORD` | App-specific password, not the account login password |
-| `APPLE_TEAM_ID` | Developer team ID |
+| `APPLE_TEAM_ID` | Developer Team ID |
 
-## Repository work after credentials are ready
+The job creates a random password for its temporary keychain. **Do not create a `KEYCHAIN_PASSWORD` secret.** Keep credentials in Actions secrets, never in repository files, issues, chats or logs. Pull-request builds do not receive these credentials. Protect the release workflow and refs; an optional protected Actions environment can add a review gate.
 
-- Limit signing credentials to the macOS release jobs and protected release
-  refs/environment. PR checks and ordinary builds need no signing secrets.
-- Import the certificate into a temporary runner keychain, replace the current
-  ad-hoc identity, and pass notarization credentials to Tauri. Fail the signing
-  build when required credentials are absent; do not fall back silently.
-- Build both Mac targets. Check the app and embedded `conn` sidecar. The
-  separately packaged CLI comes from the workspace's `target` directory;
-  signing the app does **not** establish that this separate CLI is signed.
-  Sign that binary with hardened runtime, submit it in an accepted notarization
-  container, and verify acceptance before packaging the final CLI archive.
-- Verify the application/DMG notarization and stapling. Recompute `SHA256SUMS`
-  **after** every signing/stapling change. Generate release notes describing the
-  actual signatures on each asset; the current template says ad-hoc.
-- Download the draft through a browser on Apple Silicon and Intel Macs, install
-  and run the [platform checklist](platform-support.md#release-verification-checklist).
+A valid Developer ID Application certificate includes its private key and must match the configured Team ID. Membership alone is not a certificate or proof that notarization passed. The workflow fails on missing or invalid credentials and has no ad-hoc fallback. [Tauri's signing guide](https://v2.tauri.app/distribute/sign/macos/) describes the certificate and notarization inputs.
 
-Example checks on the resulting app include:
+## Pipeline stages
+
+1. **Prepare.** Import the certificate into an ephemeral runner keychain; verify the Developer ID identity and Team match.
+2. **Build.** Tauri builds the app and bundled CLI, signs them, and performs app notarization and stapling.
+3. **Verify and notarize final assets.** Check strict signatures, hardened runtime and secure timestamps. Sign the standalone CLI separately, submit it in a ZIP to Apple, and require `Accepted`. Notarize and staple the final DMG, then inspect its mounted app and ticket. A bare CLI cannot be stapled; do not claim offline ticket availability for it.
+4. **Package and record evidence.** Collect the final DMG and CLI archive, then write one `conn-v0.3.0-<target>-signing.json` per Mac target. It records the source commit, submission IDs, acceptance, verification results and final asset hashes without certificate passwords, credential values or detailed notarization logs.
+5. **Gate upload.** Finalization requires both reports to match the final DMG and CLI archive. Only then are release checksums and a draft uploaded. The reports themselves are public assets covered by `SHA256SUMS`.
+6. **Clean up.** Always remove the temporary keychain and credential files and restore the previous keychain search list, including on failure.
+
+Signing the `.app` does not automatically sign the separately distributed CLI. All signing and stapling must finish before packaging and checksum generation. Rebuilding or altering an asset invalidates its prior hash-bound evidence.
+
+The JSON reports summarize the native CI checks; they are not independent signatures or attestations. The Apple signatures and notarization tickets belong to the distributed software.
+
+## Before public distribution
+
+Download the draft in a browser on Apple Silicon and Intel Macs. Confirm the signatures and tickets, then complete the [native interaction checklist](platform-support.md#release-verification-checklist). Typical app checks are:
 
 ```sh
 codesign --verify --deep --strict --verbose=2 /Applications/Conn.app
@@ -60,9 +47,4 @@ spctl --assess --type execute --verbose=4 /Applications/Conn.app
 xcrun stapler validate /Applications/Conn.app
 ```
 
-Check the identity and notarization result, not just command exit codes. Archive
-the non-secret verification results with the release evidence. Preserve existing
-public assets; any later change to a published binary needs a new version.
-
-Sources: [Tauri macOS signing and notarization](https://v2.tauri.app/distribute/sign/macos/),
-[Apple Developer enrollment](https://developer.apple.com/programs/enroll/).
+Inspect the reported identity and notarization evidence, not just an exit code. Record the tested OS version, asset hash, first-launch result and any untested behavior in release notes. Do not publish ad-hoc Mac artifacts as the notarized release or replace public assets after signing; ship a new version for changed binaries.

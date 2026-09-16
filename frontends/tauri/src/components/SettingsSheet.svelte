@@ -93,9 +93,46 @@
   // ---- appearance ----
   function setTheme(id: string) { st.theme = id as any; localStorage.setItem("ss:theme", id); }
 
+  // ---- connect an external agent ----
+  type CliStatus = { canConfigure: boolean; canInstall: boolean; bundled: string | null; onPath: string | null };
+  type AgentConfiguration = { command: string; endpoint: string; mcpJson: string; codexToml: string };
+  let setupStatus = $state<CliStatus | null>(null);
+  let setupLoading = $state(false);
+  let setupBusy = $state(false);
+  let setupError = $state("");
+  let config = $state<AgentConfiguration | null>(null);
+  let configFormat = $state<"mcpJson" | "codexToml">("mcpJson");
+  let showConfiguration = $state(false);
+  const configText = $derived(config?.[configFormat] ?? "");
+  async function loadSetup() {
+    setupLoading = true;
+    setupError = "";
+    try { setupStatus = await cmd<CliStatus>("cli_status"); }
+    catch (e) { setupError = t("s.connect.load_failed", { error: String(e) }); }
+    finally { setupLoading = false; }
+  }
+  async function copyAgentConfiguration() {
+    setupBusy = true;
+    setupError = "";
+    try {
+      // Creating an AppImage's stable CLI copy happens only on this explicit action.
+      config = await cmd<AgentConfiguration>("agent_configuration");
+      try {
+        await navigator.clipboard.writeText(config[configFormat]);
+        toast(t("s.connect.copied"), "ok");
+      } catch {
+        showConfiguration = true;
+        setupError = t("s.connect.copy_failed");
+        toast(t("copy.failed"), "warn");
+      }
+    } catch (e) { setupError = t("s.connect.failed", { error: String(e) }); }
+    finally { setupBusy = false; }
+  }
+  $effect(() => { if (st.settingsTab === "agents") loadSetup(); });
+
   // ---- diagnostics ----
   let diag = $state<any>(null);
-  async function loadDiag() { diag = await cmd("diagnostics"); }
+  async function loadDiag() { try { diag = await cmd("diagnostics"); } catch (e) { toast(String(e), "danger"); } }
   $effect(() => { if (st.settingsTab === "diagnostics") loadDiag(); });
 
   function key(e: KeyboardEvent) { if (e.key === "Escape") onclose(); }
@@ -123,6 +160,26 @@
       {#if st.settingsTab === "profiles"}
         <ProfilesPane />
       {:else if st.settingsTab === "agents"}
+        <div class="agent-setup">
+          <h3>{t("s.connect.title")}</h3>
+          <p class="muted">{t("s.connect.hint")}</p>
+          <label class="config-format">{t("s.connect.format")}
+            <select bind:value={configFormat} disabled={setupBusy}>
+              <option value="mcpJson">MCP JSON</option>
+              <option value="codexToml">Codex TOML</option>
+            </select>
+          </label>
+          <button class="btn primary" disabled={setupBusy || !setupStatus?.canConfigure} onclick={copyAgentConfiguration}>{setupBusy ? t("s.connect.preparing") : t("s.connect.copy")}</button>
+          {#if !setupLoading && setupStatus && !setupStatus.canConfigure}<p class="muted">{t("s.connect.missing")}</p>{/if}
+          {#if setupError}<p class="setup-error" role="alert">{setupError}</p>{/if}
+          {#if !setupLoading && !setupStatus}<button class="btn" onclick={loadSetup}>{t("s.connect.retry")}</button>{/if}
+          {#if config}
+            <details bind:open={showConfiguration}>
+              <summary>{t("s.connect.view")}</summary>
+              <textarea readonly value={configText} aria-label={t("s.connect.view")} spellcheck="false" onfocus={(event) => event.currentTarget.select()}></textarea>
+            </details>
+          {/if}
+        </div>
         <h3>{t("mode")}</h3>
         <div class="seg">
           {#each ["observe", "copilot", "autopilot"] as id}
@@ -263,7 +320,8 @@
             <dt>{t("s.diag.audit")}</dt><dd><code>{diag.auditPath}</code> <span class="muted">· {t("s.diag.log")}</span></dd>
             <dt>{t("s.diag.cli")}</dt>
             <dd class="rowdd">{#if diag.cli.onPath}<code>{diag.cli.onPath}</code>{:else}<span class="muted">{t("s.diag.cli.none")}</span>{/if}
-              <button class="btn mini" onclick={async () => { try { toast(t("cli.installed", { path: await cmd<string>("install_cli") }), "ok"); loadDiag(); } catch (e) { toast(String(e), "danger"); } }}>{diag.cli.onPath ? t("s.diag.cli.relink") : t("s.diag.cli.install")}</button></dd>
+              {#if diag.cli.canInstall}<button class="btn mini" onclick={async () => { try { toast(t("cli.installed", { path: await cmd<string>("install_cli") }), "ok"); loadDiag(); } catch (e) { toast(String(e), "danger"); } }}>{t("s.diag.cli.install")}</button>{/if}</dd>
+            {#if diag.cli.canConfigure}<dt>{t("s.connect.title")}</dt><dd><button class="btn mini" onclick={() => st.settingsTab = "agents"}>{t("s.connect.copy")}</button></dd>{/if}
             <dt>{t("s.diag.plugins")}</dt>
             <dd class="plugins">
               {#each [["claude", "Claude Code"], ["copilot", "Copilot CLI"], ["codex", "Codex CLI"]] as [id, name]}
@@ -285,19 +343,19 @@
   .scope button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; background: transparent; color: var(--muted); padding: 5px 8px; border-radius: 8px; cursor: pointer; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .scope button.on { background: var(--surface); color: var(--fg); font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,.18); }
   .scope .dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; }
-  .body { display: grid; grid-template-columns: 130px 1fr; flex: 1; min-height: 0; }
+  .body { display: grid; grid-template-columns: 130px minmax(0, 1fr); flex: 1; min-height: 0; }
   nav { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-right: 1px solid var(--line); }
   nav button { text-align: left; background: transparent; border: 0; padding: 8px 10px; border-radius: 8px; cursor: pointer; color: var(--muted); font-size: 12.5px; }
   nav button.on { background: var(--surface2); color: var(--fg); font-weight: 600; }
   nav .spacer { flex: 1; }
   nav .small { font-size: 10.5px; margin: 0 4px 6px; line-height: 1.4; }
   nav .link { color: var(--agent); font-size: 11.5px; padding: 6px 8px; }
-  section { padding: 14px 18px; overflow: auto; }
+  section { min-width: 0; padding: 14px 18px; overflow: auto; }
   h3 { margin: 18px 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); display: flex; gap: 8px; align-items: baseline; }
   h3:first-child { margin-top: 4px; }
   h3 em { text-transform: none; letter-spacing: 0; font-style: normal; font-weight: 400; }
   h3 .v { margin-left: auto; color: var(--fg); font-weight: 600; text-transform: none; letter-spacing: 0; font-variant-numeric: tabular-nums; }
-  .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .seg button { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; background: var(--surface2); border: 1px solid var(--line); border-radius: 10px; padding: 10px; cursor: pointer; text-align: left; }
   .seg button span { color: var(--muted); font-size: 11px; }
   .seg button.on { border-color: var(--agent); box-shadow: 0 0 0 1px var(--agent) inset; }
@@ -307,11 +365,12 @@
   .pill { background: var(--surface2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px; cursor: pointer; font-size: 12px; color: var(--muted); }
   .pill.on { color: var(--fg); border-color: var(--agent); box-shadow: 0 0 0 1px var(--agent) inset; }
   .pill.mono { font-family: var(--font-mono); font-size: 11px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tools { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; }
+  .tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 6px 16px; }
+  .tg { min-width: 0; }
   .tg b { display: block; font-size: 11px; color: var(--muted); margin: 6px 0 2px; }
   .tool { margin: 2px 0; font-size: 12px; gap: 6px; min-width: 0; }
   .tool code { flex: 0 0 auto; }
-  .tool span { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tool span { min-width: 0; flex: 1; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .agent { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
   .agent b { color: var(--a); }
   .agent .sw { background: var(--a); }
@@ -359,6 +418,15 @@
   .tcard .sw { display: flex; gap: 4px; width: auto; height: auto; }
   .tcard .sw i { width: 14px; height: 14px; border-radius: 4px; background: var(--ts); }
   .tcard .sw i:nth-child(2) { background: var(--agent); } .tcard .sw i:nth-child(3) { background: var(--tfg); }
+  .agent-setup { margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+  .agent-setup p { font-size: 12px; line-height: 1.55; }
+  .config-format { display: flex; align-items: center; gap: 10px; margin: 12px 0; font-size: 12px; }
+  .config-format select { background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; }
+  .agent-setup details { margin-top: 12px; font-size: 12px; }
+  .agent-setup summary { cursor: pointer; color: var(--muted); }
+  .agent-setup textarea { min-height: 170px; line-height: 1.5; }
+  .agent-setup .setup-error { color: var(--danger); overflow-wrap: anywhere; }
+  .agent-setup button:disabled { opacity: .55; cursor: default; }
   .diag { display: grid; grid-template-columns: 110px 1fr; gap: 10px 12px; margin: 4px 0; font-size: 12px; align-items: center; }
   .diag dt { color: var(--muted); }
   .diag dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }

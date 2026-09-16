@@ -9,5 +9,5 @@ serde.workspace = true
 serde_json.workspace = true
 parking_lot.workspace = true
 
-[dev-dependencies]
+sha2 = "0.10"
 tempfile.workspace = true

@@ -2,83 +2,59 @@
 
 English · [한국어](platform-support.ko.md) · [Install](getting-started.md) · [Release](releasing.md)
 
-Conn distributes its MIT-licensed source and native binaries through GitHub
-Releases. One Rust engine and one Svelte UI serve all desktop platforms. The
-browser harness is a development adapter to that engine.
+Conn provides its MIT-licensed source and native binaries through [GitHub Releases](https://github.com/eggplantiny/conn/releases/tag/v0.3.0). All desktop packages use the same Rust engine and Svelte UI. The browser harness is a development adapter.
 
-## First preview policy
+## v0.3.0 preview targets
 
-These are release targets. A target becomes a tested platform only when the
-corresponding release asset passes the checklist below; see the dated
-[verification record](backend-verification.md) for evidence.
+This table defines the build and distribution contract. It does not claim that every target has passed interactive testing. Each release must identify its actual build, signing, installation, and runtime results; dated evidence also lives in [backend verification](backend-verification.md).
 
-| Platform | Release build host | Files | Publication policy |
+| Target | Build runner | Files | Distribution policy |
 |---|---|---|---|
-| Ubuntu 24.04 and 26.04, x64 | GitHub `ubuntu-24.04` | `.deb`, `.AppImage`, CLI `.tar.gz` | Verify the same CI assets on both Ubuntu versions. |
-| Windows x64 | GitHub `windows-2022` | NSIS `.exe`, CLI `.zip` | Unsigned preview is intentional; disclose publisher/SmartScreen prompts. Test on a Windows desktop before publication. |
-| macOS Apple Silicon | GitHub `macos-15` | `.dmg`, CLI `.tar.gz` | Public distribution will use Developer ID signing and notarization after Apple enrollment. Current ad-hoc artifacts are for testing. |
-| macOS Intel | GitHub `macos-15-intel` | `.dmg`, CLI `.tar.gz` | Same signing policy; validate independently on Intel hardware. |
+| Ubuntu 24.04 / 26.04 x64 | `ubuntu-24.04` | `.deb`, `.AppImage`, CLI `.tar.gz` | Build on 24.04; record runtime results for both Ubuntu versions. |
+| Windows x64 | `windows-2022` | NSIS `.exe`, CLI `.zip` | Intentionally unsigned preview. Disclose installer prompts and Windows desktop checks. |
+| macOS Apple Silicon | `macos-15` | `.dmg`, CLI `.tar.gz` | Developer ID signatures and accepted notarization required for public assets. |
+| macOS Intel | `macos-15-intel` | `.dmg`, CLI `.tar.gz` | Same signing gate; record Intel runtime results separately. |
 
-The Tauri config currently declares macOS 12.0 as its deployment minimum. That
-setting is not evidence of a tested minimum. Windows Server CI is likewise not
-proof of Windows desktop/WebView2 behavior. List actual tested OS versions in each
-release. Linux ARM, Windows ARM, Ubuntu 22.04 and other Linux distributions have
-no binary compatibility commitment in this preview.
+Download the correct installer from [Getting started](getting-started.md). The desktop includes its matching CLI; **Settings → Agents → Connect your agent** copies configuration using the CLI's absolute path and the current endpoint. Desktop users do not need Rust, Node.js, or a `PATH` change.
 
-### Linux: build once on the oldest intended Ubuntu
+### Linux
 
-The development host uses Ubuntu 26.04. A local build there can depend on newer
-glibc or system libraries, so it must not replace the Ubuntu 24.04 release build.
-AppImage also has a system-library baseline; it is not a guarantee of universal
-Linux compatibility. Keep the release runner pinned to `ubuntu-24.04`, including
-the CLI sidecar, and validate its output on clean 24.04 and 26.04 installations.
-See [Tauri's AppImage guidance](https://v2.tauri.app/distribute/appimage/).
+Release binaries, including the CLI, are built on Ubuntu 24.04. A local build on newer Ubuntu can require newer glibc or system libraries and must not replace the release baseline. Test the same downloaded `.deb` and AppImage on 24.04 and 26.04, including a graphical session. AppImage still has system-library requirements. See [Tauri's AppImage guide](https://v2.tauri.app/distribute/appimage/).
 
-### Windows: unsigned first
+### Windows
 
-A Windows certificate is not a prerequisite for this preview. Distribute the
-unsigned installer and CLI with SHA-256 checksums and an explicit signing note.
-SmartScreen or an unknown-publisher prompt may appear; managed machines may block
-installation. Do not ask users to disable system protection. Certificates or a
-signing service can be added later. Windows signing is separate from Apple's
-notarization process. See [Tauri's Windows signing guide](https://v2.tauri.app/distribute/sign/windows/).
+A signing certificate is not required for this preview. SmartScreen or an unknown-publisher prompt may appear; managed machines may block installation. Release notes must say the installer and CLI are unsigned. Do not instruct users to disable system protection. Windows signing can be added independently later. See [Tauri's Windows signing guide](https://v2.tauri.app/distribute/sign/windows/).
 
-### macOS: enrollment, then signing
+A Windows Server CI build does not establish Windows desktop, WebView2, or interactive ConPTY compatibility. Record the desktop OS, shell and installer behavior actually tested.
 
-Apple enrollment is pending. The current workflow uses
-`APPLE_SIGNING_IDENTITY=-`: ad-hoc signing, without notarization. Keep these
-packages in testing/draft status. Enrollment alone does not configure CI; follow
-the [macOS signing checklist](macos-signing.md) before public Mac downloads.
+### macOS
+
+The [signing pipeline](macos-signing.md) uses GitHub-hosted Mac runners, Developer ID Application credentials, and Apple notarization. It requires signatures for the app, embedded CLI and standalone CLI; app and DMG tickets are stapled. A bare CLI is notarized in a ZIP submission but cannot carry a stapled ticket itself.
+
+Both Mac targets produce a public `-signing.json` report bound to the final asset hashes. A successful signing report demonstrates those checks, not a completed first-run GUI test. Verify a fresh browser download on each architecture before claiming that interaction is tested.
+
+Tauri declares macOS 12.0 as the deployment minimum; this is not a tested-minimum claim. Linux ARM, Windows ARM, Ubuntu 22.04 and other Linux distributions are outside this preview's binary compatibility commitment.
 
 ## Release verification checklist
 
-Run against the downloaded draft artifacts, not only a development checkout.
-Record the tag/commit, asset name and SHA-256, OS version, CPU architecture, shell,
-desktop session (Wayland/X11 on Linux), and pass/fail observations.
+Use the downloaded release candidates. Record tag/commit, filename and SHA-256, OS version, CPU, shell, and Linux display session. Mark each check **passed**, **failed**, or **not tested**; do not convert a CI pass into a native interaction claim.
 
-- [ ] Verify the checksum, install the desktop and extract the CLI on a clean user account or VM.
-- [ ] Launch without Node.js, Rust or the development server installed; check `conn --version` and the bundled CLI in Diagnostics.
-- [ ] Type, paste, resize and open/close several tabs; confirm the shell exits when its tab closes.
-- [ ] Test a local shell: bash on Ubuntu; PowerShell and cmd.exe on Windows; zsh on each Mac architecture.
-- [ ] Connect an agent via `conn mcp`, read a disposable file, and inspect the original request in Timeline.
-- [ ] Deny a deletion and confirm the file remains; approve a separate deletion and confirm its outcome.
-- [ ] Cancel execution during grace, reclaim control by typing, and verify that the agent stops writing.
-- [ ] Check English/Korean, keyboard focus, wrapping, and reduced motion in the native app.
-- [ ] Close/reopen the app, check saved settings/timeline, and uninstall the desktop. Record what user data remains.
-- [ ] On Ubuntu, test both `.deb` and AppImage on 24.04 and 26.04, including a real graphical session.
-- [ ] On Windows, record installer trust prompts, WebView2 availability, and named-pipe connection/cleanup. Test WSL only if advertising it as verified.
-- [ ] On macOS, verify app, sidecar and standalone CLI signatures, notarization and a fresh browser download on both architectures.
+- [ ] Match the checksum and install in a clean account or VM.
+- [ ] Launch without Rust, Node.js or a development server. Check the bundled CLI path and copy agent configuration from Settings.
+- [ ] Connect an external agent with that copied configuration; read the screen and a disposable file.
+- [ ] Type, paste, resize, open/close tabs, and confirm the shell ends with its tab.
+- [ ] Verify bash on Ubuntu, PowerShell and cmd.exe on Windows, and zsh on each Mac architecture.
+- [ ] Approve a request, deny a separate request, cancel execution grace, and take control by typing. Check the actual shell outcome and original request in Timeline.
+- [ ] Check English/Korean, keyboard focus, wrapping and reduced motion in the native app.
+- [ ] Reopen the app to check saved settings/timeline, then uninstall and record retained user data.
+- [ ] Ubuntu: test both package formats on 24.04 and 26.04 with a real graphical session.
+- [ ] Windows: record trust prompts, WebView2 readiness, and named-pipe connection/cleanup.
+- [ ] macOS: inspect both signing reports and test fresh downloaded app/CLI execution on Apple Silicon and Intel.
 
-SSH, Docker, WSL and Git Bash are profile options. Mark them verified only after
-testing the actual external environment. Automated builds, PTY tests, package
-creation and native interaction remain separate evidence.
+SSH, Docker, WSL and Git Bash are profile options. Claim verified support only for external environments actually tested. A build, a package, a signing check and interactive use are separate evidence.
 
 ## Publication and updates
 
-The workflow creates a **draft prerelease** with nine binaries and `SHA256SUMS`.
-A maintainer reviews evidence and publishes explicitly. While Apple setup is
-pending, a complete three-platform draft can remain unpublished; do not silently
-substitute ad-hoc Mac packages for the intended notarized release.
+The workflow prepares a **draft prerelease** with nine binaries/installers, two Mac signing reports, and `SHA256SUMS`. It does not publish automatically. Missing or failed Mac signing evidence blocks the release draft upload; unsigned Windows assets are the explicit preview policy.
 
-Updates are manual: download a newer release. There is no in-app updater, updater
-signing key, app-store listing or hosted package repository in this preview.
+Before publishing, maintainers review the [release checks](releasing.md), record runtime results and limitations, and confirm that download links match the assets. Updates are manual downloads. This preview has no in-app updater, updater signing key, app-store listing or hosted package repository.
