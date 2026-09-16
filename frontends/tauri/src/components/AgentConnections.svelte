@@ -49,7 +49,7 @@
 
 <section class="connections" aria-labelledby="connections-title">
   <header><h3 id="connections-title">{t("agents.title")}</h3><button class="link" disabled={!!busy} onclick={refresh}>{t("agents.refresh")}</button></header>
-  <p class="intro">{t("agents.intro")}</p>
+
   {#if error}<p class="error" role="alert">{error}</p>{/if}
   {#if notice}<p class="notice" role="status">{notice}</p>{/if}
   {#if !catalog && !error}<p class="intro">{t("agents.loading")}</p>{/if}
@@ -62,7 +62,7 @@
             <div class="identity"><h4>{client.name}</h4><span class="state" class:attention={client.state === "conflict" || client.state === "needs_update"}>{t(`agents.state.${client.state}`)}</span></div>
             {#if client.connected}<span class="live"><i></i>{t("agents.connected")}</span>{/if}
           </div>
-          <p class="client-hint">{t(`agents.hint.${client.id}`)}</p>
+
           <div class="actions">
             <button class="btn" class:primary={!client.managed} disabled={!!busy || !catalog.canConfigure || client.state === "conflict" || client.state === "external"} onclick={() => act(client, "install")}>
               {busy === client.id ? t("agents.working") : t(client.managed ? "agents.update" : "agents.install")}
@@ -73,6 +73,8 @@
           {#if client.state === "external"}<p class="client-hint">{t("agents.external")}</p>{/if}
           <details>
             <summary>{t("agents.details")}</summary>
+            <p class="client-hint">{t(`agents.hint.${client.id}`)}</p>
+            <p class="client-hint">{t("agents.intro")}</p>
             <dl><dt>{t("agents.config")}</dt><dd>{client.configPath}</dd><dt>{t("agents.skill")}</dt><dd>{client.skillPath}</dd></dl>
             <p class="client-hint">{t("agents.personal")}</p>
             <button class="link" disabled={!!busy || !catalog.canConfigure} onclick={() => copy(client)}>{t("agents.manual")}</button>
@@ -81,7 +83,7 @@
         </article>
       {/each}
     </div>
-    <p class="footnote">{t("agents.verify")}</p>
+    <details><summary>{t("s.connectionStatus")}</summary><p class="footnote">{t("agents.verify")}</p></details>
   {/if}
 </section>
 
@@ -93,8 +95,10 @@
   h4 { margin: 0; font-size: 13px; font-weight: 600; }
   p { line-height: 1.6; }
   .intro, .footnote { color: var(--muted); font-size: 12px; margin: 9px 0 14px; }
-  .clients { display: grid; gap: 10px; }
-  .client { min-width: 0; border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: var(--bg); transition: border-color 180ms ease; }
+  .clients { display: grid; gap: 0; margin-top: 8px; }
+  .client { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 12px; min-width: 0; border-bottom: 1px solid var(--line); padding: 10px 0; }
+  .client > details, .client > p { grid-column: 1 / -1; }
+  .client details { margin-top: 0; }
   .client.connected { border-color: color-mix(in srgb, var(--ok, #35cba1) 45%, var(--line)); }
   .client-top { justify-content: space-between; gap: 6px; }
   .state { font-size: 10px; color: var(--muted); border: 1px solid var(--line); padding: 2px 6px; border-radius: 5px; }

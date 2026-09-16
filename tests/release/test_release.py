@@ -1,5 +1,6 @@
 """Release contract tests; no network or platform toolchain required."""
 import importlib.util
+import base64
 import json
 import os
 import subprocess
@@ -70,7 +71,45 @@ class ReleaseTests(unittest.TestCase):
                                            for kind in ("cli", "dmg")},
                           "assets": {name: release.sha256(self.out / name) for name in release.asset_names(self.version, target)}}
                 (self.out / release.signing_name(self.version, target)).write_text(json.dumps(report))
+        # Structural test fixture only: runtime cryptographic verification is separate.
+        signature = base64.b64encode(("untrusted comment: fixture\n" + base64.b64encode(bytes(74)).decode() + "\ntrusted comment: fixture\n" + base64.b64encode(bytes(64)).decode() + "\n").encode()).decode()
+        for target in release.TARGETS:
+            name = release.update_asset(self.version, target)
+            if target.endswith("apple-darwin"):
+                (self.out / name).write_bytes(b"notarized updater archive fixture")
+                path = self.out / release.signing_name(self.version, target)
+                report = json.loads(path.read_text())
+                report["updater"] = {"archive": name, "sha256": release.sha256(self.out / name), "containedAppVerified": True}
+                path.write_text(json.dumps(report))
+            (self.out / (name + ".sig")).write_text(signature)
         release.finalize(self.out, self.tag, self.sha, self.root)
+
+    def test_updater_manifest_is_complete_and_tied_to_public_assets(self):
+        self.complete_assets()
+        manifest = release.read_json(self.out / "latest.json")
+        self.assertEqual(manifest["version"], self.version)
+        self.assertEqual(set(manifest["platforms"]), {"darwin-aarch64", "linux-x86_64", "windows-x86_64"})
+        for entry in manifest["platforms"].values():
+            self.assertTrue(entry["url"].startswith(f"{release.REPOSITORY}/releases/download/{self.tag}/conn-{self.tag}-"))
+            self.assertTrue((self.out / entry["url"].rsplit("/", 1)[1]).is_file())
+        sig = next(self.out.glob("*.sig")); sig.write_text("corrupt")
+        with self.assertRaisesRegex(release.ReleaseError, "signature"):
+            release.finalize(self.out, self.tag, self.sha, self.root)
+
+    def test_missing_update_and_changed_macos_archive_block_release(self):
+        self.complete_assets()
+        app = self.out / release.update_asset(self.version, "aarch64-apple-darwin")
+        app.write_bytes(b"changed archive")
+        with self.assertRaisesRegex(release.ReleaseError, "notarized-app"):
+            release.finalize(self.out, self.tag, self.sha, self.root)
+        app.unlink()
+        with self.assertRaises(release.ReleaseError):
+            release.finalize(self.out, self.tag, self.sha, self.root)
+
+    def test_license_is_bundled_without_dmg_agreement(self):
+        config = release.read_json(self.root / "frontends/tauri/src-tauri/tauri.conf.json")
+        self.assertNotIn("licenseFile", config["bundle"])
+        self.assertEqual(config["bundle"]["resources"]["../../../LICENSE"], "LICENSE")
 
     def test_versions_and_exact_tag(self):
         self.assertEqual(release.check(self.root, self.tag), self.version)
@@ -172,7 +211,7 @@ class ReleaseTests(unittest.TestCase):
     def test_finalize_requires_exact_matrix_and_checksums_every_asset(self):
         self.complete_assets()
         manifest = (self.out / "SHA256SUMS").read_text()
-        self.assertEqual(len(manifest.splitlines()), 8)
+        self.assertEqual(len(manifest.splitlines()), 13)
         for line in manifest.splitlines():
             digest, filename = line.split("  ")
             self.assertEqual(digest, release.sha256(self.out / filename))
@@ -214,7 +253,7 @@ class ReleaseTests(unittest.TestCase):
         expected = {str((self.out / name).resolve()) for name in release.release_names(self.version)}
         expected.add(str((self.out / "SHA256SUMS").resolve()))
         self.assertEqual(set(upload[upload.index("--clobber") + 1:]), expected)
-        self.assertEqual(len(expected), 9)
+        self.assertEqual(len(expected), 14)
 
     @unittest.skipUnless(os.name == "posix", "POSIX directory symlinks unavailable")
     def test_draft_uploads_resolved_paths_through_a_tempdir_symlink(self):

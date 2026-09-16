@@ -249,15 +249,17 @@ def inspect_dmg(dmg: Path, team: str, expected_app):
     with tempfile.TemporaryDirectory(prefix="conn-dmg-") as directory:
         mount = Path(directory) / "volume"
         mount.mkdir()
-        # Tauri embeds this project's MIT LICENSE as the DMG's agreement. Answer
-        # that prompt over a pipe so CI cannot hang or refuse the mount on EOF.
-        # Keep the signed image unchanged; do not convert it to remove the EULA.
+        # Mount with closed stdin: a license agreement must fail rather than be accepted.
         command(["hdiutil", "attach", dmg, "-plist", "-readonly", "-nobrowse", "-mountpoint", mount],
-                "Mount final DMG", input_text="Y\n")
+                "Mount final DMG", input_text="")
         try:
             apps = list(mount.glob("*.app"))
             if len(apps) != 1:
                 raise release.ReleaseError("Final DMG must contain exactly one app")
+            if not (apps[0] / "Contents/Resources/LICENSE").is_file():
+                raise release.ReleaseError("Final app is missing the bundled license")
+            if not (mount / "Applications").is_symlink() or os.readlink(mount / "Applications") != "/Applications":
+                raise release.ReleaseError("Final DMG is missing the Applications destination link")
             received = app_evidence(apps[0], team)
             for key in ("bundle", "desktop", "sidecar"):
                 if received[key]["cdhash"] != expected_app[key]["cdhash"]:

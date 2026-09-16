@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { newTimeline, recordTimeline, visibleTimeline, timelineSteps, importSavedActivity, commandDecisions, isExternalAutomation } from '../../src/lib/timeline.ts';
+import { newTimeline, recordTimeline, visibleTimeline, timelineSteps, importSavedActivity, savedTimelines, commandDecisions, isExternalAutomation } from '../../src/lib/timeline.ts';
 const request = (id = 'r1', actor = 'codex') => ({ event: 'control_requested', request: { requestId: id, agentId: actor, reason: 'Inspect a file' } });
 const grant = (actor = 'codex', lease = 'l1') => ({ event: 'control_granted', agentId: actor, lease, reason: 'Inspect a file' });
 const exec = (cmd = 'pwd', policy = 'allow') => ({ event: 'agent_exec', agentId: 'codex', cmd, policy });
@@ -228,4 +228,21 @@ test('private lifecycle events and saved records are ignored', () => {
   recordTimeline(s,{event:'shell_command_finished',commandId:'c1',exitCode:0,durationMs:1});
   importSavedActivity(s,[{action:'shell_command_started',commandId:'c1',actor:'human',cmd:'private'}]);
   assert.equal(s.items.length,0);
+});
+
+test('saved records stay in their own session, with legacy records separate', () => {
+  const entries = [
+    { action: 'exec', session: 'shell-a', actor: 'codex', cmd: 'pwd', policy: 'allow' },
+    { action: 'exec', session: 'shell-b', actor: 'codex', cmd: 'ls', policy: 'allow' },
+    { action: 'exec', actor: 'codex', cmd: 'date', policy: 'allow' },
+    { action: 'exec', session: 'private', actor: 'codex', cmd: 'secret', externalPrivate: true },
+  ];
+  const groups = savedTimelines(entries);
+  assert.deepEqual(Object.keys(groups), ['shell-a', 'shell-b', 'legacy']);
+  assert.equal(groups['shell-a'].items[0].text, 'pwd');
+  assert.equal(groups['shell-b'].items[0].text, 'ls');
+  assert.equal(groups.legacy.items[0].text, 'date');
+  assert.equal(groups['new-shell'], undefined);
+  recordTimeline(groups['shell-a'], exec('whoami'));
+  assert.equal(groups['shell-b'].items.length, 1);
 });

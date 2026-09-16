@@ -18,7 +18,7 @@
   import Timeline from "./components/Timeline.svelte";
   import Toasts from "./components/Toasts.svelte";
   import HandoffWash from "./components/HandoffWash.svelte";
-  import { newTimeline, recordTimeline, importSavedActivity } from "./lib/timeline";
+  import { newTimeline, recordTimeline, savedTimelines } from "./lib/timeline";
   import { invoke, listen } from "./lib/transport";
   import { cmd, changeMode, onEvent, onTabOpened, log, type Pacing } from "./lib/bridge";
   import { st, cur, tab, tabIndex, newTab, toast, announce, type TabState } from "./lib/store.svelte";
@@ -120,6 +120,8 @@
     const idx = st.order.indexOf(id);
     await invoke("close_tab", { session: id });
     st.order = st.order.filter((x) => x !== id);
+    const closed = tab(id);
+    if (closed && !closed.externalPrivate && closed.timeline.items.length) st.pastTimelines[id] = closed.timeline;
     delete st.tabs[id];
     delete terms[id];
     if (st.active === id) { const next = st.order[Math.max(0, idx - 1)]; st.active = next; await invoke("attend", { session: next }); terms[next]?.refit(); focusTerm(); }
@@ -189,9 +191,18 @@
     (q) => { const m = q.match(/^(?:theme|테마)\s+(\w+)$/i); if (!m) return []; const th = Object.values(THEMES).find((x) => x.id.startsWith(m[1].toLowerCase()) || x.name.toLowerCase().startsWith(m[1].toLowerCase())); if (!th) return []; return [{ id: "set-theme", group: "theme", label: tr("a.theme", { name: th.name }), run: () => setTheme(th.id) }]; },
   ];
 
+  let handbackHeight = $state(0);
+  let timelineHeight = $state(0);
+  const handbackSpace = $derived(cur().externalPrivate || !cur().handback ? 0 : handbackHeight);
+  const timelineSpace = $derived(cur().externalPrivate || !st.timelineOpen || !timelineHeight ? 0 : timelineHeight + 10);
   function onKey(e: KeyboardEvent) {
     if (!appShortcut(e)) {
-      if (e.key === "Escape" && (st.paletteOpen || st.settingsOpen || st.timelineOpen || st.centerOpen)) { st.paletteOpen = false; st.settingsOpen = false; st.timelineOpen = false; st.centerOpen = false; focusTerm(); }
+      if (e.key === "Escape" && (st.paletteOpen || st.settingsOpen || st.timelineOpen || st.centerOpen || cur().handback)) {
+        e.preventDefault();
+        st.paletteOpen = false; st.settingsOpen = false; st.timelineOpen = false; st.centerOpen = false;
+        cur().handback = false;
+        focusTerm();
+      }
       return;
     }
     const key = shortcutKey(e);
@@ -351,7 +362,14 @@
       for (const id of info.sessions) await syncStatus(id);
       if (st.active && !cur().externalPrivate) {
         const tail = await invoke<any[]>("audit_tail", { n: 60 });
-        importSavedActivity(cur().timeline, tail);
+        const saved = savedTimelines(tail);
+        for (const [id, history] of Object.entries(saved)) {
+          const live = tab(id);
+          if (live?.externalPrivate) continue;
+          // Live events win if they arrived while startup was reading the audit.
+          if (live && !live.timeline.items.length) live.timeline = history;
+          else if (!live) st.pastTimelines[id] = history;
+        }
       }
       st.booted = true; st.backendOnline = true;
       await tick();
@@ -367,7 +385,7 @@
 
 <svelte:window onkeydown={onKey} />
 
-<main class="app" class:agent={cur().controller.type === "agent"} class:asking={!!cur().ctlReq || !!cur().attention} style:--term-right={st.settingsOpen ? "616px" : "16px"} style:--agent={cur().controller.type === "agent" ? agentColor(cur().controller.agentId) : cur().ctlReq ? agentColor(cur().ctlReq?.agentId) : cur().attention ? agentColor(cur().attention?.agentId) : "#8b7cff"}>
+<main style:--handback-space={`${handbackSpace}px`} style:--term-bottom={`${26 + handbackSpace + timelineSpace}px`} class="app" class:agent={cur().controller.type === "agent"} class:asking={!!cur().ctlReq || !!cur().attention} style:--term-right={st.settingsOpen ? "616px" : "16px"} style:--agent={cur().controller.type === "agent" ? agentColor(cur().controller.agentId) : cur().ctlReq ? agentColor(cur().ctlReq?.agentId) : cur().attention ? agentColor(cur().attention?.agentId) : "#8b7cff"}>
   {#each st.order as id (id)}
     {#if tab(id)?.statusReady}<Term bind:this={terms[id]} session={id} />{/if}
   {/each}
@@ -382,17 +400,18 @@
   {#if !cur().externalPrivate}
   <ControlRequest />
   <GraceBar />
-  <HandbackChip bind:this={chip} />
+  <div class="handback-dock" bind:clientHeight={handbackHeight}><HandbackChip bind:this={chip} /></div>
   <LeaveChip bind:this={leave} />
-  <Timeline />
+  <Timeline bind:height={timelineHeight} />
   {/if}
   <Toasts />
-  {#if st.centerOpen && !cur().externalPrivate}<Center onclose={() => { st.centerOpen = false; focusTerm(); }} onpalette={() => { st.centerOpen = false; st.paletteOpen = true; }} onsettings={() => { st.centerOpen = false; st.settingsOpen = true; }} />{/if}
+  {#if st.centerOpen && !cur().externalPrivate}<Center onclose={() => { st.centerOpen = false; focusTerm(); }} />{/if}
   {#if st.paletteOpen}<Palette {actions} {parsers} onclose={() => { st.paletteOpen = false; focusTerm(); }} />{/if}
-  {#if st.settingsOpen}<SettingsSheet onclose={() => { st.settingsOpen = false; focusTerm(); }} />{/if}
+  {#if st.settingsOpen}<SettingsSheet onclose={() => { st.settingsOpen = false; queueMicrotask(focusTerm); }} />{/if}
 </main>
 
 <style>
+  .handback-dock { position: absolute; left: 0; right: 0; bottom: 26px; z-index: 12; pointer-events: none; }
   .app { position: relative; width: 100vw; height: 100vh; overflow: hidden; background: var(--bg); }
   .frame { position: absolute; inset: 6px; border-radius: 12px; pointer-events: none; z-index: 5;
     border: 1.5px solid var(--agent);

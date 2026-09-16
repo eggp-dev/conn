@@ -25,6 +25,7 @@ enum Sink {
 
 pub struct Audit {
     sink: Sink,
+    session: Option<String>,
 }
 
 impl Audit {
@@ -40,22 +41,27 @@ impl Audit {
             use std::os::unix::fs::PermissionsExt;
             file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
         }
-        Ok(Self { sink: Sink::File(Mutex::new(file)) })
+        Ok(Self { sink: Sink::File(Mutex::new(file)), session: None })
     }
 
     /// In-memory sink for tests. The returned handle can be inspected afterwards.
     pub fn memory() -> (Self, Arc<Mutex<Vec<Event>>>) {
         let store = Arc::new(Mutex::new(Vec::new()));
-        (Self { sink: Sink::Memory(store.clone()) }, store)
+        (Self { sink: Sink::Memory(store.clone()), session: None }, store)
     }
 
     pub fn null() -> Self {
-        Self { sink: Sink::Null }
+        Self { sink: Sink::Null, session: None }
+    }
+
+    pub fn for_session(mut self, session: String) -> Self {
+        self.session = Some(session);
+        self
     }
 
     pub fn record(&self, actor: &str, action: &str, fields: Value) {
         if matches!(self.sink, Sink::Null) { return; }
-        let fields = match fields {
+        let mut fields = match fields {
             Value::Object(m) => m,
             Value::Null => Map::new(),
             other => {
@@ -64,6 +70,7 @@ impl Audit {
                 m
             }
         };
+        if let Some(session) = &self.session { fields.insert("session".into(), Value::String(session.clone())); }
         let event = Event {
             ts: chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, false),
             actor: actor.to_string(),
@@ -104,4 +111,17 @@ pub fn read_events(path: &Path) -> std::io::Result<Vec<Event>> {
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod session_tests {
+    use super::*;
+    #[test]
+    fn session_identity_is_authoritative_and_private_sink_stays_empty() {
+        let (audit, events) = Audit::memory();
+        let audit = audit.for_session("unique-shell".into());
+        audit.record("human", "exec", serde_json::json!({"session":"wrong", "cmd":"pwd"}));
+        assert_eq!(events.lock().unwrap()[0].fields["session"], "unique-shell");
+        Audit::null().for_session("private".into()).record("human", "exec", Value::Null);
+    }
 }

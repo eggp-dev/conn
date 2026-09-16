@@ -115,7 +115,7 @@
 </script>
 
 <div class="scrim" transition:fade={{ duration: 120 }} onclick={onclose} role="presentation"></div>
-<div class="pal" role="dialog" aria-label="command palette">
+<div class="pal palette-surface" role="dialog" aria-label="command palette">
   <div class="row">
     <span class="mag">{shortcutLabel("⌘K")}</span>
     <input bind:this={input} bind:value={q} placeholder={t("pal.placeholder")} onkeydown={key} spellcheck="false" autocomplete="off" role="combobox" aria-expanded="true" aria-controls="pal-list" aria-activedescendant={items[idx] ? `pal-${items[idx].id}` : undefined} aria-label={t("pal.listbox")} />
@@ -143,10 +143,7 @@
 
 <style>
   .scrim { position: absolute; inset: 0; z-index: 40; background: rgba(0,0,0,.25); }
-  .pal { position: absolute; z-index: 41; top: 56px; left: 50%; width: min(640px, 92vw); background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(18px) saturate(140%);
-    border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow), 0 0 0 1px color-mix(in srgb, var(--agent) 12%, transparent); overflow: hidden;
-    transform-origin: 50% 0; animation: pop .34s cubic-bezier(.34, 1.4, .64, 1) both; will-change: transform, opacity; }
-  @keyframes pop { 0% { transform: translateX(-50%) scale(.9) translateY(-8px); opacity: 0; } 100% { transform: translateX(-50%) scale(1) translateY(0); opacity: 1; } }
+  .pal { z-index: 41; }
   .row { display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
   .mag { color: var(--muted); font-size: 14px; }
   input { flex: 1; background: transparent; border: 0; outline: 0; color: var(--fg); font: 14.5px var(--font-ui); }
@@ -167,5 +164,5 @@
   kbd { font-size: 10.5px; }
   footer { display: flex; gap: 12px; align-items: center; padding: 7px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
   footer kbd { margin-right: 2px; }
-  @media (prefers-reduced-motion: reduce) { .pal { animation: none; transform: translateX(-50%); } }
+
 </style>

@@ -218,3 +218,19 @@ export function importSavedActivity(s: TimelineState, entries: Record<string, an
     it.status = policyOutcome(it.policy); step(it, it.t, it.status);
   }
 }
+
+/** Partition persisted records before projection; missing identity is never guessed. */
+export function savedTimelines(entries: Record<string, any>[]): Record<string, TimelineState> {
+  const groups: Record<string, Record<string, any>[]> = Object.create(null);
+  for (const entry of entries) {
+    const id = typeof entry.session === "string" && entry.session ? entry.session : "legacy";
+    (groups[id] ??= []).push(entry);
+  }
+  const result: Record<string, TimelineState> = Object.create(null);
+  for (const [id, records] of Object.entries(groups)) {
+    const history = newTimeline();
+    importSavedActivity(history, records);
+    if (history.items.length) result[id] = history;
+  }
+  return result;
+}

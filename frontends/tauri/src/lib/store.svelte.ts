@@ -71,6 +71,7 @@ export const st = $state({
   shell: "",
   tabs: {} as Record<string, TabState>,
   order: [] as string[],
+  pastTimelines: {} as Record<string, TimelineState>,
   active: "" as string,
   tabSeq: 0,
   toasts: [] as Toast[],

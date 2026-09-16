@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Conn",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "identifier": "dev.eggp.conn",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -49,7 +49,17 @@
     "category": "DeveloperTool",
     "shortDescription": "A shared terminal for humans and AI agents.",
     "longDescription": "Work with your AI agent in the same live shell. Review requests, hand over control, take it back, and inspect commands and collaboration decisions in one timeline. Includes English and Korean interface languages and a local MCP adapter.",
-    "licenseFile": "../../../LICENSE",
-    "copyright": "Copyright (c) 2026 Conn contributors"
+    "copyright": "Copyright (c) 2026 Conn contributors",
+    "resources": {
+      "../../../LICENSE": "LICENSE"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

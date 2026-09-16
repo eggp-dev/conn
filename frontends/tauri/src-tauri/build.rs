@@ -1,4 +1,6 @@
 fn main() {
+    println!("cargo:rerun-if-env-changed=CONN_UPDATER_ENABLED");
+    println!("cargo:rerun-if-env-changed=CONN_RELEASE_CHANNEL");
     println!("cargo:rerun-if-changed=src/macos/scripting.m");
     println!("cargo:rerun-if-changed=Conn.sdef");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {

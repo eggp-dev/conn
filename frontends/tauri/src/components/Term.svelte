@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { DOCK_MOTION_MS, dockOffsetFrames, reducedMotion } from "../lib/motion";
   import { appShortcut, shortcutKey } from "../lib/shortcuts";
   import { onMount } from "svelte";
   import { Terminal } from "@xterm/xterm";
@@ -57,7 +58,7 @@
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
       // Escape closes an open overlay instead of reaching the shell.
-      if (e.key === "Escape" && (st.settingsOpen || st.timelineOpen || st.centerOpen || st.paletteOpen)) return false;
+      if (e.key === "Escape" && (st.settingsOpen || st.timelineOpen || st.centerOpen || st.paletteOpen || tab(session)?.handback)) return false;
       const key = shortcutKey(e);
       if (appShortcut(e) && ["k", ",", "j", "t", "w", "Enter", "[", "]", "ArrowRight", "ArrowLeft"].includes(key)) return false;
       if (appShortcut(e) && /^[1-9]$/.test(key)) return false;
@@ -95,12 +96,41 @@
     });
     term.onRender(measure);
     term.onCursorMove(measure);
-    const ro = new ResizeObserver(() => { if (active) fit.fit(); });
+    let previousBottom = parseFloat(getComputedStyle(host).bottom);
+    let previousHeight = host.clientHeight;
+    let motion: Animation | undefined;
+    const ro = new ResizeObserver(() => {
+      const bottom = parseFloat(getComputedStyle(host).bottom);
+      const height = host.clientHeight;
+      const dockChanged = bottom !== previousBottom;
+      const delta = previousHeight - height;
+      previousBottom = bottom;
+      previousHeight = height;
+      if (!active) return;
+      // Commit the final terminal grid once. Animate its visual offset, not
+      // its height: otherwise every frame resizes the PTY and redraws the shell.
+      const transform = getComputedStyle(host).transform;
+      const offset = transform === "none" ? 0 : new DOMMatrixReadOnly(transform).m42;
+      motion?.cancel();
+      const rowHeight = host.querySelector<HTMLElement>(".xterm-screen")!.clientHeight / term.rows;
+      const before = term.buffer.active;
+      const cursorBefore = before.baseY + before.cursorY - before.viewportY;
+      fit.fit();
+      const after = term.buffer.active;
+      const cursorDelta = (cursorBefore - (after.baseY + after.cursorY - after.viewportY)) * rowHeight;
+      if (dockChanged && delta && cursorDelta && !reducedMotion()) {
+        host.style.willChange = "transform";
+        motion = host.animate(dockOffsetFrames(cursorDelta + offset), {
+          duration: DOCK_MOTION_MS, easing: "linear",
+        });
+        motion.onfinish = () => { host.style.willChange = ""; measure(); };
+      } else { host.style.willChange = ""; }
+    });
     ro.observe(host);
     let mounted = true;
     const un = onOutput((p) => { if (mounted && p.session === session) term.write(b64ToBytes(p.data)); });
     un.then(() => { if (mounted) return cmd("attach_output", { session }); }).catch(() => {});
-    return () => { mounted = false; inputListener.dispose(); privateClipboard.dispose(); ro.disconnect(); un.then((f) => f()); term.dispose(); };
+    return () => { mounted = false; inputListener.dispose(); privateClipboard.dispose(); motion?.cancel(); ro.disconnect(); un.then((f) => f()); term.dispose(); };
   });
 
   $effect(() => {
@@ -112,5 +142,5 @@
 <div class="host" bind:this={host} hidden={!active}></div>
 
 <style>
-  .host { position: absolute; inset: 44px var(--term-right, 16px) 26px 16px; padding: 0; transition: right .22s var(--ease); }
+  .host { position: absolute; inset: 44px var(--term-right, 16px) var(--term-bottom, 26px) 16px; padding: 0; transition: right .22s var(--ease); }
 </style>

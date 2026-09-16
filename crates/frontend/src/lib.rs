@@ -220,8 +220,8 @@ fn spawn_tab_with(app: &AppHandle, state: &AppState, window: &str, mut rows: u16
     let profile = profiles.profiles.iter().find(|p| p.id == profile_id.unwrap_or(&profiles.default_profile)).ok_or("Unknown profile")?.clone();
     let availability = profile.availability();
     if !availability.available { return Err(format!("{}: {}", profile.name, availability.message)); }
-    let id = { let mut s = state.seq.lock(); *s += 1; format!("t{}", *s) };
-    let audit = if external_private { conn_core::audit::Audit::null() } else { conn_core::audit::Audit::open(&state.config_dir.join("audit.jsonl")).map_err(|e|e.to_string())? };
+    let id = { let mut s = state.seq.lock(); *s += 1; format!("t{}-{}", *s, uuid::Uuid::new_v4()) };
+    let audit = if external_private { conn_core::audit::Audit::null() } else { conn_core::audit::Audit::open(&state.config_dir.join("audit.jsonl")).map_err(|e|e.to_string())?.for_session(id.clone()) };
     let policy_path = state.config_dir.join("policy.yaml");
     let policy = match conn_core::policy::PolicyStore::open(&policy_path) {
         Ok(p) => p,

@@ -3,6 +3,9 @@ use conn_frontend::Harness;
 use serde_json::Value;
 use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
+mod updates;
+#[cfg(test)]
+mod update_tests;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -25,7 +28,9 @@ async fn dispatch(
 }
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![dispatch])
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updates::Updates::new())
+        .invoke_handler(tauri::generate_handler![dispatch, updates::app_update])
         .setup(|app| {
             let handle = app.handle().clone();
             let harness = Arc::new(Harness::new(

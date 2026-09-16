@@ -67,6 +67,8 @@ jobs:
     timeout-minutes: 120
     env:
       CARGO_INCREMENTAL: '0'
+      CONN_UPDATER_ENABLED: '1'
+      CONN_RELEASE_CHANNEL: preview
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -78,6 +80,10 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
+      - name: Configure updater public key
+        env:
+          TAURI_SIGNING_PUBLIC_KEY: ${{ vars.TAURI_SIGNING_PUBLIC_KEY }}
+        run: python scripts/updater_artifacts.py config --out frontends/tauri/src-tauri/tauri.updater.release.json
       - name: Prepare private macOS signing keychain
         if: runner.os == 'macOS'
         env:
@@ -91,7 +97,7 @@ jobs:
       - name: Build Linux or Windows CLI sidecar and desktop installer
         if: runner.os != 'macOS'
         working-directory: frontends/tauri
-        run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+        run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config src-tauri/tauri.updater.release.json
       - name: Build, sign and notarize macOS app and sidecar
         if: runner.os == 'macOS'
         working-directory: frontends/tauri
@@ -102,7 +108,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           MACOSX_DEPLOYMENT_TARGET: '12.0'
         # Keep the signed app for final verification; dmg alone removes it.
-        run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+        run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config src-tauri/tauri.updater.release.json
       - name: Verify macOS signatures, notarize CLI and DMG, and package
         if: runner.os == 'macOS'
         env:
@@ -113,6 +119,17 @@ jobs:
       - name: Package Linux or Windows assets
         if: runner.os != 'macOS'
         run: python scripts/release.py package --target ${{ matrix.target }} --out release-artifacts
+      - name: Sign final updater artifacts
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: python scripts/updater_artifacts.py package --target ${{ matrix.target }} --out release-artifacts
+      - name: Verify updater signatures against the embedded public key
+        env:
+          TAURI_SIGNING_PUBLIC_KEY: ${{ vars.TAURI_SIGNING_PUBLIC_KEY }}
+          CONN_UPDATER_ARTIFACTS: ${{ github.workspace }}/release-artifacts
+        run: cargo test --manifest-path frontends/tauri/src-tauri/Cargo.toml --release --target ${{ matrix.target }} --locked --lib update_tests::release_payload_signatures_match_the_embedded_key -- --ignored --exact
       - name: Run standalone packaged CLI on its native runner
         run: python scripts/release.py smoke --target ${{ matrix.target }} --artifacts release-artifacts
       - name: Remove temporary macOS signing credentials

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { shortcutLabel } from "../lib/shortcuts";
   // The control centre: grows out of the island. The eight-tenths of settings you
   // touch while working — mode, ask-first, grace, who is here and what they may do.
   import { fade } from "svelte/transition";
@@ -7,7 +6,7 @@
   import { cmd, changeMode } from "../lib/bridge";
   import { agentColor } from "../lib/themes";
   import { t, fmtMs } from "../lib/i18n.svelte";
-  let { onclose, onpalette, onsettings }: { onclose: () => void; onpalette: () => void; onsettings: () => void } = $props();
+  let { onclose }: { onclose: () => void } = $props();
   const tb = $derived(cur());
   const isAgent = $derived(tb.controller.type === "agent");
   const color = $derived(isAgent ? agentColor(tb.controller.agentId) : "var(--muted)");
@@ -25,7 +24,7 @@
 </script>
 
 <div class="scrim" transition:fade={{ duration: 100 }} onclick={onclose} role="presentation"></div>
-<section class="center" style:--c={color} onkeydown={key} tabindex="-1" aria-label={t("center.title")}>
+<section class="center conn-popover" style:--c={color} onkeydown={key} tabindex="-1" aria-label={t("center.title")}>
   <header>
     <span class="core"></span>
     <b>{!tb.processAlive ? t("shell.exited") : isAgent ? t("conn.agent", { agent: tb.controller.agentId ?? "" }) : t("conn.yours")}</b>
@@ -69,19 +68,13 @@
     {/each}
   {/if}
 
-  <footer>
-    <button class="btn ghost" onclick={onpalette}>{t("center.commands")} <kbd>{shortcutLabel("⌘K")}</kbd></button>
-    <button class="btn ghost" onclick={onsettings}>{t("center.settings")} <kbd>{shortcutLabel("⌘,")}</kbd></button>
-  </footer>
+
 </section>
 
 <style>
   .scrim { position: absolute; inset: 0; z-index: 30; }
-  .center { position: absolute; top: 44px; right: 14px; z-index: 31; width: min(360px, 92vw); padding: 12px 14px 10px; border-radius: 16px; outline: 0;
-    background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(18px) saturate(140%);
-    border: 1px solid color-mix(in srgb, var(--c) 40%, var(--line)); box-shadow: var(--shadow), 0 0 0 1px color-mix(in srgb, var(--c) 18%, transparent);
-    transform-origin: calc(100% - 20px) -10px; animation: grow .38s cubic-bezier(.34, 1.45, .64, 1) both; will-change: transform, opacity; font-size: 12.5px; }
-  @keyframes grow { 0% { transform: scale(.4); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+  .center { position: absolute; top: 44px; right: 14px; z-index: 31; width: min(360px, 92vw); padding: 12px 14px; outline: 0;
+    --popover-origin: calc(100% - 20px) -10px; font-size: 12.5px; }
   header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
   .core { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: 0 0 8px; }
   header b { font-size: 13px; }
@@ -106,8 +99,5 @@
   .tools { flex: 1; display: flex; flex-wrap: wrap; gap: 3px; }
   .tools code { font-size: 10px; padding: 1px 5px; border-radius: 999px; background: var(--surface2); color: var(--muted); }
   .btn.mini { padding: 2px 8px; font-size: 11px; }
-  footer { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--line); }
-  footer kbd { margin-left: 4px; }
   p.muted { margin: 2px 0; font-size: 12px; }
-  @media (prefers-reduced-motion: reduce) { .center { animation: none; } }
 </style>

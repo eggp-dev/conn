@@ -1,6 +1,6 @@
 [package]
 name = "conn-desktop"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2021"
 description = "A shared terminal for humans and AI agents."
 repository = "https://github.com/eggplantiny/conn"
@@ -27,7 +27,15 @@ parking_lot = "0.12"
 conn-core = { path = "../../../crates/core" }
 
 conn-frontend = { path = "../../../crates/frontend" }
+semver = "1"
+tokio = { version = "1", features = ["sync"] }
+tauri-plugin-updater = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = "5"
 libc = "0.2"
+
+[dev-dependencies]
+minisign-verify = "0.2"
+tauri = { version = "2", features = ["test"] }

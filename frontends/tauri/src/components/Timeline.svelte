@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { tick } from "svelte";
+  import { dockReveal, dockDismiss } from "../lib/motion";
+  let { height = $bindable(0) } = $props<{ height?: number }>();
   import RequestDetails from "./RequestDetails.svelte";
   import { shortcutLabel } from "../lib/shortcuts";
   import { t } from "../lib/i18n.svelte";
@@ -8,7 +11,27 @@
   import { visibleTimeline, timelineSteps, controlFor, commandDecisions, isExternalAutomation, isCommand, isProblem, isPolicyBlocked, policyBlockLabel, type TimelineItem, type TimelineFilter, type TimelineStep } from "../lib/timeline";
   const history = $derived(cur().timeline);
   const all = $derived(visibleTimeline(history, "all"));
+  $effect(() => { st.active; selected = null; hover = null; });
   const strip = $derived(all.slice(-200));
+  let stripNode: HTMLDivElement;
+  let start = $state(true), end = $state(true);
+  let lastSession = "";
+  function edges() { if (stripNode) { start = stripNode.scrollLeft < 2; end = stripNode.scrollWidth - stripNode.clientWidth - stripNode.scrollLeft < 2; } }
+  $effect.pre(() => {
+    const session = st.active; void strip;
+    const node = stripNode;
+    const follow = session !== lastSession || !node || node.scrollWidth - node.clientWidth - node.scrollLeft < 2;
+    const anchor = node ? Array.from(node.children).find(el => (el as HTMLElement).offsetLeft >= node.scrollLeft) as HTMLElement | undefined : undefined;
+    const id = anchor?.dataset.id, offset = anchor ? anchor.offsetLeft - node.scrollLeft : 0;
+    lastSession = session;
+    void tick().then(() => {
+      if (!stripNode || st.active !== session) return;
+      if (follow) stripNode.scrollLeft = stripNode.scrollWidth;
+      else { const kept = Array.from(stripNode.children).find(el => (el as HTMLElement).dataset.id === id) as HTMLElement | undefined; if (kept) stripNode.scrollLeft = kept.offsetLeft - offset; }
+      edges();
+    });
+  });
+  function browse(direction: number) { stripNode.scrollBy({ left: direction * stripNode.clientWidth * .8, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' }); }
   let filter = $state<TimelineFilter>("all");
   let selected = $state<string | null>(null);
   let hover = $state<string | null>(null);
@@ -61,7 +84,7 @@
 {/if}
 
 {#if st.timelineOpen}
-  <section class="panel" aria-label={t("tl.title")}>
+  <section class="panel" bind:clientHeight={height} in:dockReveal out:dockDismiss aria-label={t("tl.title")}>
     <header>
       <b>{t("tl.title")}</b><span class="muted">{t("tl.records", { n: items.length })}</span>
       <button class="btn ghost close" onclick={() => (st.timelineOpen = false)}>{t("close")} <kbd>esc</kbd></button>
@@ -70,9 +93,9 @@
       {#each ["all", "commands", "collaboration"] as value}
         <button class:chosen={filter === value} aria-pressed={filter === value} onclick={() => { filter = value as TimelineFilter; selected = null; }}>{t(`tl.filter.${value}`)}</button>
       {/each}
-      <span class="scope muted">{t("tl.scope")}</span>
+
     </div>
-    <p class="privacy-note muted">{t(`shell.integration.${cur().shellIntegration.state}`, { shell: cur().shellIntegration.shell ?? "" })} {t("privacy.history")}</p>
+
     <ol aria-label={t("tl.title")}>
       {#each items as it (it.id)}
         <li>
@@ -118,38 +141,47 @@
 
 <div class="tl" class:open={st.timelineOpen} onmouseleave={() => (hover = null)} role="presentation">
   <button class="hit" onclick={() => (st.timelineOpen = !st.timelineOpen)} aria-label={t("tl.toggle")}></button>
-  <div class="strip">
+  <div class="strip-nav">
+  <button class="browse" disabled={start} aria-label={t("tl.older")} onclick={() => browse(-1)}>‹</button>
+  <div class="strip" bind:this={stripNode} onscroll={edges} onwheel={e => { if (stripNode.scrollWidth <= stripNode.clientWidth || e.ctrlKey) return; e.preventDefault(); stripNode.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY; }} onkeydown={e => { if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return; e.preventDefault(); const buttons = Array.from(stripNode.querySelectorAll('button')); const i = buttons.indexOf(document.activeElement as HTMLButtonElement); buttons[e.key === 'Home' ? 0 : e.key === 'End' ? buttons.length - 1 : Math.max(0, Math.min(buttons.length - 1, i + (e.key === 'ArrowRight' ? 1 : -1)))]?.focus(); }} role="group" aria-label={t("tl.title")}>
     {#each strip as it (it.id)}
-      <button class="seg" class:collab={!isCommand(it)} class:problem={isProblem(it)} class:pending={it.status === "pending" || it.status === "scheduled"} style:--c={color(it)} aria-label={name(it)}
+      <button data-id={it.id} class="seg" class:collab={!isCommand(it)} class:problem={isProblem(it)} class:pending={it.status === "pending" || it.status === "scheduled"} style:--c={color(it)} aria-label={name(it)}
         onmouseenter={(e) => { hover = it.id; const r = e.currentTarget.getBoundingClientRect(); hoverX = r.left + r.width / 2; }}
         onfocus={(e) => { hover = it.id; const r = e.currentTarget.getBoundingClientRect(); hoverX = r.left + r.width / 2; }} onblur={() => (hover = null)} onclick={() => inspect(it)}></button>
-    {:else}{#each Array.from({ length: 40 }) as _}<span class="seg ghost"></span>{/each}{/each}
+    {/each}
+  </div>
+  <button class="browse" disabled={end} aria-label={t("tl.newer")} onclick={() => browse(1)}>›</button>
   </div>
   <button class="label" onclick={() => (st.timelineOpen = !st.timelineOpen)}><span>{t("tl.title")}</span><b>{all.length}</b><kbd>{shortcutLabel("⌘J")}</kbd></button>
 </div>
 
 <style>
-  .privacy-note { margin: 0; padding: 8px 16px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
   .tl { position: absolute; left: 0; right: 0; bottom: 0; height: 22px; z-index: 15; }
   .hit { position: absolute; inset: 0; background: transparent; border: 0; cursor: pointer; }
-  .strip { position: absolute; left: 16px; right: 170px; bottom: 3px; display: flex; gap: 2px; height: 12px; align-items: flex-end; pointer-events: none; }
-  .seg { flex: 1 1 8px; max-width: 28px; min-width: 2px; height: 5px; border: 0; border-radius: 1.5px; padding: 0; background: var(--c); pointer-events: auto; cursor: pointer; transition: height .1s; }
-  .seg:hover, .seg:focus-visible { height: 10px; outline: 1px solid var(--fg); outline-offset: 2px; }
-  .seg.collab { flex: 0 1 6px; max-width: 6px; height: 6px; border-radius: 50%; background: transparent; border: 1px solid var(--c); }
-  .seg.problem { outline: 1px solid var(--danger); outline-offset: 1px; }
-  .seg.pending { background: transparent; border: 1px solid var(--c); }
-  .seg.ghost { background: var(--line); opacity: .7; pointer-events: none; }
+  .strip-nav { position: absolute; left: 10px; right: 190px; bottom: 0; height: 24px; display: flex; align-items: center; gap: 2px; }
+  .browse { flex: 0 0 24px; height: 24px; border: 0; background: transparent; color: var(--muted); cursor: pointer; border-radius: 4px; }
+  .browse:disabled { opacity: .2; cursor: default; }
+  .browse:not(:disabled):hover { background: var(--surface2); color: var(--fg); }
+  .strip { position: relative; flex: 1; min-width: 0; display: flex; gap: 4px; height: 24px; align-items: center; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; }
+  .strip::-webkit-scrollbar { display: none; }
+  .seg { position: relative; flex: 0 0 24px; width: 24px; height: 24px; border: 0; padding: 0; background: transparent; cursor: pointer; border-radius: 4px; }
+  .seg::after { content: ''; position: absolute; inset: 9px 4px; border-radius: 2px; background: var(--c); transition: transform 120ms; }
+  .seg:hover::after, .seg:focus-visible::after { transform: scaleY(1.4); }
+  .seg:focus-visible { outline: 1px solid var(--fg); outline-offset: -1px; }
+  .seg.collab::after { inset: 8px; border-radius: 50%; background: transparent; border: 1px solid var(--c); }
+  .seg.problem::after { outline: 1px solid var(--danger); outline-offset: 1px; }
+  .seg.pending::after { background: transparent; border: 1px solid var(--c); }
+  @media (prefers-reduced-motion: reduce) { .seg::after { transition: none; } }
   .label { position: absolute; right: 12px; bottom: 2px; display: flex; gap: 6px; align-items: baseline; font-size: 11px; color: var(--muted); background: transparent; border: 0; cursor: pointer; padding: 2px 4px; }
   .label:hover, .tl.open .label { color: var(--fg); }
   .label b, time { font-variant-numeric: tabular-nums; }
   .card { position: fixed; bottom: 30px; z-index: 16; width: min(300px, calc(100vw - 24px)); padding: 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--c); box-shadow: var(--shadow); pointer-events: none; font-size: 12px; display: grid; gap: 8px; overflow-wrap: anywhere; }
-  .panel { position: absolute; left: 16px; right: 16px; bottom: 28px; max-height: min(60vh, 560px); z-index: 16; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; font-size: 13px; }
+  .panel { position: absolute; left: 16px; right: 16px; bottom: calc(28px + var(--handback-space, 0px)); height: min(45vh, 420px); max-height: calc(100vh - 160px - var(--handback-space, 0px)); z-index: 16; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; font-size: 13px; }
   header { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 14px; }
   .close { margin-left: auto; }
   .filters { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 0 14px 10px; border-bottom: 1px solid var(--line); }
   .filters button { padding: 5px 10px; border: 1px solid transparent; border-radius: 6px; color: var(--muted); background: transparent; cursor: pointer; font-size: 12px; }
   .filters button.chosen { background: var(--surface2); border-color: var(--line); color: var(--fg); }
-  .scope { margin-left: auto; font-size: 11px; }
   ol { list-style: none; padding: 0; margin: 0; overflow: auto; }
   .panel > ol { padding: 0 14px; }
   .panel > ol > li { border-bottom: 1px solid var(--line); }
@@ -180,5 +212,5 @@
   .steps p { color: var(--muted); white-space: pre-wrap; }
   .actions { display: flex; gap: 8px; justify-content: flex-end; }
   .empty { padding: 20px 0; }
-  @media (max-width: 640px) { .scope { width: 100%; margin: 4px 0 0; } .panel { max-height: 65vh; } }
+  @media (max-width: 640px) { .panel { height: 50vh; } }
 </style>

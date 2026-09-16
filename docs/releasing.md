@@ -16,7 +16,7 @@ Actions are pinned by commit SHA. Pull requests receive no signing secrets. Only
 2. Add a user-facing [CHANGELOG](../CHANGELOG.md) entry and check the exact release version:
 
    ```sh
-   python3 scripts/release.py check --tag v0.5.1
+   python3 scripts/release.py check --tag v0.6.0
    python3 scripts/check_repo.py
    python3 -m unittest discover -s tests/release -v
    cargo test --workspace --locked
@@ -30,8 +30,8 @@ Actions are pinned by commit SHA. Pull requests receive no signing secrets. Only
 4. Create and push the version tag deliberately:
 
    ```sh
-   git tag -a v0.5.1 -m "Conn v0.5.1 preview"
-   git push origin v0.5.1
+   git tag -a v0.6.0 -m "Conn v0.6.0 preview"
+   git push origin v0.6.0
    ```
 
 Tagging and publishing are maintainer release actions. Do not move a published tag.
@@ -54,10 +54,10 @@ The release stages are:
 
 1. Build the matching CLI and desktop package on each native runner.
 2. On Mac, sign and notarize the app, embedded CLI, standalone CLI and DMG as described in [macOS signing](macos-signing.md). Generate the Apple Silicon report, including acceptance and final asset hashes.
-3. `release.py package` normalizes filenames. `finalize` requires all seven binaries/installers and the valid Apple Silicon report before writing `SHA256SUMS` and bilingual notes.
-4. After the exact commit's CI and all build/signing jobs pass, `draft` uploads **9 assets**: seven binaries/installers, one signing report and `SHA256SUMS`. It creates or updates an unpublished prerelease and refuses to modify a public release.
+3. `release.py package` normalizes filenames. `finalize` requires all installers, updater archives/signatures and the valid Apple Silicon report before writing `SHA256SUMS` and bilingual notes.
+4. After the exact commit's CI and all build/signing jobs pass, `draft` uploads **14 assets**: seven binaries/installers, one macOS updater archive, three updater signatures, `latest.json`, one signing report and `SHA256SUMS`. It creates or updates an unpublished prerelease and refuses to modify a public release.
 
-Re-running can repair an incomplete draft. No workflow publishes automatically. Actions retains temporary build artifacts for seven days; uploaded release assets persist. The CLI archives contain the license and installation notes. This preview has no automatic updater.
+Re-running can repair an incomplete draft. No workflow publishes automatically. Actions retains temporary build artifacts for seven days; uploaded release assets persist. The CLI archives contain the license and installation notes. The updater manifest is release-scoped and discovered via GitHub release metadata, including the explicit preview channel.
 
 ## Review and publish
 
@@ -77,3 +77,13 @@ For implementation details, see [Tauri's GitHub pipeline guide](https://v2.tauri
 ## Failed release or rollback
 
 A build or signing failure leaves the release unpublished. Correct the cause and rerun the draft workflow. An unpublished retag decision must be explicit and documented. For a public release, preserve its tag and binaries, document the problem, and ship a patch version. Never silently replace public assets.
+
+## Updater signing
+
+Release jobs require repository variable `TAURI_SIGNING_PUBLIC_KEY` and secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The private key must be encrypted; keep an owner-only encrypted backup and retain the password in your approved secrets manager. Losing the signing key prevents existing installations from trusting future updates. Do not rotate it casually or print it in logs.
+
+`updater_artifacts.py config` embeds only the public key using a release-only Tauri override. `CONN_UPDATER_ENABLED=1` enables native installation and `CONN_RELEASE_CHANNEL=preview` defines the initial channel; a future stable workflow must set `stable`. Debug builds and browser tests cannot self-install. Release signing runs after final native signing/notarization: macOS archives the verified stapled app, Linux reuses AppImage and Windows reuses the NSIS installer. `latest.json` includes artifact signatures; the app verifies downloaded bytes before exposing installation. Installer code signing and updater signatures are separate protections.
+
+No agreement is injected into the DMG. MIT notices remain bundled as `LICENSE`; the verification mount provides closed stdin, never an automatic Agree response.
+
+Before publishing record native upgrade coverage: older updater-enabled build → candidate; interrupted/offline download; invalid signature; missing asset; permissions; relaunch; active shell confirmation; and startup after an installation failure. Build success does not establish these installed-app results. v0.6.0 is the bootstrap release for older manually updated clients.

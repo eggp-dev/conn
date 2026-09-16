@@ -267,3 +267,14 @@ fn private_shell_never_installs_integration() {
     );
     assert!(h.events.lock().unwrap().is_empty());
 }
+
+#[test]
+fn prompt_array_tail_does_not_disarm_human_command_recording() {
+    let h = Shell::with_prompt("/bin/bash", false,
+        r#"if [[ -z ${CONN_ARRAY_TEST-} ]]; then CONN_ARRAY_TEST=1; PROMPT_COMMAND[1]="printf ARRAY_HOOK_OK"; fi"#);
+    h.run("printf HUMAN_ARRAY_COMMAND", 1);
+    assert_eq!(h.starts()[0].fields["cmd"], "printf HUMAN_ARRAY_COMMAND");
+    h.run("false", 2);
+    assert_eq!(h.ends()[1].fields["exitCode"], 1);
+    h.until(|| String::from_utf8_lossy(&h.output.lock().unwrap()).contains("ARRAY_HOOK_OK"));
+}

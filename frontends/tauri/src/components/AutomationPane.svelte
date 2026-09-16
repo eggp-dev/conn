@@ -60,7 +60,7 @@
 </script>
 
 <div class="automation">
-  <h2>{t('automation.title')}</h2>
+
   <p>{t('automation.description')}</p>
   {#if error}<p role="alert">{error}</p>{/if}
   {#if info}
@@ -68,6 +68,7 @@
     {#if info.requiresReenable}<p class="notice" role="status">{t('automation.reenable')}</p>{/if}
     <label class="toggle"><input type="checkbox" checked={info.config.enabled} disabled={busy || !info.nativeSupported} onchange={toggle} />{t('automation.enable')}</label>
     <p class="hint">{t('automation.permission')}</p>
+    <details class="configuration" open={info.config.enabled}><summary>{t("s.automationConfig")}</summary>
     {#if info.linuxSupported}
       <label for="linux-callers">{t('automation.callers')}</label>
       <textarea id="linux-callers" rows="3" disabled={busy} value={info.config.linuxExecutables.join('\n')} onchange={e => info && save({...info.config, linuxExecutables: e.currentTarget.value.split('\n').map(p => p.trim()).filter(Boolean)})}></textarea>
@@ -75,14 +76,16 @@
     {/if}
     <h3>{t('automation.profiles')}</h3>
     {#each profiles as item}
-      <label class="profile"><input type="checkbox" checked={info.config.profiles.includes(item.id)} disabled={busy || !info.nativeSupported} onchange={e => profile(item.id, e)} /><span>{item.name}<small>{item.id}</small></span></label>
+      <label class="profile"><input type="checkbox" checked={info.config.profiles.includes(item.id)} disabled={busy || !info.nativeSupported} onchange={e => profile(item.id, e)} /><span>{item.name}</span></label>
     {/each}
     <p class="hint">{t('automation.scope')}</p>
+    </details>
     <button class="revoke" disabled={busy} onclick={revoke}>{t('automation.revoke')}</button>
   {/if}
 </div>
 
 <style>
+ .configuration { display: grid; gap: 12px; } .configuration summary { cursor: pointer; font-size: 12px; color: var(--muted); margin-bottom: 12px; }
   .automation { display: grid; gap: 14px; min-width: 0; }
   h2,h3,p { margin: 0; } h2 { font-size: 16px; } h3 { margin-top: 8px; font-size: 12px; color: var(--muted); }
   p { line-height: 1.6; overflow-wrap: anywhere; }

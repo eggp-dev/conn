@@ -81,6 +81,8 @@ jobs:
           APPLE_SIGNING_IDENTITY: '-'
         run: npm run tauri build -- --debug --bundles app
         working-directory: frontends/tauri
+      - name: Native desktop unit tests
+        run: cargo test --manifest-path frontends/tauri/src-tauri/Cargo.toml --lib --locked
       - name: Check macOS scripting metadata and compile external automation examples
         if: runner.os == 'macOS'
         run: python3 scripts/check_macos_scripting.py --app frontends/tauri/src-tauri/target/debug/bundle/macos/Conn.app

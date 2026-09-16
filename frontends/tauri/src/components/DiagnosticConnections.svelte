@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from "../lib/i18n.svelte";
   import { groupConnections, type AgentConnection } from "../lib/connections";
-  let { connections }: { connections: AgentConnection[] } = $props();
+  let { connections, compact = false }: { connections: AgentConnection[]; compact?: boolean } = $props();
   const groups = $derived(groupConnections(connections));
 </script>
 
@@ -16,7 +16,7 @@
       </ul>
     </details>
   {:else}<span class="muted">{t("center.no_agents")}</span>{/each}
-  <p>{t("s.diag.connections.note")}</p>
+  {#if !compact}<p>{t("s.diag.connections.note")}</p>{/if}
 </div>
 
 <style>

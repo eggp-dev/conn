@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — Preview · 2026-09-17
+
+- Add signed in-app updates with background checks/downloads, preview channels, progress and user-controlled installation/restart. Older versions require one manual install; Debian packages remain system-managed/manual.
+- Remove the macOS DMG license agreement while retaining bundled MIT notices and Developer ID notarization.
+- Keep timeline activity scoped to its shell and preserve readable markers, 24px click targets and horizontal navigation.
+- Unify dock motion, menus and settings surfaces. Add compact agent setup, advanced disclosures, numeric pacing, unsaved-change protection and concise diagnostics.
+
+한국어: 앱 내 서명 업데이트, 동의 화면 없는 macOS 설치, 셸별 타임라인과 최소 클릭 영역, 일관된 모션 및 간결한 설정을 추가했습니다. 설치·재시작은 사용자가 선택합니다.
+
 
 - Restore human command history through local Bash/Zsh execution hooks, without collecting application input or changing user dotfiles. SSH and editor sessions remain usable; only the outer local command is recorded.
 - Join shell start/completion to agent review records by submission ID; show working directory, exit code, duration, and unconfirmed completion. Keep private external sessions excluded and show unavailable integration explicitly.
@@ -19,7 +27,7 @@
 - Require one explicit re-enable of previous automation permissions; keep the allowed profile selection. Earlier audit/timeline files and backups are not automatically removed.
 - Rename launcher examples generically and update the scripting dictionary and English/Korean guides. Native Apple Event and external-launcher acceptance testing remains required before release.
 
-한국어: 외부 자동화를 비공유 세션과 전용 입력 경로로 교체하는 **미배포 변경**입니다. 시작 프로그램은 기본 셸에 입력하지 않고 직접 실행하며, 에이전트 승인·정책·Grace를 거치지 않습니다. 비공유 활동과 원시 사람 입력은 Conn 기록에 남기지 않고 MCP·공개 IPC 접근을 차단합니다. 이전 허용은 한 번 다시 켜야 합니다. 일반 세션의 원시 사람 입력 기록도 제거했습니다. AI 공유는 아직 구현하지 않았으며, 과거 기록도 자동 삭제하지 않습니다. 실제 Mac 검증은 배포 전 별도로 필요합니다.
+한국어: 외부 자동화를 비공유 세션과 전용 입력 경로로 교체하는 변경입니다. 시작 프로그램은 기본 셸에 입력하지 않고 직접 실행하며, 에이전트 승인·정책·Grace를 거치지 않습니다. 비공유 활동과 원시 사람 입력은 Conn 기록에 남기지 않고 MCP·공개 IPC 접근을 차단합니다. 이전 허용은 한 번 다시 켜야 합니다. 일반 세션의 원시 사람 입력 기록도 제거했습니다. AI 공유는 아직 구현하지 않았으며, 과거 기록도 자동 삭제하지 않습니다. 실제 Mac 검증은 배포 전 별도로 필요합니다.
 
 ## 0.5.1 — Preview · 2026-09-16
 

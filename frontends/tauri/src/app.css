@@ -35,3 +35,25 @@ button { font: inherit; color: inherit; }
 input[type=range] { accent-color: var(--agent); }
 input[type=checkbox] { accent-color: var(--agent); }
 ::selection { background: var(--selection); }
+
+/* Shared surface and anchor motion for the app menu and control centre. */
+.conn-popover {
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid color-mix(in srgb, var(--c, var(--muted)) 40%, var(--line));
+  box-shadow: var(--shadow), 0 0 0 1px color-mix(in srgb, var(--c, var(--muted)) 18%, transparent);
+  transform-origin: var(--popover-origin);
+  animation: conn-popover-grow .38s cubic-bezier(.34, 1.45, .64, 1) both;
+}
+@keyframes conn-popover-grow {
+  from { transform: scale(.4); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .conn-popover { animation: none; }
+}
+
+.palette-surface { position: absolute; top: 56px; left: 50%; width: min(640px, 92vw); background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(18px) saturate(140%); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow), 0 0 0 1px color-mix(in srgb, var(--agent) 12%, transparent); overflow: hidden; transform-origin: 50% 0; animation: palette-pop .34s cubic-bezier(.34, 1.4, .64, 1) both; }
+@keyframes palette-pop { from { transform: translateX(-50%) scale(.9) translateY(-8px); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .palette-surface { animation: none; transform: translateX(-50%); } }

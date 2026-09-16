@@ -4,7 +4,8 @@
   import { st, cur } from "../lib/store.svelte";
   import { agentColor } from "../lib/themes";
   import { connMarkState, graceProgress } from "../lib/connMark";
-  import { tick } from "svelte";
+  import { updater, startAutoUpdates } from "../lib/nativeUpdates.svelte";
+  import { onMount, tick } from "svelte";
   import { t } from "../lib/i18n.svelte";
   import { shortcutLabel } from "../lib/shortcuts";
   let { onnew, onpalette, ontimeline, onsettings }: { onnew: () => void; onpalette: () => void; ontimeline: () => void; onsettings: () => void } = $props();
@@ -27,6 +28,7 @@
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
   });
+  onMount(startAutoUpdates);
   let open = $state(false);
   let updates = $state(false);
   let root: HTMLDivElement;
@@ -37,7 +39,7 @@
     { label: t("menu.palette"), key: "⌘K", action: onpalette },
     ...(!active.externalPrivate ? [{ label: t("menu.timeline"), key: "⌘J", action: ontimeline, disabled: false }] : []),
     { label: t("center.settings") + "…", key: "⌘,", action: onsettings },
-    { label: t("update.title") + "…", key: "", action: () => { updates = true; } },
+    { label: (updater.status.phase === "ready" ? t("update.restart") : t("update.title")) + "…", key: "", action: () => { updates = true; } },
   ]);
   function close(restore = false) { open = false; if (restore) trigger.focus(); }
   async function show(last = false) {
@@ -63,14 +65,15 @@
   <button class="trigger" bind:this={trigger} aria-haspopup="menu" aria-expanded={open} aria-controls="conn-app-menu" aria-label={t("mark.menu", { state: markLabel })} title={markLabel}
     onclick={() => open ? close(true) : show()}
     onkeydown={(e) => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); show(e.key === "ArrowUp"); } }}>
+    {#if updater.status.phase === "ready"}<span class="update-dot" aria-label={t("update.ready", {version: updater.status.version ?? ""})}></span>{/if}
     <ConnMark state={mark} {progress} color={agentColor(active.controller.agentId)} motion={st.effects} />
   </button>
   {#if open}
-    <div class="menu" id="conn-app-menu" role="menu" tabindex="-1" aria-label="Conn" bind:this={menu} onkeydown={keydown}>
+    <div class="menu conn-popover" id="conn-app-menu" role="menu" tabindex="-1" aria-label="Conn" bind:this={menu} onkeydown={keydown}>
       {#each entries as entry, i}
         {#if i === 3}<div class="separator" role="separator"></div>{/if}
         <button role="menuitem" tabindex="-1" disabled={entry.disabled} onclick={() => { close(true); entry.action(); }}>
-          <span>{entry.label}</span><span class="shortcut" aria-hidden="true">{shortcutLabel(entry.key)}</span>
+          <span>{entry.label}</span>{#if entry.key}<kbd aria-hidden="true">{shortcutLabel(entry.key)}</kbd>{/if}
         </button>
       {/each}
     </div>
@@ -80,14 +83,15 @@
 {#if updates}<UpdateDialog onclose={async () => { updates = false; await tick(); trigger.focus(); }} />{/if}
 
 <style>
+  .update-dot { position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--agent); top: -2px; right: -2px; }
   .app-menu { position: relative; flex: 0 0 auto; margin-right: 6px; }
   .trigger { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 3px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--fg); cursor: pointer; font-size: 12px; }
   .trigger:hover, .trigger[aria-expanded="true"] { background: var(--surface2); border-color: var(--muted); }
   .trigger:focus-visible { outline: 2px solid var(--agent); outline-offset: 2px; }
-  .menu { position: absolute; top: calc(100% + 8px); left: 0; width: min(300px, calc(100vw - 32px)); padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); }
-  .menu button { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: 100%; min-height: 36px; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--fg); text-align: left; font-size: 13px; cursor: pointer; }
+  .menu { position: absolute; top: calc(100% + 8px); left: 0; width: min(320px, calc(100vw - 32px)); padding: 12px 14px; --popover-origin: 16px -10px; }
+  .menu button { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: 100%; min-height: 38px; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--fg); text-align: left; font-size: 13px; cursor: pointer; }
   .menu button:hover, .menu button:focus { outline: none; background: var(--surface2); }
   .menu button:disabled { opacity: .45; cursor: default; }
-  .shortcut { color: var(--muted); font-size: 11px; white-space: nowrap; }
-  .separator { height: 1px; margin: 5px 4px; background: var(--line); }
+  kbd { flex-shrink: 0; white-space: nowrap; }
+  .separator { height: 1px; margin: 8px 0; background: var(--line); }
 </style>
