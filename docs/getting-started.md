@@ -6,32 +6,32 @@ Install Conn, connect your agent, and take turns in the same terminal. The deskt
 
 ## 1. Install and open a session
 
-Download the [v0.3.0 preview](https://github.com/eggplantiny/conn/releases/tag/v0.3.0) for your OS and CPU. See the release notes for the exact signing and runtime verification results.
+Download the [v0.4.0 preview](https://github.com/eggplantiny/conn/releases/tag/v0.4.0) for your OS and CPU. See the release notes for the exact signing and runtime verification results.
 
 | Platform | Download | Install |
 |---|---|---|
-| Ubuntu x64 | [`.deb`](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.deb) | Run the command below, then open Conn from your applications. |
-| Ubuntu x64 | [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage) | Make the file executable, then open it. |
-| macOS Apple Silicon | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-aarch64-apple-darwin-desktop.dmg) | Open the DMG, drag Conn into Applications, then launch it there. |
-| macOS Intel | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-apple-darwin-desktop.dmg) | Open the DMG, drag Conn into Applications, then launch it there. |
-| Windows x64 | [Installer `.exe`](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-pc-windows-msvc-setup.exe) | Run the installer, then open Conn from the Start menu. |
+| Ubuntu x64 | [`.deb`](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.deb) | Run the command below, then open Conn from your applications. |
+| Ubuntu x64 | [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.AppImage) | Make the file executable, then open it. |
+| macOS Apple Silicon | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-aarch64-apple-darwin-desktop.dmg) | Open the DMG, drag Conn into Applications, then launch it there. |
+| macOS Intel | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-apple-darwin-desktop.dmg) | Open the DMG, drag Conn into Applications, then launch it there. |
+| Windows x64 | [Installer `.exe`](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-pc-windows-msvc-setup.exe) | Run the installer, then open Conn from the Start menu. |
 
 For Ubuntu, run the matching command in your download directory:
 
 ```sh
-sudo apt install ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.deb
+sudo apt install ./conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.deb
 ```
 
 Or, for AppImage:
 
 ```sh
-chmod +x ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage
-./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage
+chmod +x ./conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.AppImage
+./conn-v0.4.0-x86_64-unknown-linux-gnu-desktop.AppImage
 ```
 
 The Linux build targets Ubuntu 24.04 and 26.04 x64; AppImage still depends on system libraries. Windows previews are intentionally unsigned, so SmartScreen or an unknown-publisher prompt may appear; managed PCs may block installation. Public Mac assets must pass the release's Developer ID signing and notarization checks. See [platform support](platform-support.md) for the limits of each target.
 
-Optional: download [SHA256SUMS](https://github.com/eggplantiny/conn/releases/download/v0.3.0/SHA256SUMS) alongside your file. On Linux, run `sha256sum --ignore-missing -c SHA256SUMS`; on macOS, compare `shasum -a 256 <file>` with its line; on Windows, use `Get-FileHash <file> -Algorithm SHA256`. Checksums detect corruption and are separate from code signing.
+Optional: download [SHA256SUMS](https://github.com/eggplantiny/conn/releases/download/v0.4.0/SHA256SUMS) alongside your file. On Linux, run `sha256sum --ignore-missing -c SHA256SUMS`; on macOS, compare `shasum -a 256 <file>` with its line; on Windows, use `Get-FileHash <file> -Algorithm SHA256`. Checksums detect corruption and are separate from code signing.
 
 ## 2. Set up your terminal
 
@@ -47,15 +47,15 @@ Autopilot allows agent execution within policy. **Co-pilot** lets you accept eac
 
 In **Settings → Agents → Connect your agent**:
 
-1. Choose **Codex TOML** for Codex or **MCP JSON** for clients using `mcpServers` configuration.
-2. Click **Copy agent configuration**.
-3. Add the copied server entry to your client's MCP configuration and restart or reconnect that client. For Codex, merge the entry into `~/.codex/config.toml`; preserve your other settings.
+1. Choose Codex / ChatGPT local tasks, Claude Code, Cursor, GitHub Copilot in VS Code, or Copilot CLI.
+2. Click **Set up** to register the MCP server and collaboration skill.
+3. Restart or reconnect your client following the card's hint. Keep Conn open and ask your agent to read the current terminal.
 
-The copied entry contains the CLI's **absolute executable path** and this Conn session's endpoint. You do not need to install Rust, run Cargo, or add `conn` to `PATH`; AppImage uses the same steps. Keep Conn open while the agent connects. After updating, moving or reinstalling the application, copy the configuration again.
+**Configured** means the files are saved; **Connected now** appears while the client is attached to Conn. Client trust prompts and command approvals remain separate. [Client paths, updates, removal and troubleshooting](agent-integrations.md).
 
-The server uses MCP stdio. Client formats differ; JSON is configuration data, not a shell command. This local connection does not by itself provide a remote server for browser-only clients.
+The setup uses the bundled CLI's absolute path and current endpoint. Rust, Cargo, Node.js and PATH changes are not required; AppImage stages its CLI at a stable path. After moving or reinstalling Conn, use **Update setup**. Existing manually registered Conn entries are preserved for review.
 
-Conn derives the agent name from MCP initialization. To set one explicitly, add `--agent-id my-agent` after `mcp`. Use `--tools static` for clients that do not refresh tool lists; automatic mode already selects this for recognized Codex clients. Every tool call still checks permission. The [companion skill](../plugin/skills/conn/SKILL.md) describes the workflow.
+For other clients, expand **Other MCP clients · manual setup** and copy MCP JSON or Codex TOML. Client formats differ; JSON is configuration data, not a shell command. This local connection does not provide a remote server for ChatGPT web/cloud tasks.
 
 ### Manual configuration and endpoints
 
@@ -91,7 +91,7 @@ Denied, blocked, cancelled, expired and executed are separate outcomes. **Execut
 
 ## Existing-terminal and CLI use
 
-Download the CLI archive for [Linux x64](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-unknown-linux-gnu-cli.tar.gz), [Mac Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-aarch64-apple-darwin-cli.tar.gz), [Mac Intel](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-apple-darwin-cli.tar.gz), or [Windows x64](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-pc-windows-msvc-cli.zip). Extract `conn` (`conn.exe` on Windows) to a directory on your user `PATH` and reopen your terminal.
+Download the CLI archive for [Linux x64](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-unknown-linux-gnu-cli.tar.gz), [Mac Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-aarch64-apple-darwin-cli.tar.gz), [Mac Intel](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-apple-darwin-cli.tar.gz), or [Windows x64](https://github.com/eggplantiny/conn/releases/download/v0.4.0/conn-v0.4.0-x86_64-pc-windows-msvc-cli.zip). Extract `conn` (`conn.exe` on Windows) to a directory on your user `PATH` and reopen your terminal.
 
 ```sh
 conn --version

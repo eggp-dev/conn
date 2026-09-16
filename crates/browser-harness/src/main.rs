@@ -27,7 +27,7 @@ async fn upgrade(State(s): State<Server>, Query(q): Query<HashMap<String,String>
 async fn serve(socket: WebSocket, server: Server) {
     let (tx,mut rx) = tokio::sync::mpsc::unbounded_channel::<Value>();
     let emit_tx = tx.clone();
-    let harness = Arc::new(Harness::new(server.dir.clone(),server.dir.join("conn.sock"),Arc::new(move |name,payload| { let _ = emit_tx.send(json!({"event":name,"payload":payload})); })));
+    let harness = Arc::new(Harness::with_setup_home(server.dir.clone(),server.dir.join("conn.sock"),Arc::new(move |name,payload| { let _ = emit_tx.send(json!({"event":name,"payload":payload})); }), Some(server.dir.join("agent-clients"))));
     let (mut writer,mut reader) = socket.split();
     loop {
         if rx.len() > 2048 { break; } // Disconnect on overload rather than silently dropping state transitions.

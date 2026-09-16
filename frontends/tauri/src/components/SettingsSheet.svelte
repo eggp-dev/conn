@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AgentConnections from "./AgentConnections.svelte";
   import ProfilesPane from "./ProfilesPane.svelte";
   import { fly } from "svelte/transition";
   import { st, cur, toast, type Analysis } from "../lib/store.svelte";
@@ -160,7 +161,8 @@
       {#if st.settingsTab === "profiles"}
         <ProfilesPane />
       {:else if st.settingsTab === "agents"}
-        <div class="agent-setup">
+        <AgentConnections />
+        <details class="agent-setup"><summary>{t("agents.other")}</summary>
           <h3>{t("s.connect.title")}</h3>
           <p class="muted">{t("s.connect.hint")}</p>
           <label class="config-format">{t("s.connect.format")}
@@ -179,7 +181,7 @@
               <textarea readonly value={configText} aria-label={t("s.connect.view")} spellcheck="false" onfocus={(event) => event.currentTarget.select()}></textarea>
             </details>
           {/if}
-        </div>
+        </details>
         <h3>{t("mode")}</h3>
         <div class="seg">
           {#each ["observe", "copilot", "autopilot"] as id}

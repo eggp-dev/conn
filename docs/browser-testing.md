@@ -62,3 +62,12 @@ Prepare `profiles.json` and `app.json` in the new state directory before opening
 the page to select a demo working directory, clean shell prompt and pacing.
 The new browser origin and state directory keep its timeline separate. Use a
 disposable demo project; state separation still does not sandbox shell access.
+
+## Agent setup isolation
+
+The harness supplies `<test state>/agent-clients` as the client home for integration
+setup. The Settings UI and native installer are unchanged; only path resolution
+is injected. Clicking Set up, Update setup or Remove setup changes these disposable
+files, never your real Codex/Claude/Cursor/Copilot configuration. Do not launch a
+client against this temporary configuration unless you intend to connect it to
+the test backend. CLI staging and backups remain under the test state directory.

@@ -1,6 +1,6 @@
 ---
 name: conn
-description: Procedure and etiquette for running commands in a shell shared with a human (conn). Use it when the user says "conn", "the shared shell", "in my terminal", "look at the screen and …", "in the shell that's open", or when terminal_* tools are present. Follow this instead of the built-in shell tools.
+description: Procedure and etiquette for running commands in a shell shared with a human (conn). Use it when the user says "conn", "the shared shell", "in my terminal", "look at the screen and …", "in the shell that's open", and Conn terminal_* tools are available. For tasks the user wants in Conn, use its tools instead of the built-in shell.
 ---
 
 # Working in conn
@@ -10,7 +10,7 @@ This shell is **watched by a human who can step in at any moment**. You are a gu
 ## Procedure
 
 1. **Look first.** Read the screen with `terminal_snapshot`. Is there a prompt? Is something running? What did the human just do? Commands the human ran may be on the screen.
-2. **Ask with a reason.** The `reason` you pass to `terminal_request_control(reason)` appears on the human's screen verbatim. One line, concrete: `"check the 3 crashlooping pods and delete them"`. If the call does not return for a while, the human is deciding. On `control_denied`, observe only; ask again with a clearer reason, or tell the user.
+2. **Ask with a reason.** The `reason` you pass to `terminal_request_control(reason, command)` appears on the human's screen verbatim. Keep the reason concrete and include the exact planned shell command in `command`, so the human can inspect it before granting control. This metadata does not execute the command. If the call does not return for a while, the human is deciding. On `control_denied`, observe only and tell the user. Do not repeat the request unless they ask you to retry.
 3. **Separate typing from running.** `terminal_type` only types. Running is `terminal_send_key("ENTER", intent)`. One command at a time. Never put a newline in `text`.
    - **`intent` is required.** One line saying what the command does and what it changes. It sits at the top of the human's approval card and in the audit log. Describe the outcome: `"delete the hello-mel directory (a git repo, unrecoverable)"`. Without it you get `intent_required`.
    - **One dangerous command per line.** Chaining a delete, privilege escalation, force push or overwrite to other commands with `&&` `;` `|` comes back `denied` without an approval (label "run dangerous commands alone"). If you need a `cd`, run the `cd` on its own line first, then send only the dangerous command.

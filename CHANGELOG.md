@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0 — Preview · 2026-09-16
+
+- Set up MCP and the bundled collaboration skill from Settings for Codex / local ChatGPT tasks, Claude Code, Cursor, GitHub Copilot in VS Code and Copilot CLI.
+- Update or remove managed setups while preserving other settings, comments and user-edited entries.
+- Separate saved configuration from live agent connections, with English and Korean guidance.
+- Add client adapters, private recovery copies, atomic writes, conflict checks and shared-skill ownership.
+- Isolate browser-harness client settings from real user configurations.
+- Include exact planned commands in the companion skill’s control-request procedure.
+
+한국어: 설정에서 Codex·Claude Code·Cursor·GitHub Copilot의 MCP와 협업 스킬을 등록·갱신·해제할 수 있습니다. 기존 설정을 보존하고 실제 접속 여부를 따로 표시합니다.
+
 ## 0.3.0 — Preview · 2026-09-16
 
 First public preview of Conn, a shared terminal for humans and AI agents.
