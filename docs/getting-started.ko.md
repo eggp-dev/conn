@@ -2,193 +2,140 @@
 
 [English](getting-started.md) · 한국어 · [Conn 소개로 돌아가기](../README.ko.md)
 
-첫 목표는 간단합니다. 터미널을 열고, 에이전트가 읽기 전용 명령 하나를 요청하게 한 뒤, 내 결정이 타임라인에 남는지 확인합니다.
+Conn을 설치하고 에이전트를 연결해 같은 터미널에서 번갈아 작업하세요. 데스크톱 다운로드에는 에이전트 연결용 CLI가 포함되어 있으므로 Rust·Node.js·개발 서버가 필요하지 않습니다.
 
 ## 1. 설치하고 세션 열기
 
-### 릴리스 파일 사용
+OS와 CPU에 맞는 [v0.3.0 프리뷰](https://github.com/eggplantiny/conn/releases/tag/v0.3.0)를 받으세요. 실제 서명 상태와 실행 검증 결과는 릴리스 안내에서 확인할 수 있습니다.
 
-[공개된 릴리스](https://github.com/eggplantiny/conn/releases)에 첨부된 파일을 사용하세요. 릴리스 워크플로는 Linux `.deb`·`.AppImage`, macOS `.dmg`, Windows NSIS `.exe`, 별도 CLI 압축 파일을 대상으로 합니다. 아직 공개된 릴리스가 없다면 아래 소스 빌드 방법을 사용하세요.
+| 플랫폼 | 다운로드 | 설치 |
+|---|---|---|
+| Ubuntu x64 | [`.deb`](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.deb) | 아래 명령으로 설치한 뒤 앱 목록에서 Conn을 엽니다. |
+| Ubuntu x64 | [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage) | 실행 권한을 준 뒤 파일을 엽니다. |
+| macOS Apple Silicon | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-aarch64-apple-darwin-desktop.dmg) | DMG를 열고 Conn을 Applications로 옮긴 뒤 그곳에서 실행합니다. |
+| macOS Intel | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-apple-darwin-desktop.dmg) | DMG를 열고 Conn을 Applications로 옮긴 뒤 그곳에서 실행합니다. |
+| Windows x64 | [설치 `.exe`](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-pc-windows-msvc-setup.exe) | 설치 파일을 실행하고 시작 메뉴에서 Conn을 엽니다. |
 
-Windows 프리뷰는 무서명으로 배포합니다. SmartScreen·알 수 없는 배포자 경고가 나타날 수 있고 관리되는 PC에서는 설치가 차단될 수 있습니다. Mac 공개 다운로드는 Developer ID 서명·공증 후 제공할 계획이며 현재 ad-hoc 산출물은 테스트용입니다. 각 릴리스의 실제 서명·검증 상태를 확인하세요. 체크섬은 다운로드 손상을 확인하며 배포자 신원을 보증하지 않습니다. [플랫폼 지원 안내](platform-support.ko.md)를 참고하세요. 아직 릴리스를 공개하지 않았다면 설치 검증 완료를 의미하지 않습니다.
-
-OS와 CPU 아키텍처에 맞는 파일을 선택하세요.
-
-| 플랫폼 | 데스크톱 설치 |
-|---|---|
-| Ubuntu 24.04·26.04 x64 | `.deb`를 받은 폴더에서 `sudo apt install ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.deb`를 실행합니다. |
-| Ubuntu x64 AppImage | `chmod +x ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage`로 실행 권한을 준 뒤 해당 파일을 실행합니다. 시스템에 AppImage가 요구하는 런타임 라이브러리가 있어야 합니다. |
-| macOS | Apple Silicon(`aarch64`) 또는 Intel(`x86_64`)용 `.dmg`를 열고 Conn을 Applications로 옮깁니다. 릴리스 안내에서 서명·공증된 패키지를 확인하세요. ad-hoc 초안은 테스트용입니다. |
-| Windows x64 | `-setup.exe` 설치 파일을 실행한 뒤 시작 메뉴에서 Conn을 엽니다. 프리뷰에는 검증된 배포자 인증서가 없습니다. |
-
-Linux 릴리스는 Ubuntu 24.04에서 빌드하고 24.04·26.04에서 검증합니다. 다른 배포판·이전 Ubuntu는 아직 검증하지 않았으며 AppImage가 모든 Linux 호환을 보장하지 않습니다.
-
-다른 버전은 명령의 `v0.3.0`을 받은 버전으로 바꾸고, 체크섬도 같은 릴리스에서 받으세요. 데스크톱에는 같은 버전의 CLI가 포함됩니다. 에이전트 클라이언트의 `PATH`를 구성할 때는 별도 CLI 압축 파일도 사용할 수 있습니다.
-
-CLI 압축 파일을 사용한다면 `conn`(Windows는 `conn.exe`)을 사용자 `PATH`에 포함된 폴더에 풀어 넣으세요. 터미널을 다시 열고 확인합니다.
+Ubuntu에서는 다운로드한 폴더에서 실행합니다.
 
 ```sh
-conn --version
+sudo apt install ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.deb
 ```
 
-Unix에서는 데스크톱 명령 팔레트의 **conn CLI를 PATH에 설치** 기능도 사용할 수 있습니다. 함께 배포된 CLI가 있어야 하며, 설정 → 진단에서 번들 실행 파일과 `PATH`에서 찾은 실행 파일을 확인할 수 있습니다. Windows에서는 CLI 압축 파일이나 Cargo 설치를 사용하세요.
-
-### 소스에서 실행
-
-CLI에는 rustup으로 설치한 Rust와 플랫폼의 네이티브 컴파일러·링커가 필요합니다. 데스크톱에는 **Node.js 24**와 [Tauri 필수 구성 요소](https://v2.tauri.app/start/prerequisites/)도 필요합니다. `rust-toolchain.toml`이 Rust 1.95.0을 선택합니다.
+AppImage를 선택했다면 다음과 같이 실행합니다.
 
 ```sh
-git clone https://github.com/eggplantiny/conn.git
-cd conn
-cargo install --path crates/cli --locked
+chmod +x ./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage
+./conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage
 ```
 
-프런트엔드를 하나 선택합니다.
+Linux 빌드 대상은 Ubuntu 24.04·26.04 x64이며 AppImage에도 시스템 라이브러리가 필요합니다. Windows 프리뷰는 의도적으로 무서명 배포하므로 SmartScreen·알 수 없는 배포자 경고가 나올 수 있고 관리되는 PC에서는 설치가 차단될 수 있습니다. Mac 공개 파일은 릴리스의 Developer ID 서명·공증 검사를 통과해야 합니다. 각 대상의 범위는 [플랫폼 지원](platform-support.ko.md)을 참고하세요.
 
-**데스크톱** — 저장소에서 실행:
-
-```sh
-cd frontends/tauri
-npm ci
-npm run tauri dev
-```
-
-**기존 터미널** — 다음 명령 실행:
-
-```sh
-conn
-```
-
-세션을 열어 두세요. `conn mcp`는 이미 열린 세션에 에이전트를 연결하며, 터미널을 대신 열지는 않습니다. 처음에는 기본 연결 주소를 사용하는 Conn 프런트엔드를 하나만 실행하세요. 여러 인스턴스를 따로 실행하려면 각각 다른 연결 주소가 필요합니다.
+원하면 파일과 함께 [SHA256SUMS](https://github.com/eggplantiny/conn/releases/download/v0.3.0/SHA256SUMS)를 받으세요. Linux는 `sha256sum --ignore-missing -c SHA256SUMS`, macOS는 `shasum -a 256 <파일>` 결과와 해당 줄 비교, Windows는 `Get-FileHash <파일> -Algorithm SHA256`을 사용합니다. 체크섬은 파일 손상을 확인하며 코드 서명과는 별개입니다.
 
 ## 2. 터미널 설정
 
-데스크톱의 **왼쪽 위 C 아이콘 → 설정**을 엽니다.
+**왼쪽 위 C 아이콘 → 설정**을 엽니다.
 
-1. **터미널 프로필**에서 로컬 셸과 시작 디렉터리를 선택합니다. 필요하면 설치된 셸을 탐색하고 기본 프로필을 지정하세요.
-2. **테마 → 언어**에서 English 또는 한국어를 고릅니다. 움직임을 줄이려면 핸드오프 효과를 끄세요. 아이콘은 운영체제의 모션 줄이기 설정도 따릅니다.
-3. 설정을 닫습니다. **+** 버튼은 기본 프로필로 새 탭을 엽니다. 기존 탭은 원래 프로필을 유지합니다.
-4. **오른쪽 위 제어 상태 표시**를 누릅니다. 이번 예제에서는 **Autopilot**, **제어권 부여 전 확인 켜기**, **실행 유예 2초**로 설정합니다.
+1. **터미널 프로필**에서 로컬 셸, 시작 폴더, 기본 프로필을 고릅니다. **+**로 해당 프로필의 새 탭을 열 수 있으며 기존 탭의 프로필은 유지됩니다.
+2. **테마 → 언어**에서 English 또는 한국어를 고릅니다. 핸드오프 효과를 끌 수 있으며 아이콘은 OS의 모션 줄이기 설정도 따릅니다.
+3. 설정을 닫고 **오른쪽 위 제어 상태 표시**를 누릅니다. 첫 요청에서는 **Autopilot**, **제어권 부여 전 확인 켜기**, **실행 유예 2초**로 설정하세요.
 
-Autopilot은 정책 안에서 에이전트 실행을 허용하며, 필요한 명령 승인을 생략하지 않습니다. 제안된 명령마다 사람이 Enter를 누르는 흐름을 원하면 **Co-pilot**을 선택하세요. **Observe**는 에이전트가 쓰지 않고 읽기만 하게 합니다.
-
-기존 터미널 프런트엔드라면 다른 터미널에서 설정합니다.
-
-```sh
-conn mode autopilot
-conn gate --ask
-conn pacing --enter-grace-ms 2000
-conn status
-```
-
-이 명령들은 실행 중인 세션의 옵션을 변경하며 다른 셸을 시작하지 않습니다.
+Autopilot은 정책 안에서 에이전트 실행을 허용합니다. **Co-pilot**에서는 제안된 명령마다 사람이 Enter를 누르며, **Observe**는 에이전트가 쓰지 않고 읽기만 하게 합니다.
 
 ## 에이전트 연결
 
-에이전트 클라이언트에 다음 명령을 MCP stdio 서버로 등록하세요.
+**설정 → 에이전트 → 에이전트 연결**에서 진행합니다.
 
-```text
-실행 파일: conn
-인자:      mcp
+1. Codex라면 **Codex TOML**, `mcpServers` 설정을 쓰는 클라이언트라면 **MCP JSON**을 고릅니다.
+2. **에이전트 설정 복사**를 누릅니다.
+3. 복사한 서버 항목을 클라이언트의 MCP 설정에 추가한 뒤 클라이언트를 다시 실행하거나 연결합니다. Codex는 `~/.codex/config.toml`에 항목을 합치며 다른 설정은 유지하세요.
+
+복사한 설정에는 CLI의 **실제 절대 경로**와 현재 Conn 세션의 연결 주소가 들어갑니다. Rust 설치, Cargo 실행, `PATH` 등록은 필요하지 않으며 AppImage도 같은 절차를 사용합니다. 에이전트가 연결하는 동안 Conn을 열어 두세요. 앱을 업데이트하거나 옮기거나 재설치했다면 설정을 다시 복사하세요.
+
+서버는 MCP stdio 방식입니다. 클라이언트마다 설정 형식이 다르며 JSON은 설정 데이터이므로 셸 명령으로 실행하지 않습니다. 이 로컬 연결만으로 브라우저 전용 클라이언트에 필요한 원격 서버가 제공되지는 않습니다.
+
+Conn은 MCP 초기화 정보에서 에이전트 이름을 정합니다. 고정 이름이 필요하면 `mcp` 뒤에 `--agent-id my-agent`를 추가하세요. 도구 목록을 새로 읽지 못하는 클라이언트에는 `--tools static`을 사용할 수 있습니다. Codex로 인식되는 클라이언트는 자동 모드에서 이미 정적 목록을 사용하며 실제 호출마다 권한을 검사합니다. [함께 제공하는 스킬](../plugin/skills/conn/SKILL.md)에서 절차를 확인할 수 있습니다.
+
+### 직접 설정과 연결 주소
+
+CLI를 별도로 설치해 `PATH`에 등록했다면 Codex CLI에서 다음 명령으로 연결할 수 있습니다.
+
+```sh
+codex mcp add conn -- conn mcp
 ```
 
-`mcpServers` JSON 형식을 사용하는 클라이언트라면 다음과 같이 지정합니다.
-
-```json
-{
-  "mcpServers": {
-    "conn": {
-      "command": "conn",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-설정 형식과 위치는 클라이언트마다 다릅니다. 위 JSON은 서버 정의이며 터미널에 붙여 넣는 명령이 아닙니다. 에이전트의 환경에서 CLI를 찾지 못하면 `command`에 절대 경로를 쓰세요. Windows에서는 필요에 따라 `conn.exe` 전체 경로를 지정하고 JSON의 역슬래시를 이스케이프하세요.
-
-Conn은 MCP 초기화 정보에서 에이전트 이름을 정합니다. 고정 이름을 쓰려면 인자를 `mcp --agent-id my-agent`로 지정하세요. 도구 목록 변경을 반영하지 못하는 클라이언트에는 `mcp --tools static`을 사용할 수 있습니다. 자동 모드는 Codex로 인식되는 클라이언트 이름에 정적 목록을 선택하며, 실제 호출마다 권한 검사는 계속 적용됩니다.
-
-어댑터는 MCP 초기화 시 사용 지침을 제공합니다. [함께 제공하는 스킬](../plugin/skills/conn/SKILL.md)에 절차가 있고 `conn guide`로도 읽을 수 있습니다. [플러그인 폴더](../plugin/README.md#한국어)에는 이를 불러올 수 있는 클라이언트를 위한 MCP 정의와 스킬이 함께 있습니다.
-
-### 연결 주소 확인
-
-기본 연결 주소는 Unix의 `~/.conn/conn.sock`, Windows의 로컬 사용자별 Named Pipe입니다. 데스크톱이 실제 사용하는 주소는 **설정 → 진단**에서 확인하세요.
-
-기본값이 아닌 주소는 표시된 값을 그대로 전달합니다.
-
-```text
-실행 파일: conn
-인자:      --socket <진단에-표시된-연결-주소> mcp
-```
-
-`CONN_SOCKET` 환경 변수로도 선택할 수 있습니다. 로컬 브라우저 테스트 환경은 별도 연결 주소를 출력하며 데스크톱 세션에 자동으로 연결하지 않습니다.
+기본 주소는 Unix의 `~/.conn/conn.sock`, Windows의 로컬 사용자별 Named Pipe입니다. **설정 → 진단**에서 현재 주소를 확인하세요. 기본값이 아닌 세션에는 `conn --socket <연결주소> mcp` 또는 `CONN_SOCKET`을 사용합니다. 데스크톱에서 복사하는 설정에는 이 값이 자동으로 포함됩니다. 브라우저 테스트 어댑터는 별도 주소를 사용합니다.
 
 ## 3. 제어권 주고받기
 
 에이전트에게 요청하세요.
 
-> 모든 셸 작업은 Conn으로 해줘. 현재 화면을 읽고 현재 디렉터리를 확인할 제어권을 요청해. 정확한 명령도 요청에 포함해 줘. 파일은 변경하지 마. 내가 거절하거나 개입하면 멈추고 무슨 일이 있었는지 알려줘.
+> 모든 셸 작업은 Conn으로 해줘. 현재 화면을 읽고 현재 디렉터리를 확인할 제어권을 요청해. 정확한 명령도 포함해 줘. 파일은 변경하지 마. 내가 거절하거나 제어권을 가져오면 멈추고 무슨 일이 있었는지 알려줘.
 
-CLI만으로 시연하려면 공유 세션 안이 아닌 **다른 터미널**에서 실행합니다.
+1. 제어 요청을 검토합니다. **요청 원문 보기**에는 인자와 에이전트가 전달한 예정 명령이 표시됩니다.
+2. **허용**을 선택합니다. 별도의 명령 승인이 뜨면 그것도 검토하세요. 실행 유예 중 **Enter**는 즉시 실행하고 **Esc**는 취소합니다.
+3. 결과를 함께 읽습니다. Enter가 전달됐다고 성공으로 판단하지 말고 에이전트가 스냅샷을 다시 확인하도록 요청하세요.
+4. 직접 명령을 입력해 제어권을 가져와 보세요. 준비가 되면 에이전트에게 바뀐 화면을 읽고 계속하도록 요청합니다.
+5. **타임라인**에서 명령과 제어권 변경을 확인합니다. 요청을 거절해 실행되지 않는지도 확인할 수 있습니다. 다시 시도할 때는 명시적으로 요청하세요.
 
-```sh
-conn agent --agent-id demo run "pwd" --reason "파일을 변경하지 않고 현재 디렉터리를 확인합니다"
-```
+**제어권을 가져와도 이미 실행 중인 명령을 되돌리거나 멈추지는 않습니다.** 에이전트의 추가 입력을 막는 동작입니다. 실행 중인 프로세스를 멈추려면 Ctrl-C 같은 일반적인 터미널 인터럽트를 사용하세요.
 
-cmd.exe에서는 `pwd` 대신 `cd`를 쓰세요. 비 POSIX 셸과 원격 프로필은 일반 정책이 명령을 허용하더라도 별도 명령 검토가 필요합니다.
-
-데스크톱에서 확인할 순서입니다.
-
-1. 제어 요청이 나타나면 **요청 원문 보기**를 펼쳐 `request_control`, 인자, 예정 명령을 확인합니다.
-2. 첫 시도는 **거부**를 선택합니다. 명령이 실행되지 않아야 합니다. 아래 **타임라인**을 열고 거절 기록을 확인하세요.
-3. 에이전트에게 명시적으로 재시도를 요청하거나, 직접 위 CLI 예제를 다시 실행합니다. 이번에는 **허용**을 선택하세요.
-4. 명령 승인 카드가 추가로 뜨면 따로 검토합니다. 실행 유예 중 **Enter**는 즉시 실행, **Esc**는 취소입니다.
-5. 터미널 출력을 읽습니다. 에이전트도 새 스냅샷을 읽고 실제 보이는 결과를 알려줘야 합니다.
-
-열린 C 아이콘은 현재 탭의 상태를 반영합니다. 사람의 제어 상태에서 요청 대기, 에이전트 제어, 실행 유예로 변하고 정책 차단·일시 정지·연결 종료도 구별합니다. 아이콘은 상태 표시이며 승인 버튼이 아닙니다.
-
-**제어권을 가져와도 이미 실행 중인 명령이 취소되지는 않습니다.** 사람의 터미널 입력은 에이전트의 추가 입력을 막습니다. 실행 중인 프로세스도 중단하려면 Ctrl-C 등 터미널의 일반적인 중단 동작을 사용하세요. 다른 터미널에서 `conn take`를 실행하면 공유 셸에 문자를 넣지 않고 제어권을 회수합니다.
+열린 C 아이콘은 사람 제어, 대기 중인 요청, 에이전트 제어, 실행 유예를 나타내는 상태 표시이며 승인 버튼은 아닙니다.
 
 ## 4. 타임라인 읽기
 
-데스크톱 타임라인은 명령 기록과 협업 기록을 함께 보여줍니다.
+**전체**는 명령과 협업을 합쳐 보여주고 **명령**, **협업**으로 걸러 볼 수 있습니다. **상세**에서 이벤트 순서를, **요청 원문 보기**에서 기록한 메서드와 인자를 확인하세요. 오래된 기록이나 일부 클라이언트에는 예정 명령이 없을 수 있습니다.
 
-- **전체**는 서로 관련된 제어 이벤트와 명령 실행을 묶어 보여줍니다.
-- **명령**은 명령 입력에 집중합니다.
-- **협업**은 제어 요청과 제어권 이양을 보여줍니다.
-- **상세**에서는 이벤트 순서, 의도, 확인 가능한 정책 정보를 봅니다.
-- **요청 원문 보기**에는 기록된 메서드와 인자가 있습니다. 예정 명령은 메타데이터이며 그 명령을 실행했다는 증거가 아닙니다.
+거절, 정책 차단, 취소, 만료, 실행은 서로 다른 결과입니다. **실행됨**은 입력이 셸에 도착했다는 뜻이며 명령 성공을 뜻하지 않습니다. 타임라인은 터미널 출력이나 스크롤백을 저장하지 않습니다.
 
-사용자 거절, 정책 차단, 취소, 만료, 실행은 서로 다른 결과입니다. 과거 기록에는 원문이 없을 수 있고 클라이언트가 예정 명령을 생략할 수도 있습니다. Conn은 없는 정보를 만들어 채우지 않고 확인할 수 없다고 표시합니다.
+## 기존 터미널과 CLI 사용
 
-**실행됨**은 Conn이 명령을 셸에 전달했다는 의미입니다. 종료 코드나 작업 완료 결과가 아닙니다. 타임라인은 터미널 녹화 기능이 아니며 출력·스크롤백은 감사 로그에 저장되지 않습니다.
-
-터미널에서도 감사 기록을 확인할 수 있습니다.
+[Linux x64](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-unknown-linux-gnu-cli.tar.gz), [Mac Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-aarch64-apple-darwin-cli.tar.gz), [Mac Intel](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-apple-darwin-cli.tar.gz), [Windows x64](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-pc-windows-msvc-cli.zip)용 CLI 압축 파일을 받으세요. `conn`(Windows는 `conn.exe`)을 사용자 `PATH`에 포함된 폴더에 풀고 터미널을 다시 엽니다.
 
 ```sh
-conn log -n 30
-conn log --json --actor demo
+conn --version
+conn
 ```
 
-## 자주 확인할 사항
+세션을 열어 두세요. 다른 터미널에서 예제 설정과 읽기 전용 요청을 보냅니다.
 
-| 증상 | 확인할 내용 |
+```sh
+conn mode autopilot
+conn gate --ask
+conn pacing --enter-grace-ms 2000
+conn agent --agent-id demo run "pwd" --reason "Show the current directory without changing files"
+```
+
+cmd.exe에는 `pwd` 대신 `cd`를 사용하세요. `conn take`는 제어권을 회수하고 `conn log -n 30`은 최근 기록을 읽습니다. `agent run`은 입력 후 스냅샷을 출력하며 셸 명령의 종료 상태를 추적하지 않습니다. 비-POSIX·원격 프로필에는 명령 검토가 필요합니다.
+
+## 자주 묻는 문제
+
+| 증상 | 확인할 것 |
 |---|---|
-| `conn`을 찾지 못함 | `PATH` 변경 후 터미널을 다시 열거나 MCP 설정에 실행 파일 전체 경로를 지정하세요. |
-| 에이전트가 연결하지 못함 | Conn 세션을 열어 두고 진단의 연결 주소를 비교하세요. 브라우저 테스트는 별도 주소를 씁니다. |
-| 읽기는 되지만 입력하지 못함 | Observe 모드, 도구 허용 범위, 제어권, 현재 보고 있는 탭을 확인하세요. |
-| 요청이 계속 대기 중임 | 제어 요청, 명령 승인 또는 Co-pilot 제안이 사람의 결정을 기다릴 수 있습니다. |
-| `unattended` 또는 `suspended` | 해당 탭으로 돌아가거나 명시적으로 맡겨 주세요. 에이전트는 사람의 화면을 전환할 수 없습니다. |
-| 연결한 명령이 차단됨 | `isolate_dangerous: true`에서는 위험 작업을 단독으로 요청해야 합니다. 이동, 작업, 결과 확인을 각각 요청하세요. |
-| 거절된 명령인데 CLI 출력이 있음 | `result:`와 타임라인을 읽으세요. `agent run`은 화면 스냅샷을 출력하며, CLI 프로세스의 정상 종료가 셸 명령 실행을 뜻하지는 않습니다. |
-| 긴 명령이 아직 끝나지 않음 | `agent run`은 전달 직후 잠시 기다렸다 화면을 읽으며 셸 종료 상태를 추적하지 않습니다. 기다린 뒤 스냅샷을 다시 요청하세요. |
-| 브라우저 새로고침으로 셸이 끝남 | 개발 테스트 환경의 정상 동작입니다. 필요한 때만 새로고침하세요. 파일과 저장된 감사 기록은 유지되지만 실행 중인 세션은 종료됩니다. |
+| 에이전트가 CLI를 찾지 못함 | 설정에서 연결 구성을 다시 복사하세요. 데스크톱 연결은 절대 경로를 사용하므로 `PATH` 변경이 필요하지 않습니다. |
+| 에이전트가 연결되지 않음 | Conn을 열어 두고 현재 주소를 사용하세요. 앱을 옮겼다면 설정을 다시 복사하세요. |
+| 읽지만 입력하지 못함 | Observe 모드, 도구 권한, 제어권 소유자, 해당 탭이 보이는지 확인하세요. |
+| 요청이 계속 대기함 | 제어 요청, 명령 승인, Co-pilot 제안이 있는지 확인하세요. |
+| `unattended` 또는 `suspended` | 해당 탭으로 돌아가거나 명시적으로 맡기세요. 에이전트는 보이는 탭을 바꿀 수 없습니다. |
+| 복합 명령이 차단됨 | `isolate_dangerous: true`이면 이동, 위험 작업, 검증을 각각 요청하세요. |
+| 명령이 아직 실행 중임 | 기다린 뒤 스냅샷을 다시 읽으세요. 입력 결과는 종료 상태가 아닙니다. |
 
-정책은 **설정 → 정책** 또는 `~/.conn/policy.yaml`에서 바꿉니다. 정책 차단은 승인 버튼으로 해제할 수 없습니다. 규칙을 변경하기 전에 [정책 문서](policy.md)를 읽어보세요.
+정책은 **설정 → 정책** 또는 `~/.conn/policy.yaml`에 있습니다. 승인으로 정책 차단을 해제할 수는 없습니다. 설정과 기록의 기본 위치는 `~/.conn`(Windows는 `%USERPROFILE%\.conn`)입니다. 요청과 프로필 환경 값에 민감한 내용이 있을 수 있으므로 공유 전에 확인하세요.
 
-## 로컬 데이터와 다음 단계
+## 소스에서 실행
 
-설정과 감사 데이터는 기본적으로 `~/.conn`(Windows의 `%USERPROFILE%\.conn`)에 있으며 프로필, 정책, 기본값, 감사 기록을 포함합니다. 프런트엔드는 외형 설정도 로컬에 보관합니다. 프로필 환경 변수와 요청 인자에는 민감한 값이 들어갈 수 있으므로 제보에 첨부하기 전에 확인하고 가려 주세요.
+소스 빌드는 개발이나 직접 수정할 때 사용합니다. rustup으로 Rust와 네이티브 컴파일러·링커를 설치하세요. 데스크톱 빌드에는 **Node.js 24**와 [Tauri 필수 구성 요소](https://v2.tauri.app/start/prerequisites/)도 필요합니다. 저장소에서 Rust 도구 버전을 고정합니다.
 
-다음 문서: [백엔드와 프로필](backends.md), [신뢰 범위](security.md), [브라우저 테스트](browser-testing.md), [기여 안내](../CONTRIBUTING.ko.md).
+```sh
+git clone https://github.com/eggplantiny/conn.git
+cd conn
+cargo install --path crates/cli --locked
+cd frontends/tauri
+npm ci
+npm run tauri dev
+```
+
+기존 터미널 프런트엔드는 Cargo 설치 후 `conn`을 실행하세요. 이 경로에는 Node.js와 Tauri가 필요하지 않습니다.
+
+다음 안내: [백엔드](backends.md), [정책](policy.md), [신뢰 범위](security.md#한국어-요약), [기여](../CONTRIBUTING.ko.md).

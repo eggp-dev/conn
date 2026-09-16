@@ -11,13 +11,16 @@ import gzip
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import tomllib
+import uuid
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -96,6 +99,67 @@ def asset_names(version: str, target: str) -> list[str]:
     base = f"conn-v{version}-{target}"
     archive = ".zip" if "windows" in target else ".tar.gz"
     return [f"{base}-cli{archive}"] + [f"{base}-{'setup' if ext == '.exe' else 'desktop'}{ext}" for ext in TARGETS[target]]
+
+
+def signing_name(version: str, target: str) -> str:
+    asset_names(version, target)
+    if not target.endswith("apple-darwin"):
+        raise ReleaseError("Signing evidence is required only for macOS targets")
+    return f"conn-v{version}-{target}-signing.json"
+
+
+def release_names(version: str) -> list[str]:
+    return sorted([name for target in TARGETS for name in asset_names(version, target)] +
+                  [signing_name(version, target) for target in TARGETS if target.endswith("apple-darwin")])
+
+
+def validate_signing_report(path: Path, version: str, target: str, artifacts: Path, sha: str | None = None):
+    """Validate native CI evidence and bind it to the exact uploaded bytes.
+
+    The report records macOS runner checks; it is not an independent signature or
+    attestation. Apple code signatures and notarization tickets remain in binaries.
+    """
+    report = read_json(regular_file(path, artifacts))
+    if report.get("schemaVersion") != 1 or report.get("version") != version or report.get("target") != target:
+        raise ReleaseError("Signing evidence version/target does not match the release")
+    if re.fullmatch(r"[0-9a-f]{40}", report.get("sourceCommit", "")) is None or (sha and report["sourceCommit"] != sha.lower()):
+        raise ReleaseError("Signing evidence does not match the source commit")
+    def signature(value, runtime=True):
+        if not isinstance(value, dict) or any(value.get(key) is not True for key in ("developerId", "teamVerified", "secureTimestamp")):
+            raise ReleaseError("Missing Developer ID, Team or timestamp verification")
+        if value.get("hardenedRuntime") is not runtime or re.fullmatch(r"[0-9a-f]{40,64}", value.get("cdhash", "")) is None:
+            raise ReleaseError("Missing hardened-runtime or CodeDirectory verification")
+    app, cli, dmg = report.get("app", {}), report.get("cli", {}), report.get("dmg", {})
+    for part in ("bundle", "desktop", "sidecar"):
+        signature(app.get(part))
+    signature(cli)
+    signature(dmg, runtime=False)
+    if any(app.get(key) is not True for key in ("stapled", "gatekeeperAccepted")) or any(dmg.get(key) is not True for key in ("stapled", "gatekeeperAccepted", "containedAppVerified")):
+        raise ReleaseError("Missing app/DMG ticket or Gatekeeper verification")
+    if cli.get("stapled") is not False:
+        raise ReleaseError("Standalone CLI evidence must not claim unsupported stapling")
+    for kind in ("cli", "dmg"):
+        submission = report.get("notarization", {}).get(kind, {})
+        try:
+            uuid.UUID(submission["id"])
+        except (KeyError, ValueError, TypeError, AttributeError):
+            raise ReleaseError("Missing notarization submission ID") from None
+        if submission.get("status") != "Accepted":
+            raise ReleaseError("Apple notarization must be Accepted for CLI and DMG")
+    expected = asset_names(version, target)
+    if not isinstance(report.get("assets"), dict) or set(report["assets"]) != set(expected):
+        raise ReleaseError("Signing evidence must cover exactly this target's release assets")
+    for name in expected:
+        if report["assets"][name] != sha256(regular_file(artifacts / name, artifacts)):
+            raise ReleaseError("Release bytes changed after signing/notarization verification")
+    # The signed/notarized standalone binary must be the one inside the tarball.
+    with tarfile.open(artifacts / expected[0], "r:gz") as archive:
+        if archive.getnames() != ["conn", "LICENSE", "README.txt"] or not archive.getmember("conn").isfile():
+            raise ReleaseError("Unexpected macOS CLI archive contents")
+        stream = archive.extractfile("conn")
+        if stream is None or hashlib.file_digest(stream, "sha256").hexdigest() != cli.get("sha256"):
+            raise ReleaseError("CLI archive does not contain the verified signed executable")
+    return report
 
 
 def regular_file(path: Path, boundary: Path) -> Path:
@@ -178,11 +242,42 @@ def sha256(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def smoke(target: str, artifacts: Path, root: Path = ROOT):
+    """Run only the extracted CLI, outside the checkout and without toolchain PATH."""
+    version = check(root)
+    archive = regular_file(artifacts / asset_names(version, target)[0], artifacts)
+    filename = "conn.exe" if "windows" in target else "conn"
+    with tempfile.TemporaryDirectory(prefix="conn-installed-cli-") as directory:
+        executable = Path(directory) / filename
+        if archive.suffix == ".zip":
+            with zipfile.ZipFile(archive) as zipped:
+                if zipped.namelist() != [filename, "LICENSE", "README.txt"]:
+                    raise ReleaseError("Unexpected CLI archive contents")
+                executable.write_bytes(zipped.read(filename))
+        else:
+            with tarfile.open(archive, "r:gz") as packed:
+                if packed.getnames() != [filename, "LICENSE", "README.txt"] or not packed.getmember(filename).isfile():
+                    raise ReleaseError("Unexpected CLI archive contents")
+                stream = packed.extractfile(filename)
+                if stream is None:
+                    raise ReleaseError("CLI archive has no executable")
+                executable.write_bytes(stream.read())
+        executable.chmod(0o755)
+        env = {key: value for key, value in os.environ.items()
+               if not key.startswith(("CARGO", "RUST", "NODE", "NPM", "APPLE_"))}
+        system_root = env.get("SystemRoot", r"C:\Windows")
+        env["PATH"] = os.pathsep.join([str(Path(system_root) / "System32"), system_root]) if os.name == "nt" else "/usr/bin:/bin"
+        result = subprocess.run([str(executable), "--version"], cwd=directory, env=env,
+                                capture_output=True, text=True, timeout=30, check=False)
+        if result.returncode != 0 or result.stdout.strip() != f"conn {version}":
+            raise ReleaseError("Standalone packaged CLI did not report the release version")
+
+
 def finalize(artifacts: Path, tag: str, sha: str | None = None, root: Path = ROOT) -> list[Path]:
     version = check(root, tag)
     if sha is not None and re.fullmatch(r"[0-9a-fA-F]{40}", sha) is None:
         raise ReleaseError("--sha must be a full 40-character Git commit SHA")
-    expected = sorted(name for target in TARGETS for name in asset_names(version, target))
+    expected = release_names(version)
     if not artifacts.is_dir():
         raise ReleaseError(f"Artifact directory not found: {artifacts}")
     found = {p.name for p in artifacts.iterdir()}
@@ -191,6 +286,9 @@ def finalize(artifacts: Path, tag: str, sha: str | None = None, root: Path = ROO
     if extras or missing:
         raise ReleaseError(f"Release asset mismatch; missing={sorted(missing)}, unexpected={sorted(extras)}")
     paths = [regular_file(artifacts / name, artifacts) for name in expected]
+    for target in TARGETS:
+        if target.endswith("apple-darwin"):
+            validate_signing_report(artifacts / signing_name(version, target), version, target, artifacts, sha)
     checksums = "".join(f"{sha256(path)}  {path.name}\n" for path in paths)
     for output_name in ("SHA256SUMS", "release-notes.md"):
         if (artifacts / output_name).is_symlink():
@@ -204,21 +302,43 @@ visible control handoff, command approval, and a combined collaboration timeline
 These binaries are built by CI; a green build is not a claim of full manual
 validation on every operating system.
 {source}
-## Install
+## Download the desktop app
+
+| Your computer | Download |
+|---|---|
+| Mac — Apple Silicon (M1 or newer) | [Conn for Apple Silicon]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'aarch64-apple-darwin')[1]}) |
+| Mac — Intel | [Conn for Intel Mac]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-apple-darwin')[1]}) |
+| Windows — x64 | [Windows installer]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-pc-windows-msvc')[1]}) |
+| Ubuntu — x64 | [Ubuntu .deb]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-unknown-linux-gnu')[1]}) · [Linux AppImage]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-unknown-linux-gnu')[2]}) |
+
+Installers include the app and its Conn CLI sidecar; Rust and Node.js are not
+required to use these binaries. Windows preview installers are unsigned, so a
+SmartScreen or unknown-publisher prompt may appear. Native CLI startup is checked
+in CI; full interactive GUI installation/collaboration checks remain pending.
+
+## Getting started
 
 - [English guide]({REPOSITORY}/blob/{tag}/docs/getting-started.md)
 - [한국어 사용법]({REPOSITORY}/blob/{tag}/docs/getting-started.ko.md)
 - [What changed]({REPOSITORY}/blob/{tag}/CHANGELOG.md)
 
-Choose the desktop installer for your platform, or the `-cli` archive for a CLI
-and MCP workflow. Apple Silicon uses `aarch64-apple-darwin`; Intel Macs use
-`x86_64-apple-darwin`. Linux x64 assets are built on Ubuntu 24.04 and target
+For a standalone terminal or MCP workflow, download the CLI for
+[Apple Silicon]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'aarch64-apple-darwin')[0]}),
+[Intel Mac]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-apple-darwin')[0]}),
+[Windows x64]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-pc-windows-msvc')[0]}) or
+[Linux x64]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-unknown-linux-gnu')[0]}).
+Linux x64 assets are built on Ubuntu 24.04 and target
 Ubuntu 24.04/26.04; verify these exact assets on both systems before publishing.
 Windows targets x64 and is intentionally unsigned for this preview; a certificate
 is not a release prerequisite. SmartScreen or unknown-publisher prompts may appear.
-macOS packages are currently ad-hoc signed, not notarized: keep this draft
-unpublished until the Apple signing handoff and native checks are complete.
-Update these notes to match the resulting signatures before public distribution.
+macOS apps, their embedded CLI sidecars, and standalone CLIs are Developer ID
+signed with hardened runtime and secure timestamps. Apple notarization is
+Accepted for the final DMGs and standalone CLI submissions; app and DMG tickets
+are stapled and verified. Apple does not support stapling a standalone CLI or
+its archive, so its notarization ticket is retrieved online when needed.
+The two `-signing.json` assets record native runner checks and final asset hashes;
+they are evidence of this build, not independent cryptographic attestations.
+Native interactive installation and collaboration coverage remains limited for this preview.
 See the [platform policy]({REPOSITORY}/blob/{tag}/docs/platform-support.md).
 Follow the installation guide for platform trust prompts; never disable system
 protection globally.
@@ -241,10 +361,13 @@ Read the [security model]({REPOSITORY}/blob/{tag}/docs/security.md) and
 
 한국어: 이 릴리스는 프리뷰입니다. 명령은 사용자 계정 권한으로 실행되며, 승인 기능은
 운영체제 샌드박스가 아닙니다. 실행 기록은 입력 전달을 뜻하며 명령의 성공을 보장하지
-않습니다. macOS 패키지는 임시 서명(ad-hoc)을 사용하며 공증되지 않았습니다.
+않습니다. macOS 앱·내장 CLI·별도 CLI는 Developer ID로 서명하며 hardened runtime과
+보안 타임스탬프를 검증합니다. DMG와 별도 CLI의 Apple 공증이 승인되었고 앱·DMG에는
+티켓을 첨부했습니다. 별도 CLI와 아카이브에는 티켓을 첨부할 수 없어 필요 시 온라인으로
+조회합니다. 두 서명 보고서는 해당 빌드의 검증 기록이며 독립적인 암호학적 증명은 아닙니다.
 Windows 프리뷰는 무서명으로 배포하며 인증서가 필수 조건은 아닙니다. Linux는
-Ubuntu 24.04 빌드를 24.04·26.04에서 검증합니다. Mac 공개 전 서명·공증과 네이티브
-검증을 완료하고 실제 서명 상태에 맞게 이 초안 안내를 수정하세요.
+Ubuntu 24.04 빌드를 24.04·26.04 대상으로 제공합니다. CI에서 각 운영체제의 별도 CLI
+시작을 확인하며, 네이티브 GUI 설치·협업의 전체 대화형 검증은 아직 완료되지 않았습니다.
 """
     (artifacts / "release-notes.md").write_text(notes, encoding="utf-8", newline="\n")
     return paths + [artifacts / "SHA256SUMS"]
@@ -267,10 +390,13 @@ def draft(artifacts: Path, tag: str, sha: str, root: Path = ROOT) -> str:
     version = check(root, tag)
     if re.fullmatch(r"[0-9a-fA-F]{40}", sha) is None:
         raise ReleaseError("--sha must be a full 40-character Git commit SHA")
-    expected = sorted(name for target in TARGETS for name in asset_names(version, target))
+    expected = release_names(version)
     if not artifacts.is_dir() or {p.name for p in artifacts.iterdir()} != set(expected) | {"SHA256SUMS", "release-notes.md"}:
         raise ReleaseError("Expected only the complete finalized asset set; run finalize first")
     assets = [regular_file(artifacts / name, artifacts) for name in expected]
+    for target in TARGETS:
+        if target.endswith("apple-darwin"):
+            validate_signing_report(artifacts / signing_name(version, target), version, target, artifacts, sha)
     checksums = regular_file(artifacts / "SHA256SUMS", artifacts)
     if checksums.read_text(encoding="utf-8") != "".join(f"{sha256(path)}  {path.name}\n" for path in assets):
         raise ReleaseError("SHA256SUMS does not match the artifacts; refusing upload")
@@ -314,6 +440,9 @@ def main(argv: list[str] | None = None) -> int:
     finish.add_argument("--artifacts", type=Path, required=True)
     finish.add_argument("--tag", required=True)
     finish.add_argument("--sha")
+    native = sub.add_parser("smoke", help="Run the standalone packaged CLI outside the checkout")
+    native.add_argument("--target", required=True, choices=TARGETS)
+    native.add_argument("--artifacts", type=Path, required=True)
     publish = sub.add_parser("draft", help="Upload verified assets to an unpublished GitHub prerelease draft")
     publish.add_argument("--artifacts", type=Path, required=True)
     publish.add_argument("--tag", required=True)
@@ -328,10 +457,13 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "finalize":
             for path in finalize(args.artifacts, args.tag, args.sha):
                 print(path)
+        elif args.command == "smoke":
+            smoke(args.target, args.artifacts)
+            print(f"Standalone CLI smoke check passed: {args.target}")
         else:
             print(draft(args.artifacts, args.tag, args.sha))
         return 0
-    except (ReleaseError, OSError, KeyError, ValueError, tomllib.TOMLDecodeError) as error:
+    except (ReleaseError, OSError, KeyError, ValueError, tomllib.TOMLDecodeError, tarfile.TarError, subprocess.TimeoutExpired) as error:
         print(f"Release validation failed: {error}", file=sys.stderr)
         return 1
 

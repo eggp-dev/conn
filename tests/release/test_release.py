@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import os
+import subprocess
 from pathlib import Path
 import shutil
 import tarfile
@@ -52,10 +53,23 @@ class ReleaseTests(unittest.TestCase):
         return executable, bundle
 
     def complete_assets(self):
-        self.out.mkdir()
         for target in release.TARGETS:
-            for name in release.asset_names(self.version, target):
-                (self.out / name).write_bytes(name.encode())
+            executable, _ = self.platform_build(target)
+            release.package(target, self.out, self.root)
+            if target.endswith("apple-darwin"):
+                signature = {"developerId": True, "teamVerified": True, "secureTimestamp": True,
+                             "hardenedRuntime": True, "cdhash": "1" * 40}
+                report = {"schemaVersion": 1, "version": self.version, "target": target,
+                          "sourceCommit": self.sha,
+                          "app": {**{part: signature.copy() for part in ("bundle", "desktop", "sidecar")},
+                                  "stapled": True, "gatekeeperAccepted": True},
+                          "cli": {**signature, "stapled": False, "sha256": release.sha256(executable)},
+                          "dmg": {**signature, "hardenedRuntime": False, "stapled": True,
+                                  "gatekeeperAccepted": True, "containedAppVerified": True},
+                          "notarization": {kind: {"status": "Accepted", "id": "12345678-1234-1234-1234-123456789abc"}
+                                           for kind in ("cli", "dmg")},
+                          "assets": {name: release.sha256(self.out / name) for name in release.asset_names(self.version, target)}}
+                (self.out / release.signing_name(self.version, target)).write_text(json.dumps(report))
         release.finalize(self.out, self.tag, self.sha, self.root)
 
     def test_versions_and_exact_tag(self):
@@ -151,13 +165,15 @@ class ReleaseTests(unittest.TestCase):
     def test_finalize_requires_exact_matrix_and_checksums_every_asset(self):
         self.complete_assets()
         manifest = (self.out / "SHA256SUMS").read_text()
-        self.assertEqual(len(manifest.splitlines()), 9)
+        self.assertEqual(len(manifest.splitlines()), 11)
         for line in manifest.splitlines():
             digest, filename = line.split("  ")
             self.assertEqual(digest, release.sha256(self.out / filename))
         notes = (self.out / "release-notes.md").read_text()
         self.assertIn("Preview / prerelease", notes)
         self.assertIn("getting-started.ko.md", notes)
+        self.assertIn("Developer ID", notes)
+        self.assertNotIn("currently ad-hoc", notes)
         self.assertNotIn("release-notes.md", manifest)
         (self.out / "private.txt").write_text("do not publish")
         with self.assertRaises(release.ReleaseError):
@@ -186,7 +202,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn("--verify-tag", create)
         upload = github.call_args_list[3].args
         self.assertNotIn(str((self.out / "release-notes.md").resolve()), upload)
-        self.assertEqual(len([arg for arg in upload if arg.startswith(str(self.out))]), 10)
+        self.assertEqual(len([arg for arg in upload if arg.startswith(str(self.out))]), 12)
 
     def test_draft_retry_edits_draft_but_refuses_published_release(self):
         self.complete_assets()
@@ -221,6 +237,72 @@ class ReleaseTests(unittest.TestCase):
         with patch.object(release, "github", side_effect=answers) as github:
             release.draft(self.out, self.tag, self.sha, self.root)
         self.assertEqual(github.call_count, 5)
+
+    def test_missing_or_failed_notarization_evidence_blocks_finalization(self):
+        self.complete_assets()
+        report = next(self.out.glob("*-signing.json"))
+        original = report.read_text()
+        report.unlink()
+        with self.assertRaises(release.ReleaseError):
+            release.finalize(self.out, self.tag, self.sha, self.root)
+        report.write_text(original)
+        payload = json.loads(original)
+        payload["notarization"]["cli"]["status"] = "Invalid"
+        report.write_text(json.dumps(payload))
+        with self.assertRaises(release.ReleaseError):
+            release.finalize(self.out, self.tag, self.sha, self.root)
+
+    def test_signing_evidence_requires_matching_commit_runtime_and_tickets(self):
+        self.complete_assets()
+        path = next(self.out.glob("*-signing.json"))
+        original = path.read_text()
+        changes = [lambda r: r.update(sourceCommit="b" * 40),
+                   lambda r: r["app"]["sidecar"].update(hardenedRuntime=False),
+                   lambda r: r["app"].update(stapled=False),
+                   lambda r: r["dmg"].update(containedAppVerified=False),
+                   lambda r: r["cli"].update(stapled=True)]
+        for change in changes:
+            report = json.loads(original)
+            change(report)
+            path.write_text(json.dumps(report))
+            with self.assertRaises(release.ReleaseError):
+                release.finalize(self.out, self.tag, self.sha, self.root)
+
+    def test_cli_archive_must_contain_the_verified_signed_binary(self):
+        self.complete_assets()
+        path = next(self.out.glob("*-signing.json"))
+        report = json.loads(path.read_text())
+        report["cli"]["sha256"] = "0" * 64
+        path.write_text(json.dumps(report))
+        with self.assertRaises(release.ReleaseError):
+            release.finalize(self.out, self.tag, self.sha, self.root)
+
+    def test_resummed_artifact_does_not_bypass_signature_evidence(self):
+        self.complete_assets()
+        next(self.out.glob("*.dmg")).write_bytes(b"changed after notarization")
+        # Even a newly computed generic checksum cannot override signed-build evidence.
+        checksums = "".join(f"{release.sha256(self.out / name)}  {name}\n" for name in release.release_names(self.version))
+        (self.out / "SHA256SUMS").write_text(checksums)
+        with patch.object(release, "github") as github:
+            with self.assertRaises(release.ReleaseError):
+                release.draft(self.out, self.tag, self.sha, self.root)
+        github.assert_not_called()
+
+    def test_packaged_cli_smoke_uses_extracted_binary_and_checks_version(self):
+        target = "x86_64-unknown-linux-gnu"
+        self.platform_build(target)
+        release.package(target, self.out, self.root)
+        result = subprocess.CompletedProcess([], 0, stdout=f"conn {self.version}\n", stderr="")
+        with patch.object(release.subprocess, "run", return_value=result) as run:
+            release.smoke(target, self.out, self.root)
+        call = run.call_args
+        self.assertEqual(call.args[0][1:], ["--version"])
+        self.assertNotIn(str(self.root), call.args[0][0])
+        if os.name != "nt":
+            self.assertEqual(call.kwargs["env"]["PATH"], "/usr/bin:/bin")
+        result.stdout = "conn 99.0.0\n"
+        with patch.object(release.subprocess, "run", return_value=result), self.assertRaises(release.ReleaseError):
+            release.smoke(target, self.out, self.root)
 
 
 if __name__ == "__main__":

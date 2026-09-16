@@ -5,92 +5,60 @@
 <h1 align="center">Conn</h1>
 <p align="center"><strong>Keep your agent. Share your terminal.</strong></p>
 <p align="center">English · <a href="README.ko.md">한국어</a></p>
-<p align="center">
-  <a href="docs/getting-started.md">Get started</a> ·
-  <a href="https://github.com/eggplantiny/conn/releases">Releases</a> ·
-  <a href="CONTRIBUTING.md">Contribute</a> ·
-  <a href="LICENSE">MIT license</a>
-</p>
 
-Conn connects your AI agent to a terminal you can both use. Keep the conversation in your agent client, let it work in the shared shell, and step in by typing. When you are ready, ask it to read the current screen and continue from your changes.
+Conn connects your AI agent to a terminal you can both use. Keep the conversation in your agent client, follow its work in the shared shell, and step in by typing. Ask it to read the screen again and continue from your changes.
 
-Use Conn as a desktop app or inside your existing terminal. Agents connect through **MCP or CLI**; Conn does not run a model.
+## Download
 
-[![Watch Codex CLI and Conn: an agent fixes a test, a person adds a case, and the agent continues from the changed terminal.](docs/assets/conn-demo-poster.webp)](docs/assets/conn-demo-en.mp4)
+**Install the desktop app — no Rust or Node.js required.** It includes the Conn CLI used to connect your agent.
 
-**[Watch the demo](docs/assets/conn-demo-en.mp4)** · [한국어 영상](docs/assets/conn-demo-ko.mp4) · [How it was recorded](docs/demo.md)
+| Platform | Download v0.3.0 preview |
+|---|---|
+| macOS · Apple Silicon | [Download for Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-aarch64-apple-darwin-desktop.dmg) |
+| macOS · Intel | [Download for Intel Mac](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-apple-darwin-desktop.dmg) |
+| Windows · x64 | [Download Windows installer](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-pc-windows-msvc-setup.exe) |
+| Ubuntu · x64 | [Download .deb](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.3.0/conn-v0.3.0-x86_64-unknown-linux-gnu-desktop.AppImage) |
 
-*An actual Codex CLI session connected through Conn MCP. The demo project is prepared, user-role input is automated, and waiting time is edited.*
+[All downloads and checksums](https://github.com/eggplantiny/conn/releases/tag/v0.3.0) · [Installation help](docs/getting-started.md) · [Platform support](docs/platform-support.md)
 
-## Work together, take turns
+Windows preview installers are unsigned and may show an unknown-publisher warning. Linux packages are built on Ubuntu 24.04. See the release notes for signing and tested platform details.
 
-- **Start with your agent.** Connect an MCP client such as Codex CLI. It can read the shared screen and request commands in the same live shell you use.
-- **Step in when you need to.** Review a request, or type directly to reclaim control and stop further agent input. Taking control does not cancel a command already running.
-- **Continue from what changed.** After your turn, ask the agent to read the screen again and continue. Commands and control changes share a timeline, with the original request available to inspect.
+## See it work
 
-## Get started
+https://github.com/user-attachments/assets/c20ec712-1915-44c2-a6a2-08b83e6951c4
 
-### 1. Open Conn
+An agent fixes a failing test. You add an edge case. It reads the updated terminal and completes the fix.
 
-Install Rust through rustup, Node.js 24, and your platform's [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/). The repository pins its Rust toolchain.
+[한국어 영상](https://github.com/user-attachments/assets/4f06180c-6a2c-4c10-99e1-7941db86470b) · [Recording details](docs/demo.md)
 
-```sh
-git clone https://github.com/eggplantiny/conn.git
-cd conn
-cargo install --path crates/cli --locked
-cd frontends/tauri
-npm ci
-npm run tauri dev
-```
+*Actual Codex CLI + Conn. Prepared demo project, automated user-role input, and shortened waits.*
 
-Prefer your existing terminal? After installing the CLI, run `conn` there. That path needs Rust and a native compiler/linker, without Node.js or Tauri. Keep the session open while connecting your agent.
+## Your first collaboration
 
-### 2. Connect your agent
+1. **Open Conn.** Install the app above and choose your shell under **Settings → Profiles**.
+2. **Connect your agent.** Open **Settings → Agents**, choose **MCP JSON** or **Codex TOML**, and copy the agent configuration into your client. It includes the bundled executable and this session's endpoint, so you do not need to set up `PATH`. Keep Conn open. [Connection guide](docs/getting-started.md#connect-your-agent)
+3. **Try one request.** In the top-right controls, select **Autopilot**, enable **Ask before granting**, and set **Grace** to 2 seconds. Ask your agent:
 
-For Codex CLI, register Conn and start a new Codex session:
+   > Use Conn to read the current screen, then request control to show the current directory. Include the exact command. Do not change files. Stop if I deny the request or take control back.
 
-```sh
-codex mcp add conn -- conn mcp
-```
+Review the request and allow or deny it. Type into Conn to take control yourself. When you are done, ask the agent to read the current screen and continue. **Timeline** keeps commands and control changes together, including the original requests.
 
-Keep Conn open while your agent connects. Other clients can register `conn mcp` as an MCP **stdio server**. For clients using JSON configuration:
+Taking control stops further agent input; it does not cancel a command already running.
 
-```json
-{
-  "mcpServers": {
-    "conn": {
-      "command": "conn",
-      "args": ["mcp"]
-    }
-  }
-}
-```
+## Use the tools you already have
 
-Configuration format and location depend on the client. Use an absolute executable path if it cannot find `conn`. See [agent setup](docs/getting-started.md#connect-your-agent) for endpoints and client options.
+Conn is a desktop app or a session inside your existing terminal. Agents connect through **MCP or CLI**; Conn does not run a model. The demo uses Codex CLI. Other MCP clients can use the copied server configuration.
 
-### 3. Try one request
-
-In the desktop's top-right controls, select **Autopilot**, turn on **Ask before granting**, and set **Grace** to 2 seconds. Then ask your agent:
-
-> Use Conn for all shell work. Read the current screen, then request control to show the current directory. Include the exact command. Do not change files. Stop if I deny the request or take control back.
-
-Inspect the request and choose **Allow** or **Deny**. After allowing it, type a command yourself to take control. Ask the agent to read the screen again before proposing its next step. Open **Timeline** to review who did what.
-
-Follow the [first collaboration walkthrough](docs/getting-started.md#3-try-the-handover) for command approvals, Co-pilot mode, and CLI-only use.
+For CLI-only use, download a `-cli` archive from the release, put `conn` on your `PATH`, and run `conn` in your terminal. [CLI setup and source builds](docs/getting-started.md)
 
 ## Explore
 
 | Task | Guide |
 |---|---|
 | Install, connect, and troubleshoot | [Getting started](docs/getting-started.md) |
-| Configure local shells, WSL, SSH, or Docker | [Backends and profiles](docs/backends.md) |
-| Choose approval and execution rules | [Policy](docs/policy.md) |
-| Integrate an agent or frontend | [Protocol](docs/protocol.md) · [Architecture](docs/architecture.md) |
-| Test or contribute | [Browser testing](docs/browser-testing.md) · [Contributing](CONTRIBUTING.md) |
-| Check packages and release requirements | [Platform support](docs/platform-support.md) · [Releasing](docs/releasing.md) |
+| Local shells, WSL, SSH, or Docker | [Backends and profiles](docs/backends.md) |
+| Approval and execution rules | [Policy](docs/policy.md) |
+| Build from source or contribute | [Contributing](CONTRIBUTING.md) |
+| Agent and frontend integration | [Protocol](docs/protocol.md) · [Architecture](docs/architecture.md) |
 
-## Preview status
-
-**v0.3.0 preview.** Start with the source setup above. Linux, macOS, and Windows packaging targets and validation status are tracked in [platform support](docs/platform-support.md); a passing build does not establish installer or interactive compatibility.
-
-Conn is a collaboration and mistake-prevention layer, **not a security sandbox**. Its timeline covers actions routed through Conn; an `executed` record means input reached the shell, not that a command succeeded. Requests and screen snapshots can contain sensitive text. See the [trust model](docs/security.md) and [security reporting policy](SECURITY.md).
+**Preview software · MIT licensed.** Commands run with your account's permissions. Conn's approval controls are not an operating-system sandbox. See the [trust model](docs/security.md) and [security reporting policy](SECURITY.md).

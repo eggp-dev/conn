@@ -154,7 +154,7 @@
       { id: "center", group: "view", label: tr("a.center"), aliases: ["center", "센터", "island", "quick"], run: () => (st.centerOpen = true) },
       ...LANGS.map((l) => ({ id: `lang-${l.id}`, group: "language", label: tr("a.lang", { name: l.name }), aliases: ["language", "언어", l.id, l.name], active: () => i18n.lang === l.id, run: () => setLang(l.id) })),
       ...(["profiles", "agents", "policy", "pacing", "appearance", "diagnostics"] as const).map((tb) => ({ id: `settings-${tb}`, group: "settings", label: tr("a.settings", { tab: tr(`s.nav.${tb}`) }), keys: shortcutLabel("⌘,"), aliases: ["settings", "설정", tb], run: () => openSettings(tb) })),
-      { id: "install-cli", group: "setup", label: tr("a.install"), aliases: ["install", "cli", "설치"], run: async () => { try { toast(tr("cli.installed", { path: await invoke<string>("install_cli") }), "ok"); } catch (e) { toast(String(e), "danger"); } } },
+      { id: "connect-agent", group: "setup", label: tr("s.connect.copy"), aliases: ["connect", "mcp", "codex", "cli", "agent", "에이전트", "연결", "설정 복사"], run: () => openSettings("agents") },
     ];
   });
 

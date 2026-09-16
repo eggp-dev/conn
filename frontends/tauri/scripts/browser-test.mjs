@@ -7,7 +7,8 @@ const children=[];
 const run=(command,args,options={})=>{const child=spawn(command,args,{stdio:"inherit",...options});children.push(child);return child;};
 const build=run("cargo",["build","-p","conn-browser-harness","--locked"],{cwd:resolve("../.."),env:{...process.env,CARGO_INCREMENTAL:"0",CARGO_PROFILE_DEV_DEBUG:"0"}});
 await new Promise((resolve,reject)=>{build.on("error",reject);build.on("exit",code=>code===0?resolve():reject(new Error(`Harness build failed: ${code}`)));});
-const shellEnv={...process.env};
+// The standard launcher owns its ports; manual recording overrides stay manual.
+const shellEnv={...process.env,CONN_TEST_PORT:"1423",CONN_TEST_ORIGIN:"http://127.0.0.1:1421"};
 delete shellEnv.npm_config_prefix;
 const server=run(resolve(`../../target/debug/conn-browser-harness${process.platform==="win32"?".exe":""}`),[state],{env:shellEnv});
 for(let i=0;;i++){try{await access(join(state,"connection.json"));break;}catch{if(i>100||server.exitCode!==null)throw new Error("Harness did not start");await new Promise(r=>setTimeout(r,100));}}

@@ -2,7 +2,7 @@
 
 [English](demo.md) · 한국어 · [Conn 소개로 돌아가기](../README.ko.md)
 
-[한국어로 보기](assets/conn-demo-ko.mp4) · [영어로 보기](assets/conn-demo-en.mp4)
+[한국어로 보기](https://github.com/user-attachments/assets/4f06180c-6a2c-4c10-99e1-7941db86470b) · [영어로 보기](https://github.com/user-attachments/assets/c20ec712-1915-44c2-a6a2-08b83e6951c4)
 
 ## 하나의 작업을 번갈아 이어가기
 

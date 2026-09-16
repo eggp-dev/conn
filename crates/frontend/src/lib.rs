@@ -1,6 +1,8 @@
 //! Tauri side: one engine per tab, all behind one hub/socket. Output and lifecycle
 //! events reach the webview tagged with the session id.
 
+mod agent_setup;
+
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -158,7 +160,7 @@ fn diagnostics(state: &AppState, session: String) -> Result<Value, String> {
         "auditPath": state.config_dir.join("audit.jsonl"),
         "policyPath": policy_path,
         "defaultsPath": defaults_path(state),
-        "cli": cli_status(),
+        "cli": agent_setup::cli_status(),
         "plugins": {
             "claude": has(".claude/plugins/installed_plugins.json", "\"conn@conn\""),
             "copilot": has(".copilot/config.json", "conn@conn") || has(".copilot/config.json", "\"conn\"") || has(".copilot/mcp-config.json", "\"conn\""),
@@ -322,35 +324,6 @@ fn audit_tail(state: &AppState, n: usize) -> Result<Vec<Value>, String> {
     Ok(events[start..].iter().map(|e| serde_json::to_value(e).unwrap()).collect())
 }
 
-fn sidecar_path() -> Option<std::path::PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    let p = exe.parent()?.join(if cfg!(windows) {"conn.exe"} else {"conn"});
-    p.exists().then_some(p)
-}
-
-fn cli_status() -> Value {
-    let on_path = conn_core::backend::executable("conn").map(|p| p.display().to_string());
-    json!({ "bundled": sidecar_path(), "onPath": on_path })
-}
-
-#[cfg(unix)]
-fn install_cli() -> Result<String, String> {
-    let src = sidecar_path().ok_or("bundled CLI not found")?;
-    let candidates = [Some(std::path::PathBuf::from("/usr/local/bin")), std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/bin"))];
-    for dir in candidates.iter().flatten() {
-        if std::fs::create_dir_all(dir).is_err() { continue; }
-        let dst = dir.join("conn");
-        let _ = std::fs::remove_file(&dst);
-        if std::os::unix::fs::symlink(&src, &dst).is_ok() { return Ok(dst.display().to_string()); }
-    }
-    Err("no writable PATH directory (/usr/local/bin or ~/.local/bin)".into())
-}
-
-#[cfg(windows)]
-fn install_cli() -> Result<String, String> {
-    Err("Run cargo install --path crates/cli --locked to install conn.exe on your Cargo PATH".into())
-}
-
 fn profiles_catalog(state: &AppState) -> Result<conn_core::profiles::Catalog,String> {
     Ok(conn_core::profiles::Profiles::load(&state.config_dir.join("profiles.json"))?.catalog())
 }
@@ -396,8 +369,9 @@ fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Resul
         "policy_write" => serde_json::to_value(policy_write(state, arg::<String>(&args, "session")?, arg::<String>(&args, "text")?)?).map_err(|e|e.to_string()),
         "policy_test" => serde_json::to_value(policy_test(state, arg::<String>(&args, "session")?, arg::<String>(&args, "cmd")?)?).map_err(|e|e.to_string()),
         "audit_tail" => serde_json::to_value(audit_tail(state, arg::<usize>(&args, "n")?)?).map_err(|e|e.to_string()),
-        "cli_status" => serde_json::to_value(cli_status()).map_err(|e|e.to_string()),
-        "install_cli" => serde_json::to_value(install_cli()?).map_err(|e|e.to_string()),
+        "cli_status" => Ok(agent_setup::cli_status()),
+        "agent_configuration" => agent_setup::configuration(&state.config_dir, &state.socket),
+        "install_cli" => serde_json::to_value(agent_setup::install_cli(&state.config_dir)?).map_err(|e|e.to_string()),
         "profiles_catalog" => serde_json::to_value(profiles_catalog(state)?).map_err(|e|e.to_string()),
         "profiles_discover" => serde_json::to_value(profiles_discover(state)?).map_err(|e|e.to_string()),
         "profiles_save" => serde_json::to_value(profiles_save(state, arg::<conn_core::profiles::Profiles>(&args, "config")?)?).map_err(|e|e.to_string()),

@@ -47,6 +47,8 @@ jobs:
       ref: ${{ needs.validate.outputs.sha }}
   build:
     needs: validate
+    # Release secrets are never available to pull requests or manual branch runs.
+    if: github.repository == 'eggplantiny/conn' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
     strategy:
       fail-fast: false
       matrix:
@@ -65,11 +67,9 @@ jobs:
             target: x86_64-pc-windows-msvc
             bundles: nsis
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 120
     env:
       CARGO_INCREMENTAL: '0'
-      # Test/draft only until docs/macos-signing.md is completed.
-      APPLE_SIGNING_IDENTITY: '-'
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -81,11 +81,45 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
-      - name: Build CLI sidecar and desktop installer
+      - name: Prepare private macOS signing keychain
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: python scripts/macos_sign.py prepare --state "${{ runner.temp }}/conn-macos-signing"
+      - name: Build Linux or Windows CLI sidecar and desktop installer
+        if: runner.os != 'macOS'
         working-directory: frontends/tauri
         run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
-      - name: Package assets
+      - name: Build, sign and notarize macOS app and sidecar
+        if: runner.os == 'macOS'
+        working-directory: frontends/tauri
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MACOSX_DEPLOYMENT_TARGET: '12.0'
+        run: npm run tauri build -- --target ${{ matrix.target }} --bundles dmg
+      - name: Verify macOS signatures, notarize CLI and DMG, and package
+        if: runner.os == 'macOS'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          RELEASE_SHA: ${{ needs.validate.outputs.sha }}
+        run: python scripts/macos_sign.py finish --state "${{ runner.temp }}/conn-macos-signing" --target ${{ matrix.target }} --out release-artifacts
+      - name: Package Linux or Windows assets
+        if: runner.os != 'macOS'
         run: python scripts/release.py package --target ${{ matrix.target }} --out release-artifacts
+      - name: Run standalone packaged CLI on its native runner
+        run: python scripts/release.py smoke --target ${{ matrix.target }} --artifacts release-artifacts
+      - name: Remove temporary macOS signing credentials
+        if: always() && runner.os == 'macOS'
+        run: python scripts/macos_sign.py cleanup --state "${{ runner.temp }}/conn-macos-signing"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: conn-${{ matrix.target }}
