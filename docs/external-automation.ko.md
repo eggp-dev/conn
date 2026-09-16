@@ -6,10 +6,10 @@
 AppleScript입니다. Windows/Linux는 공통 내부 계약을 공유하지만 외부 실행 어댑터는
 아직 없습니다. 실제 PAM 호환성과 macOS 권한 동작은 Mac에서 검증해야 합니다.
 
-## PAM의 새 창 명령 (미배포)
+## PAM의 새 창 명령 (v0.5.1)
 
 사진과 같은 iTerm 형태의 **한 줄 새 창 생성 명령**을 지원하는 구현을 추가했습니다.
-아직 v0.5.0 바이너리에는 포함되지 않습니다.
+v0.5.1부터 사용할 수 있습니다.
 
 ```applescript
 tell application "Conn"

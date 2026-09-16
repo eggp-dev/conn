@@ -6,7 +6,7 @@
 
 `eggplantiny/conn`의 통합 브랜치는 `main`입니다. Actions 토큰은 기본 읽기 전용으로 유지하고 비공개 보안 제보를 켜며 `main` 변경에 **Required checks**와 대화 해결을 요구합니다. [버전 관리되는 규칙](../.github/main-ruleset.json)은 PR·CI 요건과 소유자의 명시적인 복구 우회 권한을 제공합니다. 기존 규칙이 있으면 중복 생성하지 말고 수정하세요.
 
-CI는 버전 일치, 공개 파일 검사, 문서 상대 링크, 릴리스 도구, 프런트엔드 테스트와 Svelte 빌드를 확인합니다. Linux·macOS Apple Silicon·Windows에서 Rust 테스트와 네이티브 데스크톱 디버그 빌드를 실행합니다. 릴리스 패키징도 이 세 대상을 사용하며 v0.5.0 이후 Intel Mac 배포는 잠시 중단합니다. macOS 디버그 빌드는 PR CI에서 ad-hoc 서명한 앱으로 묶어 `plutil`·`sdef`로 확인하고, `osacompile`로 해당 앱의 사전을 사용해 PAM 예제를 컴파일합니다. 스크립트는 실행하지 않고 릴리스 자격 증명도 사용하지 않습니다. 이 검사는 설치 프로그램이나 데스크톱 실제 조작 검증을 대신하지 않습니다.
+CI는 버전 일치, 공개 파일 검사, 문서 상대 링크, 릴리스 도구, 프런트엔드 테스트와 Svelte 빌드를 확인합니다. Linux·macOS Apple Silicon·Windows에서 Rust 테스트와 네이티브 데스크톱 디버그 빌드를 실행합니다. 릴리스 패키징도 이 세 대상을 사용하며 v0.5.1 이후 Intel Mac 배포는 잠시 중단합니다. macOS 디버그 빌드는 PR CI에서 ad-hoc 서명한 앱으로 묶어 `plutil`·`sdef`로 확인하고, `osacompile`로 해당 앱의 사전을 사용해 PAM 예제를 컴파일합니다. 스크립트는 실행하지 않고 릴리스 자격 증명도 사용하지 않습니다. 이 검사는 설치 프로그램이나 데스크톱 실제 조작 검증을 대신하지 않습니다.
 
 Actions는 커밋 SHA로 고정합니다. PR에는 서명 secrets를 제공하지 않고 초안 업로드 작업만 `contents: write` 권한을 가집니다. Mac 릴리스 작업은 [macOS 서명 안내](macos-signing.ko.md)의 자격 증명 6개를 사용하며 임시 키체인 암호는 작업 중 생성합니다.
 
@@ -16,7 +16,7 @@ Actions는 커밋 SHA로 고정합니다. PR에는 서명 secrets를 제공하�
 2. 사용자 관점의 [CHANGELOG](../CHANGELOG.md) 항목을 적고 정확한 릴리스 버전으로 확인합니다.
 
    ```sh
-   python3 scripts/release.py check --tag v0.5.0
+   python3 scripts/release.py check --tag v0.5.1
    python3 scripts/check_repo.py
    python3 -m unittest discover -s tests/release -v
    cargo test --workspace --locked
@@ -30,8 +30,8 @@ Actions는 커밋 SHA로 고정합니다. PR에는 서명 secrets를 제공하�
 4. 의도적으로 버전 태그를 생성하고 푸시합니다.
 
    ```sh
-   git tag -a v0.5.0 -m "Conn v0.5.0 preview"
-   git push origin v0.5.0
+   git tag -a v0.5.1 -m "Conn v0.5.1 preview"
+   git push origin v0.5.1
    ```
 
 태그 생성과 공개는 관리자의 릴리스 작업입니다. 공개된 태그를 옮기지 마세요.
