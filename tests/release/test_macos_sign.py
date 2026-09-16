@@ -126,6 +126,39 @@ class SigningTests(unittest.TestCase):
             with self.assertRaises(release.ReleaseError):
                 signing.accepted_submission(invalid)
 
+    def test_dmg_license_prompt_is_answered_without_mutating_image_and_mount_is_detached(self):
+        dmg = Path(self.temporary.name) / "Conn.dmg"
+        dmg.write_bytes(b"signed-dmg-fixture")
+        expected = {key: {"cdhash": "1" * 40} for key in ("bundle", "desktop", "sidecar")}
+
+        def native_command(args, **kwargs):
+            if args[:2] == ["hdiutil", "attach"]:
+                # A licensed DMG refuses an unattended attach without an answer.
+                if kwargs.get("input") != "Y\n":
+                    return subprocess.CompletedProcess(args, 1, "License prompt", "")
+                self.assertIn("-plist", args)
+                self.assertIn("-readonly", args)
+                mount = Path(args[args.index("-mountpoint") + 1])
+                (mount / "Conn.app").mkdir()
+            else:
+                self.assertEqual(args[:2], ["hdiutil", "detach"])
+                self.assertIsNone(kwargs.get("input"))
+            return subprocess.CompletedProcess(args, 0, "", "")
+
+        for invalid in (False, True):
+            with self.subTest(invalid_app=invalid):
+                received = {**expected, "sidecar": {"cdhash": ("2" if invalid else "1") * 40}}
+                with patch.object(signing.subprocess, "run", side_effect=native_command) as run, \
+                        patch.object(signing, "app_evidence", return_value=received):
+                    if invalid:
+                        with self.assertRaisesRegex(release.ReleaseError, "different app or sidecar"):
+                            signing.inspect_dmg(dmg, TEAM, expected)
+                    else:
+                        self.assertTrue(signing.inspect_dmg(dmg, TEAM, expected))
+                self.assertEqual([call.args[0][:2] for call in run.call_args_list],
+                                 [["hdiutil", "attach"], ["hdiutil", "detach"]])
+                self.assertEqual(dmg.read_bytes(), b"signed-dmg-fixture")
+
     def test_failed_command_does_not_expose_args_stdout_stderr_or_apple_environment(self):
         result = subprocess.CompletedProcess([], 1, "private stdout", "private stderr")
         with patch.dict(signing.os.environ, {"APPLE_PASSWORD": "private-env"}), patch.object(signing.subprocess, "run", return_value=result) as run:

@@ -57,13 +57,13 @@ def validate_identity(identity: str, team: str):
         raise release.ReleaseError("A Developer ID Application identity matching APPLE_TEAM_ID is required; ad-hoc signing is forbidden")
 
 
-def command(args, label, timeout=120):
+def command(args, label, timeout=120, *, input_text=None):
     # Do not echo args or captured output: security/notarytool arguments can carry
     # secrets. All errors name only the fixed stage and numeric exit status.
     env = {key: value for key, value in os.environ.items() if not key.startswith("APPLE_")}
     try:
         result = subprocess.run([str(arg) for arg in args], capture_output=True, text=True,
-                                check=False, timeout=timeout, env=env)
+                                check=False, timeout=timeout, env=env, input=input_text)
     except (OSError, subprocess.TimeoutExpired):
         raise release.ReleaseError(f"{label} could not complete") from None
     if result.returncode != 0:
@@ -232,7 +232,11 @@ def inspect_dmg(dmg: Path, team: str, expected_app):
     with tempfile.TemporaryDirectory(prefix="conn-dmg-") as directory:
         mount = Path(directory) / "volume"
         mount.mkdir()
-        command(["hdiutil", "attach", dmg, "-readonly", "-nobrowse", "-mountpoint", mount], "Mount final DMG")
+        # Tauri embeds this project's MIT LICENSE as the DMG's agreement. Answer
+        # that prompt over a pipe so CI cannot hang or refuse the mount on EOF.
+        # Keep the signed image unchanged; do not convert it to remove the EULA.
+        command(["hdiutil", "attach", dmg, "-plist", "-readonly", "-nobrowse", "-mountpoint", mount],
+                "Mount final DMG", input_text="Y\n")
         try:
             apps = list(mount.glob("*.app"))
             if len(apps) != 1:
