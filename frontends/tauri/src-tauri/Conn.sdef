@@ -2,6 +2,11 @@
 <!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
 <dictionary title="Conn Terminology">
   <suite name="Conn Automation" code="Conn" description="External applications control their own Conn sessions. Enable profiles in Settings → Automation first.">
+    <command name="create window with default profile" code="Conncwdf" description="Open a native window using the default allowed profile and optionally queue a startup command through approval and policy. Returns a session ID, not an iTerm window object.">
+      <cocoa class="ConnAutomationCommand"/>
+      <parameter name="command" code="cmnd" type="text" optional="yes" description="One-line startup command, passed unchanged. Control returns to the human after delivery."><cocoa key="command"/></parameter>
+      <result type="text"/>
+    </command>
     <command name="create session" code="Connopns" description="Open a tab from an allowed profile and return its session ID. Control still requires user permission.">
       <cocoa class="ConnAutomationCommand"/>
       <parameter name="profile" code="prof" type="text" optional="yes" description="Saved profile ID; defaults to the default profile."><cocoa key="profile"/></parameter>

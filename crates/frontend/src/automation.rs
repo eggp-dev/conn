@@ -34,6 +34,7 @@ pub struct Config {
 struct Binding {
     owner: String,
     name: String,
+    window: String,
     session_id: String,
     handle: String,
     conn: ConnId,
@@ -58,6 +59,7 @@ struct Job {
     binding: Arc<Binding>,
     text: String,
     newline: bool,
+    release_after_delivery: bool,
     intent: String,
     created: Instant,
     cancelled: AtomicBool,
@@ -143,6 +145,13 @@ pub(crate) fn save(state: &AppState, config: Config) -> Result<Value, String> {
     Ok(state.automation.settings())
 }
 
+fn validate_text(text: &str) -> Result<(), String> {
+    if text.len() > 16_384 || text.chars().any(char::is_control) {
+        return Err("Text must be one line without control characters (maximum 16 KiB); use the newline option".into());
+    }
+    Ok(())
+}
+
 fn field(args: &Value, key: &str) -> Result<String, String> {
     args.get(key)
         .and_then(Value::as_str)
@@ -174,6 +183,7 @@ fn request(state: &AppState, caller: &Caller, id: &str) -> Result<Arc<Job>, Stri
 pub(crate) fn dispatch(
     app: &AppHandle,
     state: &Arc<AppState>,
+    window: &str,
     caller: Caller,
     operation: &str,
     args: Value,
@@ -182,6 +192,59 @@ pub(crate) fn dispatch(
         return Err("Invalid native caller".into());
     }
     match operation {
+        "window.create" => {
+            if args.get("sensitive").and_then(Value::as_bool) == Some(true) {
+                return Err(
+                    "Sensitive input is not supported; use SSH-managed authentication".into(),
+                );
+            }
+            // Validate before opening a shell. The native adapter supplies the new
+            // window label and creates its webview after this scoped session exists.
+            let command = match args.get("command") {
+                None | Some(Value::Null) => None,
+                Some(Value::String(s)) if s.is_empty() => None,
+                Some(Value::String(s)) => {
+                    validate_text(s)?;
+                    Some(s.clone())
+                }
+                _ => return Err("Command must be text".into()),
+            };
+            let handle = dispatch(
+                app,
+                state,
+                window,
+                caller.clone(),
+                "session.create",
+                json!({}),
+            )?;
+            let request = if let Some(command) = command {
+                match dispatch(
+                    app,
+                    state,
+                    window,
+                    caller.clone(),
+                    "session.write",
+                    json!({
+                        "session":handle, "text":command, "newline":true,
+                        "releaseAfterDelivery":true,
+                        "intent":"Run the startup command requested by the external launcher"
+                    }),
+                ) {
+                    Ok(id) => id,
+                    Err(error) => {
+                        if let Ok(b) = binding(state, &caller, handle.as_str().unwrap_or_default())
+                        {
+                            let _startup = state.startup.lock();
+                            let _ = crate::close_tab(state, b.session_id.clone());
+                        }
+                        return Err(error);
+                    }
+                }
+            } else {
+                Value::Null
+            };
+            Ok(json!({"session":handle,"requestId":request}))
+        }
         "session.create" => {
             let config = state.automation.config.lock();
             if !config.enabled {
@@ -210,7 +273,8 @@ pub(crate) fn dispatch(
             }
             let _startup = state.startup.lock();
             crate::ensure_runtime(app, state)?;
-            let id = crate::spawn_tab(app, state, 24, 80, Some(profile))?;
+            let id = crate::spawn_tab(app, state, window, 24, 80, Some(profile))?;
+            state.windows.lock().select(window, &id);
             state.hub.set_attended(&id);
             let session = state.hub.get(&id).ok_or("Session closed")?;
             let name = format!("AppleScript · {}", caller.name);
@@ -230,6 +294,7 @@ pub(crate) fn dispatch(
             let b = Arc::new(Binding {
                 owner: caller.identity,
                 name: name.clone(),
+                window: window.into(),
                 session_id: id.clone(),
                 handle: handle.clone(),
                 conn,
@@ -262,10 +327,12 @@ pub(crate) fn dispatch(
                     "Sensitive input is not supported; use SSH-managed authentication".into(),
                 );
             }
-            if text.len() > 16_384 || text.chars().any(char::is_control) {
-                return Err("Text must be one line without control characters (maximum 16 KiB); use the newline option".into());
-            }
+            validate_text(&text)?;
             let newline = args.get("newline").and_then(Value::as_bool).unwrap_or(true);
+            let release_after_delivery = args
+                .get("releaseAfterDelivery")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             let intent = args
                 .get("intent")
                 .and_then(Value::as_str)
@@ -297,6 +364,7 @@ pub(crate) fn dispatch(
                     && j.binding.handle == id
                     && j.text == text
                     && j.newline == newline
+                    && j.release_after_delivery == release_after_delivery
                     && j.intent == intent
                 {
                     return Ok(json!(request_id));
@@ -320,6 +388,7 @@ pub(crate) fn dispatch(
                 binding: b.clone(),
                 text,
                 newline,
+                release_after_delivery,
                 intent,
                 created: Instant::now(),
                 cancelled: AtomicBool::new(false),
@@ -379,7 +448,12 @@ fn worker(state: Weak<AppState>, b: Arc<Binding>) {
         };
         let outcome = run_job(&state, &job, &mut has_had_control);
         match outcome {
-            Ok(detail) => job.update("delivered", detail),
+            Ok(detail) => {
+                if job.release_after_delivery {
+                    b.stop();
+                }
+                job.update("delivered", detail);
+            }
             Err((status, detail)) => {
                 job.update(status, json!(detail));
                 b.stop();
@@ -429,7 +503,7 @@ fn run_job(
     check(state, job)?;
     while !state
         .upgrade()
-        .is_some_and(|s| s.ui_ready.load(Ordering::Acquire))
+        .is_some_and(|s| s.windows.lock().ready(&job.binding.window))
     {
         check(state, job)?;
         pause();
@@ -606,9 +680,12 @@ mod tests {
     }
     fn grant(h: &Harness, handle: &str) {
         let id = physical(h, handle);
+        let window = h.state.windows.lock().owner(&id).unwrap();
         let mut request_id = String::new();
         wait_for(|| {
-            let status = h.invoke("status", json!({"session":id})).unwrap();
+            let status = h
+                .invoke_in_window(&window, "status", json!({"session":id}))
+                .unwrap();
             if let Some(id) = status["controlRequests"][0]["requestId"].as_str() {
                 request_id = id.into();
                 true
@@ -616,7 +693,8 @@ mod tests {
                 false
             }
         });
-        h.invoke(
+        h.invoke_in_window(
+            &window,
             "decide_control",
             json!({"session":id,"requestId":request_id,"grant":true}),
         )
@@ -913,6 +991,169 @@ mod tests {
                 .control_requests
                 .is_empty());
         }
+    }
+
+    #[test]
+    fn window_launch_waits_for_its_ui_runs_the_exact_wrapper_and_returns_control() {
+        let (tmp, h) = harness();
+        std::fs::write(h.state.config_dir.join("policy.yaml"), "default: allow\n").unwrap();
+        enable(&h);
+        let main = h.invoke("start", json!({"rows":24,"cols":80})).unwrap();
+        h.invoke("ui_ready", json!({})).unwrap();
+        let started = tmp.path().join("started");
+        let finished = tmp.path().join("finished");
+        let command = format!("/bin/sh -c 'printf started > \"{}\"; echo \"Press [Enter] key to exit.\"; read ANSWER; printf done > \"{}\"'", started.display(), finished.display());
+        let launch = h
+            .automate_in_window(
+                "automation-1",
+                caller(),
+                "window.create",
+                json!({"command":command}),
+            )
+            .unwrap();
+        let handle = launch["session"].as_str().unwrap();
+        let request = launch["requestId"].as_str().unwrap();
+        let tab = physical(&h, handle);
+        assert_eq!(state(&h, request), "queued");
+        assert!(!started.exists());
+        let boot = h
+            .invoke_in_window("automation-1", "start", json!({"rows":24,"cols":80}))
+            .unwrap();
+        assert_eq!(boot["sessions"], json!([tab]));
+        assert_eq!(
+            state(&h, request),
+            "queued",
+            "another window being ready must not start this input"
+        );
+        h.invoke_in_window("automation-1", "ui_ready", json!({}))
+            .unwrap();
+        grant(&h, handle);
+        // Opaque shell wrappers may require per-command review as well as control.
+        wait_for(|| {
+            let status = h
+                .invoke_in_window("automation-1", "status", json!({"session":tab}))
+                .unwrap();
+            if let Some(id) = status["pending"][0]["id"].as_str() {
+                h.invoke_in_window(
+                    "automation-1",
+                    "approve",
+                    json!({"session":tab,"approvalId":id,"decision":"grant"}),
+                )
+                .unwrap();
+            }
+            state(&h, request) == "delivered"
+        });
+        wait_for(|| std::fs::read_to_string(&started).ok().as_deref() == Some("started"));
+        assert!(
+            !finished.exists(),
+            "the wrapper must still be waiting in read"
+        );
+        assert_eq!(
+            h.invoke_in_window("automation-1", "status", json!({"session":tab}))
+                .unwrap()["controller"]["type"],
+            "human"
+        );
+        h.invoke_in_window("automation-1", "input", json!({"session":tab,"data":"\n"}))
+            .unwrap();
+        wait_for(|| std::fs::read_to_string(&finished).ok().as_deref() == Some("done"));
+        let events =
+            conn_core::audit::read_events(&h.state.config_dir.join("audit.jsonl")).unwrap();
+        assert!(events
+            .iter()
+            .any(|e| e.action == "exec" && e.fields["cmd"] == command));
+        h.close_window("automation-1");
+        assert_eq!(
+            h.invoke("status", json!({"session":main["session"]}))
+                .unwrap()["processAlive"],
+            true
+        );
+    }
+
+    #[test]
+    fn window_launch_preserves_copilot_acceptance_before_delivery() {
+        let (_tmp, h) = harness();
+        enable(&h);
+        h.invoke("set_defaults", json!({"defaults":{"mode":"copilot","pacing":{"enterGraceMs":0,"minWriteIntervalMs":0}}})).unwrap();
+        let launch = h
+            .automate_in_window(
+                "automation-1",
+                caller(),
+                "window.create",
+                json!({"command":"echo copilot-launch"}),
+            )
+            .unwrap();
+        let handle = launch["session"].as_str().unwrap();
+        let request = launch["requestId"].as_str().unwrap();
+        let tab = physical(&h, handle);
+        h.invoke_in_window("automation-1", "ui_ready", json!({}))
+            .unwrap();
+        grant(&h, handle);
+        wait_for(|| state(&h, request) == "awaiting_acceptance");
+        let s = h.state.hub.get(&tab).unwrap();
+        assert!(s.lock().input_line().is_empty());
+        let status = h
+            .invoke_in_window("automation-1", "status", json!({"session":tab}))
+            .unwrap();
+        assert_eq!(status["proposal"]["text"], "echo copilot-launch");
+        h.invoke_in_window(
+            "automation-1",
+            "accept_proposal",
+            json!({"session":tab,"proposalId":status["proposal"]["proposalId"]}),
+        )
+        .unwrap();
+        wait_for(|| state(&h, request) == "delivered");
+        assert!(s.lock().current_lease().is_none());
+    }
+
+    #[test]
+    fn rejected_window_commands_do_not_create_orphan_shells() {
+        let (_tmp, h) = harness();
+        enable(&h);
+        for args in [
+            json!({"command":"pwd\necho bypass"}),
+            json!({"command":7}),
+            json!({"command":"secret","sensitive":true}),
+        ] {
+            assert!(h
+                .automate_in_window("automation-1", caller(), "window.create", args)
+                .is_err());
+            assert!(h.state.hub.ids().is_empty());
+        }
+        h.invoke(
+            "automation_save",
+            json!({"config":{"enabled":true,"profiles":[]}}),
+        )
+        .unwrap();
+        assert!(h
+            .automate_in_window(
+                "automation-1",
+                caller(),
+                "window.create",
+                json!({"command":"pwd"})
+            )
+            .is_err());
+        assert!(h.state.hub.ids().is_empty());
+    }
+
+    #[test]
+    fn closing_a_window_cancels_its_pending_launch() {
+        let (_tmp, h) = harness();
+        enable(&h);
+        let launch = h
+            .automate_in_window(
+                "automation-1",
+                caller(),
+                "window.create",
+                json!({"command":"echo never"}),
+            )
+            .unwrap();
+        let request = launch["requestId"].as_str().unwrap();
+        h.close_window("automation-1");
+        wait_for(|| state(&h, request) == "cancelled");
+        assert!(h.state.hub.ids().is_empty());
+        assert!(h
+            .invoke_in_window("automation-1", "ui_ready", json!({}))
+            .is_err());
     }
 
     #[test]

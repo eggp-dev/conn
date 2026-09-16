@@ -16,6 +16,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 NATIVE = ROOT / "frontends/tauri/src-tauri"
+EXAMPLES = [ROOT / "examples/applescript" / name for name in ("pam-connect.applescript", "pam-window.applescript")]
 
 
 class ScriptingError(ValueError):
@@ -59,7 +60,7 @@ def run(*args: str) -> str:
     return subprocess.run(args, check=True, text=True, capture_output=True, timeout=60).stdout.strip()
 
 
-def check_bundle(app: Path, example: Path, definition: Path = NATIVE / "Conn.sdef"):
+def check_bundle(app: Path, examples: Path | list[Path], definition: Path = NATIVE / "Conn.sdef"):
     app = app.resolve(strict=True)
     plist = app / "Contents/Info.plist"
     if run("plutil", "-extract", "NSAppleScriptEnabled", "raw", "-o", "-", str(plist)) != "true":
@@ -72,24 +73,25 @@ def check_bundle(app: Path, example: Path, definition: Path = NATIVE / "Conn.sde
         raise ScriptingError("macOS did not discover the packaged Conn dictionary")
     run("codesign", "--verify", "--deep", "--strict", str(app))
     with tempfile.TemporaryDirectory(prefix="conn-applescript-compile-") as directory:
-        source = Path(directory) / "pam-connect.applescript"
-        compiled = Path(directory) / "pam-connect.scpt"
-        source.write_text(target_example(example.read_text(encoding="utf-8"), app), encoding="utf-8")
-        run("osacompile", "-o", str(compiled), str(source))
-        if not compiled.is_file() or not compiled.stat().st_size:
-            raise ScriptingError("osacompile did not produce a compiled example")
+        for index, example in enumerate([examples] if isinstance(examples, Path) else examples):
+            source = Path(directory) / f"example-{index}.applescript"
+            compiled = Path(directory) / f"example-{index}.scpt"
+            source.write_text(target_example(example.read_text(encoding="utf-8"), app), encoding="utf-8")
+            run("osacompile", "-o", str(compiled), str(source))
+            if not compiled.is_file() or not compiled.stat().st_size:
+                raise ScriptingError("osacompile did not produce a compiled example")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, required=True)
-    parser.add_argument("--example", type=Path, default=ROOT / "examples/applescript/pam-connect.applescript")
+    parser.add_argument("--example", type=Path, action="append", help="Example to compile; repeatable. Defaults to both shipped PAM templates.")
     args = parser.parse_args()
     if sys.platform != "darwin":
         parser.error("The bundle smoke check requires macOS")
     validate_adapter()
-    check_bundle(args.app, args.example)
-    print("macOS scripting metadata, bundle signature, and PAM example compilation passed; no script executed.")
+    check_bundle(args.app, args.example or EXAMPLES)
+    print("macOS scripting metadata, bundle signature, and PAM examples compiled; no script executed.")
 
 
 if __name__ == "__main__":

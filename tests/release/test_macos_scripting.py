@@ -17,6 +17,7 @@ class ScriptingTests(unittest.TestCase):
     def test_dictionary_native_adapter_and_bundle_metadata_agree(self):
         commands = scripting.validate_adapter()
         self.assertIn("create session", commands.values())
+        self.assertIn("create window with default profile", commands.values())
         self.assertIn("write text", commands.values())
         self.assertIn("request state", commands.values())
         with (scripting.NATIVE / "Info.plist").open("rb") as file:
@@ -63,8 +64,9 @@ class ScriptingTests(unittest.TestCase):
                 return ""
 
             with patch.object(scripting, "run", side_effect=run):
-                scripting.check_bundle(app, example)
+                scripting.check_bundle(app, [example, *scripting.EXAMPLES])
             self.assertEqual({args[0] for args in calls}, {"plutil", "sdef", "codesign", "osacompile"})
+            self.assertEqual(sum(args[0] == "osacompile" for args in calls), 3)
             # A missing dictionary in the .app must fail before compilation.
             (resources / "Conn.sdef").write_text("stale")
             with patch.object(scripting, "run", side_effect=run), self.assertRaises(scripting.ScriptingError):
