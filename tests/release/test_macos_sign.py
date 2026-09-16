@@ -86,6 +86,9 @@ class SigningTests(unittest.TestCase):
             self.assertGreaterEqual(len(create[3]), 48)
             self.assertNotIn(create[3], self.env.values())
             self.assertNotIn(create[3], (self.path / "state.json").read_text())
+            imported = next(args for args, _ in self.calls if args[:2] == ["security", "import"])
+            self.assertEqual(imported[imported.index("-f") + 1], "pkcs12")
+            self.assertNotIn("-A", imported)
             signing.cleanup(self.path, self.env)
         self.assertFalse(self.path.exists())
         self.assertTrue(any(args[:2] == ["security", "delete-keychain"] for args, _ in self.calls))
@@ -166,6 +169,27 @@ class SigningTests(unittest.TestCase):
                 signing.command(["security", "-p", "private-argument"], "Fixed stage")
         self.assertEqual(str(failure.exception), "Fixed stage failed (exit 1); no release artifacts will be uploaded")
         self.assertNotIn("APPLE_PASSWORD", run.call_args.kwargs["env"])
+
+    def test_import_errors_expose_only_fixed_diagnostic_categories(self):
+        cases = {
+            "MAC verification failed during PKCS12 import (wrong password?)":
+                "pkcs12-verification (password, container integrity or algorithm compatibility)",
+            "Unknown format in import": "pkcs12-format-or-decoding",
+            "Import/Export format unsupported": "pkcs12-format-or-decoding",
+            "Unable to decode the provided data": "pkcs12-format-or-decoding",
+            "User interaction is not allowed": "keychain-access",
+            "Write permissions error": "keychain-access",
+            "The specified keychain could not be found": "keychain-access",
+            "Unrecognized native failure": "unclassified-import-error",
+        }
+        for native_message, category in cases.items():
+            with self.subTest(category=category):
+                result = subprocess.CompletedProcess([], 1, "private stdout", f"private-prefix {native_message} private-suffix")
+                with patch.object(signing.subprocess, "run", return_value=result):
+                    with self.assertRaises(release.ReleaseError) as failure:
+                        signing.command(["security", "import", "private-path", "-P", "private-password"], "Import signing certificate")
+                self.assertEqual(str(failure.exception),
+                                 f"Import signing certificate failed (exit 1); category: {category}; no release artifacts will be uploaded")
 
     def test_pipeline_scopes_secrets_to_macos_and_always_cleans_up(self):
         workflow = (ROOT / ".github/workflows/release.yml").read_text()
