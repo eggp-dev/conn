@@ -1,0 +1,99 @@
+[
+  {
+    "file": "intro.mp4",
+    "seconds": 8.0,
+    "cuts": [
+      {
+        "take": "02-submit",
+        "start": 0,
+        "end": 2
+      },
+      {
+        "take": "02-submit",
+        "start": 7,
+        "end": 13
+      }
+    ],
+    "sha256": "bb793b2f25696e78cead89c2bbb582135e503ca22e8d7216358cccb569dbd1bd"
+  },
+  {
+    "file": "request.mp4",
+    "seconds": 9.0,
+    "cuts": [
+      {
+        "take": "03-request-wait",
+        "start": 0,
+        "end": 4
+      },
+      {
+        "take": "04-allow-inspect",
+        "start": 1.4,
+        "end": 6.4
+      }
+    ],
+    "sha256": "fff250e1ba7e04ecb0eb926a587bdd753f33fa678a25dd4e9d8fa6602c943ae0"
+  },
+  {
+    "file": "fix.mp4",
+    "seconds": 11.0,
+    "cuts": [
+      {
+        "take": "05-agent-fix",
+        "start": 19,
+        "end": 26
+      },
+      {
+        "take": "06-first-result",
+        "start": 38,
+        "end": 42
+      }
+    ],
+    "sha256": "10e958978b0690879c7240c372baa1e0859fb447e00695d0a72f3d50438fa649"
+  },
+  {
+    "file": "reclaim.mp4",
+    "seconds": 11.0,
+    "cuts": [
+      {
+        "take": "07-human-takeover",
+        "start": 1.2,
+        "end": 12.2
+      }
+    ],
+    "sha256": "c4d9231d5d26014bda3762ec43e3a1b2e0900367861e28443e1afb4fe817d8ea"
+  },
+  {
+    "file": "resume.mp4",
+    "seconds": 13.0,
+    "cuts": [
+      {
+        "take": "08-follow-up",
+        "start": 6,
+        "end": 10
+      },
+      {
+        "take": "10-edge-fix",
+        "start": 0,
+        "end": 3
+      },
+      {
+        "take": "10-edge-fix",
+        "start": 20,
+        "end": 26
+      }
+    ],
+    "sha256": "056a5976a39bbd8488428dc2ab803f7a95842a25411597ab7ccc1cc083d5a6f8"
+  },
+  {
+    "file": "timeline.mp4",
+    "seconds": 6.0,
+    "cuts": [
+      {
+        "take": "11-timeline-open",
+        "start": 0,
+        "end": 6
+      }
+    ],
+    "sha256": "258c7767cd29354c4f0b16a8337b07694069d860f7f004b8051735d346a99157"
+  }
+]

@@ -1,0 +1,214 @@
+{
+  "recordedOn": "2026-09-16",
+  "platform": "Ubuntu",
+  "source": "Real Codex CLI PTY and unchanged Conn Svelte UI connected to native Rust backend",
+  "client": {
+    "name": "Codex CLI",
+    "version": "0.153.0",
+    "model": "gpt-6-astra",
+    "reasoning": "medium",
+    "transport": "Conn MCP stdio",
+    "agentIdentity": "codex from MCP client initialization"
+  },
+  "staging": {
+    "task": "Prepared discount fixture and authored prompts",
+    "agent": "Commands selected by the live Codex session, not prequeued by the old RPC demo driver",
+    "humanRole": "Automated visible browser input and approvals; no independent human participant"
+  },
+  "editing": {
+    "resolution": [
+      1920,
+      1080
+    ],
+    "fps": 30,
+    "durationSeconds": 62,
+    "zoom": false,
+    "pan": false,
+    "playbackSpeed": 1,
+    "cuts": "Selected real intervals in chronological order; waiting shortened. The python-to-python3 recovery is omitted from the short edit but remains in the original capture.",
+    "editMap": "edit-map.json"
+  },
+  "observations": [
+    "Initial two tests: one failure, 144.0 != 96",
+    "Codex changed addition to subtraction; two tests passed",
+    "Human input revoked lease#1 at 09:10:08 +09:00",
+    "Human copied cases/test_cap.py into the suite and ran tests: -30.0 != 0",
+    "Codex read the updated screen and new test after the follow-up prompt",
+    "Codex clamped discounted prices to zero; all three tests passed",
+    "Codex released control at 09:13:02 +09:00"
+  ],
+  "rawCaptureStorage": "Timestamped JPEG frames and private CLI/audit logs retained in the local recording workspace, outside published assets",
+  "takes": [
+    {
+      "take": "02-submit",
+      "startedAt": 1789517194455,
+      "endedAt": 1789517216464,
+      "frames": 649,
+      "truncated": false,
+      "manifestSha256": "b25b13b6867ad0c017475dba378dccbf80bf2445106b003f6c0eb5a05177ce9a"
+    },
+    {
+      "take": "03-request-wait",
+      "startedAt": 1789517227072,
+      "endedAt": 1789517245138,
+      "frames": 923,
+      "truncated": false,
+      "manifestSha256": "e7284ccf632b2fbee636ea4d1102a6306c6a071f244077ec33585437a0752969"
+    },
+    {
+      "take": "04-allow-inspect",
+      "startedAt": 1789517254911,
+      "endedAt": 1789517282917,
+      "frames": 1562,
+      "truncated": false,
+      "manifestSha256": "b2a72c5a75e7ff4e94ea3ff9d4f58b650ef72b143598c46c2889e36c8ce71be7"
+    },
+    {
+      "take": "05-agent-fix",
+      "startedAt": 1789517295565,
+      "endedAt": 1789517340569,
+      "frames": 2565,
+      "truncated": false,
+      "manifestSha256": "47b34b8705ed581a181f4dc3dd03801d21c3cfa3fccc44ad5c13e4a309cb9526"
+    },
+    {
+      "take": "06-first-result",
+      "startedAt": 1789517345931,
+      "endedAt": 1789517387938,
+      "frames": 2372,
+      "truncated": false,
+      "manifestSha256": "97e8eaf33ed0840648e67a890c30e6daa5658a91fd6935548ea09dfbd6380e93"
+    },
+    {
+      "take": "07-human-takeover",
+      "startedAt": 1789517406380,
+      "endedAt": 1789517424423,
+      "frames": 334,
+      "truncated": false,
+      "manifestSha256": "4f86b372d06473d4244dd50d68e160310b8824a0496530baab6e8109a52634bc"
+    },
+    {
+      "take": "08-follow-up",
+      "startedAt": 1789517441935,
+      "endedAt": 1789517469940,
+      "frames": 819,
+      "truncated": false,
+      "manifestSha256": "3b8cfaf8de242d01a3ad5091e9012f208afcf54a5704cdb17743d7563e9da58a"
+    },
+    {
+      "take": "10-edge-fix",
+      "startedAt": 1789517542263,
+      "endedAt": 1789517586334,
+      "frames": 2227,
+      "truncated": false,
+      "manifestSha256": "99296b47ee2dce49a658d6cefb9c28d6cdf53742a9f704210c576a28accbbcb3"
+    },
+    {
+      "take": "11-timeline-open",
+      "startedAt": 1789517594662,
+      "endedAt": 1789517603292,
+      "frames": 4,
+      "truncated": false,
+      "manifestSha256": "a325c56fad1d477e95b90d2a0ac4abda40ca81939f7e9fc6d6ad7f7bb502ce5f"
+    }
+  ],
+  "clips": [
+    {
+      "file": "intro.mp4",
+      "seconds": 8.0,
+      "cuts": [
+        {
+          "take": "02-submit",
+          "start": 0,
+          "end": 2
+        },
+        {
+          "take": "02-submit",
+          "start": 7,
+          "end": 13
+        }
+      ],
+      "sha256": "bb793b2f25696e78cead89c2bbb582135e503ca22e8d7216358cccb569dbd1bd"
+    },
+    {
+      "file": "request.mp4",
+      "seconds": 9.0,
+      "cuts": [
+        {
+          "take": "03-request-wait",
+          "start": 0,
+          "end": 4
+        },
+        {
+          "take": "04-allow-inspect",
+          "start": 1.4,
+          "end": 6.4
+        }
+      ],
+      "sha256": "fff250e1ba7e04ecb0eb926a587bdd753f33fa678a25dd4e9d8fa6602c943ae0"
+    },
+    {
+      "file": "fix.mp4",
+      "seconds": 11.0,
+      "cuts": [
+        {
+          "take": "05-agent-fix",
+          "start": 19,
+          "end": 26
+        },
+        {
+          "take": "06-first-result",
+          "start": 38,
+          "end": 42
+        }
+      ],
+      "sha256": "10e958978b0690879c7240c372baa1e0859fb447e00695d0a72f3d50438fa649"
+    },
+    {
+      "file": "reclaim.mp4",
+      "seconds": 11.0,
+      "cuts": [
+        {
+          "take": "07-human-takeover",
+          "start": 1.2,
+          "end": 12.2
+        }
+      ],
+      "sha256": "c4d9231d5d26014bda3762ec43e3a1b2e0900367861e28443e1afb4fe817d8ea"
+    },
+    {
+      "file": "resume.mp4",
+      "seconds": 13.0,
+      "cuts": [
+        {
+          "take": "08-follow-up",
+          "start": 6,
+          "end": 10
+        },
+        {
+          "take": "10-edge-fix",
+          "start": 0,
+          "end": 3
+        },
+        {
+          "take": "10-edge-fix",
+          "start": 20,
+          "end": 26
+        }
+      ],
+      "sha256": "056a5976a39bbd8488428dc2ab803f7a95842a25411597ab7ccc1cc083d5a6f8"
+    },
+    {
+      "file": "timeline.mp4",
+      "seconds": 6.0,
+      "cuts": [
+        {
+          "take": "11-timeline-open",
+          "start": 0,
+          "end": 6
+        }
+      ],
+      "sha256": "258c7767cd29354c4f0b16a8337b07694069d860f7f004b8051735d346a99157"
+    }
+  ]
+}

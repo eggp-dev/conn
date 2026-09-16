@@ -1,0 +1,79 @@
+{
+  "recordedOn": "2026-09-16",
+  "source": "Actual Codex CLI 0.153.0 connected over MCP to the shared Conn UI and native Rust backend",
+  "staging": "Prepared discount project and prompts; user-role browser input and approvals automated; agent commands selected by the live Codex session",
+  "editing": {
+    "durationSeconds": 62,
+    "zoom": false,
+    "pan": false,
+    "playbackSpeed": 1,
+    "waitingTime": "Selected chronological intervals; see public/footage/collaboration/edit-map.json"
+  },
+  "checks": {
+    "remotionLintAndTypes": "passed",
+    "sourceClipPreflight": "All six clips passed duration, frame rate and geometry checks",
+    "fullVideoDecode": "Both final MP4 files decoded without errors",
+    "visualReview": "Both language contact sheets, full-resolution takeover and three-test-result frames, poster and Studio checked; no missing footage or clipped captions at reviewed points",
+    "studio": "No current render error or browser console errors during preview",
+    "documentationLinks": "Local README and recording guide links checked",
+    "claimReview": "Independent documentation review matched the real-session provenance",
+    "sourceFixture": "Intentionally failing source fixture; captured final workspace passes all three tests",
+    "captureBridge": "PTY input/output, resize, replay, private logging and process exit checked with a stub; live real CLI input verified during recording"
+  },
+  "files": [
+    {
+      "path": "docs/assets/conn-demo-en.mp4",
+      "sha256": "57ec6a9b138623c0eb5aaa601706aa87918aaf8f5bf5ebd21c8d6a44690c331f",
+      "media": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 1920,
+            "height": 1080,
+            "pix_fmt": "yuvj420p",
+            "r_frame_rate": "30/1",
+            "nb_frames": "1860",
+            "side_data_list": [
+              {}
+            ]
+          }
+        ],
+        "format": {
+          "duration": "62.000000",
+          "size": "4253464"
+        }
+      },
+      "fullDecode": "passed"
+    },
+    {
+      "path": "docs/assets/conn-demo-ko.mp4",
+      "sha256": "9463106a3a1a33585b2114735a07cbe74ff97cb199f770a3f3ebc585857b726f",
+      "media": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 1920,
+            "height": 1080,
+            "pix_fmt": "yuvj420p",
+            "r_frame_rate": "30/1",
+            "nb_frames": "1860",
+            "side_data_list": [
+              {}
+            ]
+          }
+        ],
+        "format": {
+          "duration": "62.000000",
+          "size": "4206593"
+        }
+      },
+      "fullDecode": "passed"
+    }
+  ]
+}

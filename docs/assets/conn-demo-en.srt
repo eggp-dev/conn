@@ -1,0 +1,28 @@
+1
+00:00:00,000 --> 00:00:08,000
+Ask Codex to help with the failing test already on your screen.
+
+2
+00:00:08,000 --> 00:00:17,000
+Codex reads the shared terminal and asks to work in it.
+
+3
+00:00:17,000 --> 00:00:28,000
+The agent fixes the discount calculation and runs the tests.
+
+4
+00:00:28,000 --> 00:00:39,000
+Take back input control. Add a test: a discount must never make the price negative.
+
+5
+00:00:39,000 --> 00:00:52,000
+Codex reads your new test, updates the fix, and checks all three cases.
+
+6
+00:00:52,000 --> 00:00:58,000
+Revisit commands, handoffs, and the requests behind them.
+
+7
+00:00:58,000 --> 00:01:02,000
+Your agent. One shared terminal.
+Real Codex CLI + Conn · Human role automated · Pauses shortened

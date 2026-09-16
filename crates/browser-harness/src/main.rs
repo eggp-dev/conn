@@ -8,6 +8,15 @@ use serde_json::{Value, json};
 
 #[derive(Clone)]
 struct Server { token: String, origin: String, dir: PathBuf, connected: Arc<AtomicBool> }
+fn test_endpoint(port: &str, origin: &str) -> Result<(u16, String), String> {
+    let port = port.parse::<u16>().ok().filter(|p| *p != 0).ok_or("CONN_TEST_PORT must be between 1 and 65535")?;
+    let frontend_port = origin.strip_prefix("http://127.0.0.1:").and_then(|p| p.parse::<u16>().ok()).filter(|p| *p != 0)
+        .ok_or("CONN_TEST_ORIGIN must be http://127.0.0.1:<port>")?;
+    if origin != format!("http://127.0.0.1:{frontend_port}") {
+        return Err("CONN_TEST_ORIGIN must be http://127.0.0.1:<port> without a path".into());
+    }
+    Ok((port, origin.into()))
+}
 async fn upgrade(State(s): State<Server>, Query(q): Query<HashMap<String,String>>, headers: HeaderMap, ws: WebSocketUpgrade) -> axum::response::Response {
     if headers.get("origin").and_then(|v|v.to_str().ok()) != Some(s.origin.as_str()) || q.get("token") != Some(&s.token) {
         return (StatusCode::FORBIDDEN,"invalid test origin or token").into_response();
@@ -42,6 +51,10 @@ async fn serve(socket: WebSocket, server: Server) {
 #[tokio::main]
 async fn main() -> Result<(),Box<dyn std::error::Error>> {
     let dir = std::env::args().nth(1).map(PathBuf::from).ok_or("usage: conn-browser-harness TEST_DIRECTORY")?;
+    let (port, origin) = test_endpoint(
+        &std::env::var("CONN_TEST_PORT").unwrap_or_else(|_| "1423".into()),
+        &std::env::var("CONN_TEST_ORIGIN").unwrap_or_else(|_| "http://127.0.0.1:1421".into()),
+    )?;
     std::fs::create_dir_all(&dir)?;
     #[cfg(unix)] { use std::os::unix::fs::PermissionsExt; std::fs::set_permissions(&dir,std::fs::Permissions::from_mode(0o700))?; }
     if !dir.join("profiles.json").exists() {
@@ -53,11 +66,32 @@ async fn main() -> Result<(),Box<dyn std::error::Error>> {
     PolicyStore::open(&dir.join("policy.yaml"))?;
     // A missing policy must never silently fall back to a simulated or permissive web policy.
     conn_core::policy::Policy::load(&dir.join("policy.yaml"))?;
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:1423").await?;
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port)).await?;
     let token = uuid::Uuid::new_v4().to_string();
-    std::fs::write(dir.join("connection.json"),serde_json::to_vec(&json!({"url":"ws://127.0.0.1:1423/ws","token":token}))?)?;
-    let server=Server{token,origin:"http://127.0.0.1:1421".into(),dir:dir.clone(),connected:Arc::new(AtomicBool::new(false))};
-    println!("Conn shared harness: 127.0.0.1:1423; isolated state: {}",dir.display());
+    std::fs::write(dir.join("connection.json"),serde_json::to_vec(&json!({"url":format!("ws://127.0.0.1:{port}/ws"),"token":token}))?)?;
+    let server=Server{token,origin,dir:dir.clone(),connected:Arc::new(AtomicBool::new(false))};
+    println!("Conn shared harness: 127.0.0.1:{port}; isolated state: {}",dir.display());
     axum::serve(listener,Router::new().route("/ws",get(upgrade)).with_state(server)).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_endpoint;
+
+    #[test]
+    fn accepts_default_and_isolated_loopback_ports() {
+        assert_eq!(test_endpoint("1423", "http://127.0.0.1:1421").unwrap().0, 1423);
+        assert_eq!(test_endpoint("1433", "http://127.0.0.1:1431").unwrap(), (1433, "http://127.0.0.1:1431".into()));
+    }
+
+    #[test]
+    fn rejects_public_origins_paths_and_invalid_ports() {
+        for origin in ["http://example.com:1431", "http://0.0.0.0:1431", "https://127.0.0.1:1431", "http://127.0.0.1:1431/path", "http://127.0.0.1:0", "http://127.0.0.1:65536"] {
+            assert!(test_endpoint("1433", origin).is_err(), "{origin}");
+        }
+        for port in ["0", "65536", "invalid"] {
+            assert!(test_endpoint(port, "http://127.0.0.1:1431").is_err(), "{port}");
+        }
+    }
 }

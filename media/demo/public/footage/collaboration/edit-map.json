@@ -1,0 +1,80 @@
+{
+  "timebase": "seconds relative to capture.json startedAt / 1000",
+  "fps": 30,
+  "output": {
+    "width": 1920,
+    "height": 1080
+  },
+  "speed": 1,
+  "transitions": "clean cuts; constant geometry; no zoom or pan",
+  "clips": {
+    "intro": [
+      {
+        "take": "02-submit",
+        "start": 0,
+        "end": 2
+      },
+      {
+        "take": "02-submit",
+        "start": 7,
+        "end": 13
+      }
+    ],
+    "request": [
+      {
+        "take": "03-request-wait",
+        "start": 0,
+        "end": 4
+      },
+      {
+        "take": "04-allow-inspect",
+        "start": 1.4,
+        "end": 6.4
+      }
+    ],
+    "fix": [
+      {
+        "take": "05-agent-fix",
+        "start": 19,
+        "end": 26
+      },
+      {
+        "take": "06-first-result",
+        "start": 38,
+        "end": 42
+      }
+    ],
+    "reclaim": [
+      {
+        "take": "07-human-takeover",
+        "start": 1.2,
+        "end": 12.2
+      }
+    ],
+    "resume": [
+      {
+        "take": "08-follow-up",
+        "start": 6,
+        "end": 10
+      },
+      {
+        "take": "10-edge-fix",
+        "start": 0,
+        "end": 3
+      },
+      {
+        "take": "10-edge-fix",
+        "start": 20,
+        "end": 26
+      }
+    ],
+    "timeline": [
+      {
+        "take": "11-timeline-open",
+        "start": 0,
+        "end": 6
+      }
+    ]
+  },
+  "closingDurationSeconds": 4
+}

@@ -1,0 +1,48 @@
+{
+  "name": "conn-demo",
+  "version": "1.0.0",
+  "description": "Bilingual Conn collaboration screencast edit",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eggplantiny/conn.git",
+    "directory": "media/demo"
+  },
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "@remotion/cli": "4.0.525",
+    "@remotion/fonts": "4.0.525",
+    "@remotion/media": "4.0.525",
+    "@remotion/transitions": "4.0.525",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.525"
+  },
+  "devDependencies": {
+    "@remotion/eslint-config-flat": "4.0.525",
+    "@types/react": "19.2.7",
+    "@types/web": "0.0.166",
+    "eslint": "9.19.0",
+    "prettier": "3.8.1",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "dev": "remotion studio --no-open",
+    "build": "remotion bundle",
+    "check": "tsc --noEmit",
+    "lint": "eslint src && tsc --noEmit",
+    "preflight": "node --experimental-strip-types scripts/preflight.mjs",
+    "render:en": "npm run preflight && remotion render ConnDemoEN ../../docs/assets/conn-demo-en.mp4",
+    "render:ko": "npm run preflight && remotion render ConnDemoKO ../../docs/assets/conn-demo-ko.mp4",
+    "poster": "remotion still ConnPoster out/conn-demo-poster.png",
+    "render": "npm run render:en && npm run render:ko && npm run poster && npm run captions",
+    "captions": "node --experimental-strip-types scripts/export-captions.mjs"
+  },
+  "sideEffects": [
+    "*.css"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=22.6.0"
+  }
+}
