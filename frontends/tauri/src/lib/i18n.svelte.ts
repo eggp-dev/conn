@@ -26,6 +26,9 @@ export function setLang(l: Lang) {
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  "update.unchanged": "The update could not be prepared. Your running app and shells are unchanged.",
+  "update.autoCheck": "Check for updates automatically",
+
   "update.restartTitle": "Install and restart Conn?",
   "update.restartWarning": "All shell sessions will close, including commands still running. Saved settings and timeline records remain. Restart when your work is finished.",
   "update.restart": "Install and restart",
@@ -606,6 +609,9 @@ const en: Dict = {
 };
 
 const ko: Dict = {
+  "update.unchanged": "업데이트를 준비하지 못했습니다. 실행 중인 앱과 셸은 그대로 유지됩니다.",
+  "update.autoCheck": "자동으로 업데이트 확인",
+
   "update.restartTitle": "업데이트를 설치하고 다시 시작할까요?",
   "update.restartWarning": "실행 중인 명령을 포함해 모든 셸 세션이 종료됩니다. 저장된 설정과 타임라인 기록은 유지됩니다. 작업을 마친 뒤 다시 시작하세요.",
   "update.restart": "설치하고 다시 시작",

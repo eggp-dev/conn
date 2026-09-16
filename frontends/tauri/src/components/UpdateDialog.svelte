@@ -21,7 +21,7 @@
     {#if confirm}
       <h3>{t('update.restartTitle')}</h3><p>{t('update.restartWarning')}</p>
     {:else if s.phase === 'checking'}<h3>{t('update.loading')}</h3>
-    {:else if s.phase === 'error'}<h3>{t('update.failed')}</h3><p class="error">{s.error}</p>
+    {:else if s.phase === 'error'}<h3>{t('update.failed')}</h3><p>{t('update.unchanged')}</p><details><summary>{t('s.diag.details')}</summary><p class="error">{s.error}</p></details>
     {:else if s.phase === 'downloading'}<h3>{t('update.downloading', { progress: progress === undefined ? '…' : `${progress}%` })}</h3><progress max="100" value={progress} aria-label={t('update.download')} />
     {:else if s.phase === 'ready'}<h3>{t('update.ready', { version: s.version ?? '' })}</h3><p class="muted">{t('update.verified')}</p>
     {:else if s.phase === 'installing'}<h3>{t('update.installing')}</h3>
@@ -32,7 +32,7 @@
   </section>
   {#if !confirm}
     <details class="preferences"><summary>{t('update.preferences')}</summary>
-      <label><input type="checkbox" disabled={updater.busy} checked={updater.automatic} onchange={e => updatePreference('automatic', e.currentTarget.checked)} />{t('update.automatic')}</label>
+      <label><input type="checkbox" disabled={updater.busy} checked={updater.automatic} onchange={e => updatePreference('automatic', e.currentTarget.checked)} />{t(s.supported ? 'update.automatic' : 'update.autoCheck')}</label>
       <label><input type="checkbox" disabled={updater.busy} checked={updater.previews} onchange={e => { updatePreference('previews', e.currentTarget.checked); void updateAction('check'); }} />{t('update.previews')}</label>
     </details>
   {/if}

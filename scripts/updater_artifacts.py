@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import tarfile
+import tempfile
 import release
 
 PLATFORMS = {"aarch64-apple-darwin": "darwin-aarch64", "x86_64-unknown-linux-gnu": "linux-x86_64", "x86_64-pc-windows-msvc": "windows-x86_64"}
@@ -42,6 +43,12 @@ def package(target: str, out: Path, root=release.ROOT):
         artifact = out / names[0]
         with tarfile.open(artifact, "w:gz", dereference=False) as archive:
             archive.add(apps[0], arcname=apps[0].name)
+        # Validate the archive users will actually extract, including its stapled ticket.
+        with tempfile.TemporaryDirectory(prefix="conn-update-verify-") as directory:
+            with tarfile.open(artifact, "r:gz") as archive:
+                archive.extractall(directory, filter="data")
+            if macos_sign.app_evidence(Path(directory) / apps[0].name, os.environ.get("APPLE_TEAM_ID", "")) != evidence:
+                raise release.ReleaseError("Packaged updater app differs from the notarized app")
         report["updater"] = {"archive": artifact.name, "sha256": release.sha256(artifact), "containedAppVerified": True}
         report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     else:

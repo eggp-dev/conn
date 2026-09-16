@@ -159,7 +159,7 @@ fn lifecycle(shell: &str) {
     assert_eq!(h.starts().len(), 4);
     assert!(!format!("{:?}", h.events.lock().unwrap()).contains("SYNTHETIC_INNER_INPUT"));
     // A forced shell exit has no completion hook; never invent exit success.
-    h.send("exec /bin/true");
+    h.send("exec /bin/sh -c 'exit 0'");
     h.until(|| h.engine.has_exited());
     assert_eq!(h.starts().len(), 5);
     assert!(h.ends().last().unwrap().fields["exitCode"].is_null());
