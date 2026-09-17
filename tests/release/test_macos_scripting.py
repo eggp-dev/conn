@@ -3,6 +3,7 @@ import importlib.util
 import json
 from pathlib import Path
 import plistlib
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -14,6 +15,22 @@ spec.loader.exec_module(scripting)
 
 
 class ScriptingTests(unittest.TestCase):
+    def test_missing_xcode_is_blocked_but_invalid_bundle_is_failure(self):
+        error = subprocess.CalledProcessError(1, ["sdef"], stderr="xcode-select: tool 'sdef' requires Xcode")
+        with patch.object(scripting.subprocess, "run", side_effect=error):
+            with self.assertRaises(scripting.ToolingUnavailable):
+                scripting.run("sdef", "/tmp/candidate.app")
+        error = subprocess.CalledProcessError(1, ["sdef"], stderr="invalid bundle")
+        with patch.object(scripting.subprocess, "run", side_effect=error):
+            with self.assertRaises(scripting.ScriptingError) as caught:
+                scripting.run("sdef", "/tmp/candidate.app")
+            self.assertNotIsInstance(caught.exception, scripting.ToolingUnavailable)
+
+    def test_missing_tool_is_blocked(self):
+        with patch.object(scripting.subprocess, "run", side_effect=FileNotFoundError):
+            with self.assertRaises(scripting.ToolingUnavailable):
+                scripting.run("sdef", "/tmp/candidate.app")
+
     def test_dictionary_native_adapter_and_bundle_metadata_agree(self):
         commands = scripting.validate_adapter()
         self.assertIn("create session", commands.values())
@@ -62,7 +79,8 @@ class ScriptingTests(unittest.TestCase):
         app = Path('/tmp/Conn "CI".app')
         for target in ('"Conn"', 'id "dev.eggp.conn"'):
             source = scripting.target_example(f'tell application {target}\ncreate session\nend tell\n', app)
-            self.assertIn('application "/tmp/Conn \\"CI\\".app"', source)
+            expected = str(app.resolve()).replace('\\', '\\\\').replace('"', '\\"')
+            self.assertIn(f'application "{expected}"', source)
         with self.assertRaises(scripting.ScriptingError):
             scripting.target_example('tell application "Terminal"\nactivate\nend tell', app)
 

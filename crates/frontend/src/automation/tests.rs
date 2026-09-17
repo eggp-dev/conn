@@ -313,7 +313,10 @@ exec /bin/sh -i"#;
     assert!(selected.call("publish_surface",json!({"session":id})).is_err());
     assert!(selected.call("set_sharing",json!({"session":id,"shared":true})).is_err());
     let hidden="SYNTHETIC_HIDDEN_PASSWORD";let masked="SYNTHETIC_MASKED_PASSWORD";
-    for (text,prompt) in [("demo-user","Password (hidden): "),(hidden,"Password (masked): "),(masked,"external-test$ ")] {
+    // macOS /bin/sh resets inherited PS1. Authentication readiness must not
+    // depend on the child shell preserving our fixture prompt. The later input
+    // assertion independently proves that the same interactive process survives.
+    for (text,prompt) in [("demo-user","Password (hidden): "),(hidden,"Password (masked): "),(masked,"AUTH TEST PASSED")] {
         let request=h.automate(caller(),"session.write",json!({"session":handle,"text":text})).unwrap();
         assert_eq!(done(&h,request.as_str().unwrap())["state"],"delivered");
         wait_for(||owner_output(&events,&id,"main").contains(prompt));
