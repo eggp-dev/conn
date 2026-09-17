@@ -223,7 +223,7 @@ def make_handler(session, args):
         # Vite's filesystem/editor endpoints are intentionally unavailable.
         if any(char in decoded for char in ("%", "\\", "\x00")) or ".." in decoded.split("/"):
             return False
-        return (decoded in {"/conn/", "/__conn/connection", "/conn-icon.svg", "/favicon.ico"}
+        return (decoded in {"/conn/", "/__conn/connection", "/conn-icon.svg", "/favicon.ico", "/capture-vite-env.js"}
                 or decoded.startswith(("/src/", "/node_modules/", "/@vite/", "/@id/", "/tests/browser/")))
 
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -275,6 +275,8 @@ def make_handler(session, args):
             # request credentials/cookies/authorization to the development server.
             query = urlsplit(self.path).query
             target_path = "/" if path == "/conn/" else path
+            if path == "/capture-vite-env.js":
+                target_path = "/@fs" + str((args.xterm_root / "vite/dist/client/env.mjs").resolve())
             if query:
                 target_path += "?" + query
             upstream = http.client.HTTPConnection(conn_target.hostname, conn_target.port or 80, timeout=10)
@@ -288,6 +290,12 @@ def make_handler(session, args):
                 if len(body) > 32 * 1024 * 1024:
                     self.send_error(502, "Development asset too large")
                     return
+                if path == "/@vite/client":
+                    # A linked node_modules directory makes Vite emit an /@fs/
+                    # import. Serve only its fixed runtime asset; never open the
+                    # general filesystem proxy for a recording convenience.
+                    env_path = (args.xterm_root / "vite/dist/client/env.mjs").resolve()
+                    body = body.replace(("/@fs" + str(env_path)).encode(), b"/capture-vite-env.js")
                 self.send_response(response.status)
                 self.send_header("Content-Type", response.getheader("Content-Type", "application/octet-stream"))
                 self.send_header("Content-Length", str(len(body)))

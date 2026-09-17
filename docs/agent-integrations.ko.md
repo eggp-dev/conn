@@ -11,6 +11,9 @@ Conn v0.4.0부터 클라이언트별 설정 버튼을 제공합니다. v0.3.0 �
 3. 카드의 안내에 따라 클라이언트를 재시작하거나 다시 연결합니다. Conn은 켜 둡니다.
 4. “Conn으로 현재 터미널을 읽어 봐. 아직 명령은 실행하지 마.”라고 요청합니다.
 
+Codex의 현재 카드 이름은 **Codex / ChatGPT**입니다. 로컬 Codex 데스크톱·CLI·IDE
+작업을 설정하며, 별도 ChatGPT 앱의 연결을 설정하는 기능은 아닙니다.
+
 앱에 포함된 실행 파일을 MCP stdio 서버로 등록하고 협업 스킬도 함께 설치합니다.
 Rust·Node.js 설치나 PATH 변경은 필요하지 않습니다. 스킬은 앱 안에 포함하며,
 설치 과정에서 인터넷의 설치 스크립트를 내려받거나 실행하지 않습니다.
@@ -23,7 +26,7 @@ Rust·Node.js 설치나 PATH 변경은 필요하지 않습니다. 스킬은 앱 
 
 | 클라이언트 | 기본 개인 MCP 설정 | 스킬 | 설정 후 |
 |---|---|---|---|
-| Codex / ChatGPT 로컬 데스크톱 작업 | `~/.codex/config.toml`의 `mcp_servers.conn` | `~/.agents/skills/conn/SKILL.md` | 로컬 클라이언트 재시작·새 작업에서 MCP 도구 확인 |
+| Codex · 로컬 데스크톱 / CLI / IDE | `~/.codex/config.toml`의 `mcp_servers.conn` | `~/.agents/skills/conn/SKILL.md` | 로컬 클라이언트 재시작·새 작업에서 MCP 도구 확인 |
 | Claude Code | `~/.claude.json`의 `mcpServers.conn` | `~/.claude/skills/conn/SKILL.md` | 새 세션에서 `/mcp`, `/skills` |
 | Cursor | `~/.cursor/mcp.json`의 `mcpServers.conn` | `~/.cursor/skills/conn/SKILL.md` | 재시작 후 MCP 설정에서 Conn 활성화 |
 | GitHub Copilot · VS Code | 기본 사용자 프로필 `mcp.json`의 `servers.conn` | `~/.copilot/skills/conn/SKILL.md` | 창 다시 로드 → **MCP: List Servers**에서 Conn 시작 |
@@ -43,7 +46,8 @@ Conn에 전달된 `CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `COPILOT_HOME`,
 프로젝트 설정·조직 정책·다른 프로필·이미 설치된 플러그인이 우선할 수 있으므로
 개인 설정 파일을 기록한 것만으로 클라이언트가 로드했다고 판단하지 않습니다.
 
-ChatGPT 웹·클라우드 작업과 원격 에이전트는 이 로컬 연결에 직접 접근할 수 없습니다.
+ChatGPT 웹·클라우드 작업과 다른 컴퓨터에서 실행하는 에이전트는 이 설정으로 로컬
+stdio 서버에 접근할 수 없습니다.
 이 기능은 셸을 인터넷에 공개하지 않습니다.
 
 ## 갱신·충돌·해제

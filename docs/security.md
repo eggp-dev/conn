@@ -10,15 +10,24 @@ Conn mediates a terminal shared by a human and a trusted agent harness. Its poli
 
 Remote and non-POSIX profiles require per-command review. They do not resolve target paths against the host filesystem, and session-wide allowances do not remove this review requirement. Explicit deny rules remain in force. See [backend boundaries](backends.md#execution-and-policy-boundaries).
 
-For ordinary collaboration sessions, invalid or unreadable policy files prevent new shells from starting and produce a `policy_load_failed` audit event. Correct the file and retry. A failed reload keeps the existing session's last successfully loaded rules; new collaboration tabs remain blocked until the file is fixed. A missing policy file creates the example policy. Private external automation has its own unreleased input and recording contract below.
+For ordinary collaboration sessions, invalid or unreadable policy files prevent new shells from starting and produce a `policy_load_failed` audit event. Correct the file and retry. A failed reload keeps the existing session's last successfully loaded rules; new collaboration tabs remain blocked until the file is fixed. A missing policy file creates the example policy. Private external automation has its own input and recording contract below, available in v0.6.0 and newer.
 
-## Ordinary-session command reconstruction limits
+<a id="ordinary-session-command-reconstruction-limits"></a>
 
-Clean input is tracked in full, including Unicode and lines that wrap visually. Policy checks and the command audit use that complete tracked text. After completion, history navigation or cursor editing marks input dirty, Conn falls back to the VT cursor row with the prompt prefix removed. **Wrapped or complex edited input can therefore be incomplete in policy evaluation and command history.** Use explicit full commands through the agent API and inspect the terminal before approving sensitive work. Original request details preserve what was submitted to Conn, but they are not a full terminal recording.
+## Ordinary-session command recording limits
 
-A complete submitted command is not proof of the bytes a shell eventually parses. Shell line editors, key bindings and locale settings can transform terminal input before parsing; the macOS 15 / Bash 3.2 Unicode PTY report is an example of this distinction. Conn records submitted text and input delivery, not a shell parser acknowledgement. For sensitive operations, inspect the resulting screen and filesystem state as well as the approval record.
+Since v0.6.0, Conn does not reconstruct human commands from raw typing, paste,
+Enter presses or screen text. Supported local Bash/Zsh shells report command start
+and completion through [shell integration](shell-integration.md). These reports
+produce human command history; password prompts, editors and other application
+input do not. Secrets deliberately included in a shell command's arguments can
+still be recorded.
 
-Alternate-screen input (for example inside an editor) is not treated as shell command history. Shell syntax, prompts and interactive applications differ; reconstructed command records should not be treated as forensic proof.
+Agent-submitted clean input is tracked in full, including Unicode and lines that wrap visually. Policy checks and the command audit use that complete tracked text. When completion, history navigation or cursor editing marks agent input dirty, Conn falls back to the VT cursor row with the prompt prefix removed. **Wrapped or complex edited agent input can therefore be incomplete in policy evaluation and command history.** Use explicit full commands through the agent API and inspect the terminal before approving sensitive work. Original request details preserve what was submitted to Conn, but they are not a full terminal recording.
+
+A complete submitted command is not proof of the bytes a shell eventually parses. Shell line editors, key bindings and locale settings can transform terminal input before parsing; the macOS 15 / Bash 3.2 Unicode PTY report is an example of this distinction. Agent submission and input delivery are distinct from a shell execution report. Shell hooks add start/completion observations where supported, not tamper-proof parser evidence. For sensitive operations, inspect the resulting screen and filesystem state as well as the approval record.
+
+Human input inside an editor or another interactive application is not reconstructed as shell command history. Explicit agent requests and submitted commands can still be retained for review. Shell syntax, prompts and interactive applications differ; command records should not be treated as forensic proof.
 
 ## Approval and takeover
 
@@ -38,9 +47,11 @@ Control requests and command approvals are separate. Granting control does not w
 
 Same-user processes are within the trust boundary. The browser adapter is a development tool that starts real native shells; do not expose it through a public reverse proxy. SSH and Docker profiles launch the configured clients, which may contact remote systems. Conn contains no model provider integration or telemetry client. An agent client can send terminal snapshots and tool responses to its own model provider under its own data policy.
 
-## Private external sessions (unreleased)
+<a id="private-external-sessions-unreleased"></a>
 
-**This replacement is UNRELEASED, not a protection provided by v0.5.1.** The
+## Private external sessions
+
+**Available in v0.6.0 and newer; not a protection provided by v0.5.1.** The
 [external automation guide](external-automation.md) describes private sessions
 created by an authorized native launcher. Their private policy is established
 before the child starts. A supplied startup program replaces the local profile
@@ -75,17 +86,21 @@ crash dumps remain separate surfaces. Same-user processes may still use other
 tools to access the OS; these API gates are not an OS sandbox. There is no password
 detector or automatic proof that login has finished.
 
-Ordinary sessions also stop reconstructing commands from raw human keystrokes.
+Ordinary sessions also do not reconstruct commands from raw human keystrokes.
 Only a content-free unfinished-input flag is retained; agent writes cannot append
-to that input until it is completed or explicitly interrupted. Human typing no
-longer creates command audit events, timeline rows or command-derived tab titles. Existing audit files, saved timeline records and backups also
-remain; no automatic historical cleanup or credential classification is performed.
+to that input until it is completed or explicitly interrupted. Raw typing does not
+create command audit events, timeline rows or command-derived tab titles. Separately,
+supported local Bash/Zsh execution hooks record commands when the shell starts
+them, including human commands. Private external sessions never install these
+hooks and remain unrecorded after human takeover. Existing audit files, saved
+timeline records and backups remain; no automatic historical cleanup or credential
+classification is performed.
 
 ## Stored data
 
 Default native state is under `~/.conn` (or the selected test/config directory). It includes policy, audit records, shell profiles and frontend defaults. The webview/browser also stores UI preferences and recent timeline data locally. Profile environment values are plaintext; avoid putting long-lived credentials there.
 
-Ordinary-session audit and saved timeline records, and records from earlier automation releases, can include agent identities, intents, full commands, paths, approval outcomes and **original request parameters**. Commands that write a file can include that file's content. Treat these records as potentially sensitive. There is no automatic secret redaction. Do not upload your `.conn` directory or paste raw request JSON into public issues without reviewing it.
+Ordinary-session audit and saved timeline records, and records from earlier automation releases, can include agent identities, intents, full commands, paths, approval outcomes and **original request parameters**. Supported shell integration also records human commands at execution, working directories and completion information. Commands that write a file can include that file's content. Treat these records as potentially sensitive. There is no automatic secret redaction. Do not upload your `.conn` directory or paste raw request JSON into public issues without reviewing it.
 
 The audit is not continuous terminal output or scrollback recording. A terminal snapshot can still expose secrets currently visible on screen. Only actions passing through Conn are covered; an agent's separate shell tool is outside this history. This preview does not offer tamper-proof logs or complete execution provenance.
 
@@ -97,7 +112,8 @@ There is no detach/reattach. Closing the desktop session or disconnecting/reload
 
 Conn은 신뢰하는 사람과 에이전트가 터미널을 공유하도록 돕습니다. 정책 검사는 실수 방지 장치이며, 악의적인 에이전트나 같은 OS 사용자 권한의 프로세스를 격리하는 보안 경계가 아닙니다.
 
-- 직접 입력한 전체 명령은 화면 줄바꿈과 무관하게 검사·기록합니다. 자동 완성, 히스토리, 커서 편집 후에는 화면의 현재 행을 복원에 사용하므로 긴 편집 명령이 불완전하게 검사·기록될 수 있습니다.
+- 사람의 원시 키 입력·붙여넣기·앱 내부 입력으로 명령을 추정하지 않습니다. v0.6.0부터 지원하는 로컬 Bash·Zsh 실행 훅이 보고한 명령은 사람 명령도 타임라인에 기록합니다. 명령 인자에 직접 넣은 비밀값은 기록될 수 있습니다.
+- 에이전트가 직접 보낸 전체 명령은 화면 줄바꿈과 무관하게 검사·기록합니다. 자동 완성, 히스토리, 커서 편집 후에는 화면의 현재 행을 복원에 사용하므로 긴 편집 명령이 불완전하게 검사·기록될 수 있습니다.
 - 전체 명령을 기록했더라도 셸이 같은 바이트를 해석했다는 증거는 아닙니다. 셸의 줄 편집기·키 바인딩·로케일이 입력을 변환할 수 있습니다. macOS 15 / Bash 3.2의 Unicode PTY 제보도 이 차이를 보여 줍니다. 민감한 작업은 승인 기록과 함께 실제 화면·파일 결과를 확인하세요.
 - 잘못되었거나 읽을 수 없는 정책 파일이 있으면 새 셸을 시작하지 않습니다. 파일을 고치고 다시 시도하세요. 실행 중인 세션의 정책 재로딩이 실패하면 마지막으로 정상 로드한 규칙을 유지합니다.
 - 원격 및 비 POSIX 프로필은 명령별 검토를 요구합니다. 제어권 승인과 명령 실행 승인은 별개입니다.
@@ -106,9 +122,11 @@ Conn은 신뢰하는 사람과 에이전트가 터미널을 공유하도록 돕�
 - Conn 자체에는 모델 제공자 연결이나 텔레메트리가 없습니다. 연결한 에이전트 클라이언트는 화면과 도구 응답을 자신의 모델 제공자에 전송할 수 있습니다.
 - 새로고침·연결 종료 시 테스트 셸이 종료됩니다. 저장된 타임라인은 프로세스를 복구하지 않습니다.
 
-### 비공유 외부 세션 변경 — 미배포
+<a id="비공유-외부-세션-변경--미배포"></a>
 
-아래 계약은 **미배포(UNRELEASED)**이며 v0.5.1의 보호 기능이 아닙니다. 외부 런처가
+### 비공유 외부 세션
+
+아래 계약은 **v0.6.0부터 제공**하며 v0.5.1의 보호 기능이 아닙니다. 외부 런처가
 허용된 프로필로 만드는 세션은 자식 실행 전부터 비공유로 설정하고, 시작 프로그램은
 프로필 프로그램을 직접 대체합니다. 외부 입력은 에이전트 등록·정책 승인·제안·Grace를
 거치지 않습니다. 기존 자동화 허용은 한 번 직접 다시 켜야 합니다.
@@ -125,15 +143,20 @@ Conn은 신뢰하는 사람과 에이전트가 터미널을 공유하도록 돕�
   덤프는 별도 경로입니다. 메모리 잔존이 없다는 약속이나 같은 사용자 프로세스의 OS
   격리가 아니며 비밀번호·인증 완료 탐지 기능도 아닙니다.
 - 일반 세션에서도 사람의 원시 입력으로 명령을 추정·기록하지 않습니다. 내용 없는 입력 중
-  상태만 유지하고, 완료·중단 전에는 에이전트가 명령을 덧붙일 수 없습니다. 이전 감사 로그·
-  타임라인·백업도 자동 삭제하지 않습니다.
+  상태만 유지하고, 완료·중단 전에는 에이전트가 명령을 덧붙일 수 없습니다. 별도로 로컬
+  Bash·Zsh 실행 훅이 확인한 명령은 사람 명령도 기록합니다. 비공유 세션은 사람 인수 후에도
+  훅을 설치하거나 기록하지 않습니다. 이전 감사 로그·타임라인·백업도 자동 삭제하지 않습니다.
 
 [외부 자동화 사용법](external-automation.ko.md)에 전체 계약과 검증 조건을 정리했습니다.
 
 보안 제보 방법은 [보안 정책](../SECURITY.md)을 참고하세요.
 
 
-## Secret exposure scenarios (unreleased hardening)
+<a id="secret-exposure-scenarios-unreleased-hardening"></a>
+
+## Secret exposure scenarios
+
+The protections below are included in v0.6.0. Their boundaries still apply.
 
 | Surface | Protection and remaining boundary |
 | --- | --- |
@@ -171,9 +194,11 @@ all scripts that interpreter runs. This is not binary signing, a same-user sandb
 or protection against privileged bus monitoring. Native Linux acceptance runs use
 a separate session bus and X11 display; Wayland-specific input is not yet verified.
 
-### Shell command integration (unreleased)
+<a id="shell-command-integration-unreleased"></a>
 
-Local Bash/Zsh emit command start and completion through a bounded per-session
+### Shell command integration
+
+Available since v0.6.0, local Bash/Zsh emit command start and completion through a bounded per-session
 mailbox (0700 directory, 0600 event files). Only complete records with the initial
 shell PID and expected sequence are accepted. Files are removed after processing
 and the directory on normal shutdown; a crash can leave temporary command data.

@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "fps": 30,
+  "speed": 1,
+  "recordedAt": "2026-09-17",
+  "disclosure": "Actual Codex CLI and Conn; prepared scenario; automated human role; cuts remove waiting and setup, never reorder decisions or results.",
+  "clips": {
+    "request": [
+      {
+        "take": "raw",
+        "start": 158,
+        "end": 164
+      },
+      {
+        "take": "raw",
+        "start": 175,
+        "end": 188
+      }
+    ],
+    "handoff": [
+      {
+        "take": "raw",
+        "start": 222.892,
+        "end": 236.892
+      },
+      {
+        "take": "raw",
+        "start": 239.1,
+        "end": 243.1
+      },
+      {
+        "take": "raw",
+        "start": 310.813,
+        "end": 315.813
+      },
+      {
+        "take": "raw",
+        "start": 397.943,
+        "end": 404.943
+      }
+    ],
+    "result": [
+      {
+        "take": "raw",
+        "start": 510,
+        "end": 519
+      }
+    ]
+  }
+}

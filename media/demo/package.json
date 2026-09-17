@@ -36,7 +36,14 @@
     "render:ko": "npm run preflight && remotion render ConnDemoKO ../../docs/assets/conn-demo-ko.mp4",
     "poster": "remotion still ConnPoster out/conn-demo-poster.png",
     "render": "npm run render:en && npm run render:ko && npm run poster && npm run captions",
-    "captions": "node --experimental-strip-types scripts/export-captions.mjs"
+    "captions": "node --experimental-strip-types scripts/export-captions.mjs",
+    "preflight:handoff": "node --experimental-strip-types scripts/preflight-handoff.mjs",
+    "render:handoff:en": "npm run preflight:handoff && remotion render ConnHandoffEN ../../docs/assets/conn-handoff-en.mp4",
+    "render:handoff:ko": "npm run preflight:handoff && remotion render ConnHandoffKO ../../docs/assets/conn-handoff-ko.mp4",
+    "render:handoff:short:en": "npm run preflight:handoff && remotion render ConnHandoffShortEN ../../docs/assets/conn-handoff-short-en.mp4",
+    "render:handoff:short:ko": "npm run preflight:handoff && remotion render ConnHandoffShortKO ../../docs/assets/conn-handoff-short-ko.mp4",
+    "poster:handoff": "remotion still ConnHandoffPosterEN out/conn-handoff-en-poster.png && remotion still ConnHandoffPosterKO out/conn-handoff-ko-poster.png && remotion still ConnHandoffSocialEN out/conn-handoff-en-social.png && remotion still ConnHandoffSocialKO out/conn-handoff-ko-social.png && node scripts/export-handoff-posters.mjs",
+    "captions:handoff": "node --experimental-strip-types scripts/export-handoff-captions.mjs"
   },
   "sideEffects": [
     "*.css"

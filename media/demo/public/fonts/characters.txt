@@ -11,10 +11,21 @@ import { Composition, Still } from "remotion";
 import { Demo } from "./Demo";
 import { Poster } from "./Poster";
 import { durationInFrames, fps } from "./footage";
+import { HandoffFilm, HandoffShort } from "./handoff/HandoffFilm";
+import { HandoffPoster } from "./handoff/HandoffPoster";
+import { handoffDuration, handoffFps, shortDuration } from "./handoff/edit";
 
 export const RemotionRoot: React.FC = () => {
   return (
     <>
+      <Composition id="ConnHandoffEN" component={HandoffFilm} durationInFrames={handoffDuration} fps={handoffFps} width={1920} height={1080} defaultProps={{ language: "en" }} />
+      <Composition id="ConnHandoffKO" component={HandoffFilm} durationInFrames={handoffDuration} fps={handoffFps} width={1920} height={1080} defaultProps={{ language: "ko" }} />
+      <Composition id="ConnHandoffShortEN" component={HandoffShort} durationInFrames={shortDuration} fps={handoffFps} width={1920} height={1080} defaultProps={{ language: "en" }} />
+      <Composition id="ConnHandoffShortKO" component={HandoffShort} durationInFrames={shortDuration} fps={handoffFps} width={1920} height={1080} defaultProps={{ language: "ko" }} />
+      <Still id="ConnHandoffPosterEN" component={HandoffPoster} width={1920} height={1080} defaultProps={{ language: "en" }} />
+      <Still id="ConnHandoffPosterKO" component={HandoffPoster} width={1920} height={1080} defaultProps={{ language: "ko" }} />
+      <Still id="ConnHandoffSocialEN" component={HandoffPoster} width={1280} height={720} defaultProps={{ language: "en" }} />
+      <Still id="ConnHandoffSocialKO" component={HandoffPoster} width={1280} height={720} defaultProps={{ language: "ko" }} />
       <Composition id="ConnDemoEN" component={Demo} durationInFrames={durationInFrames} fps={fps} width={1920} height={1080} defaultProps={{ language: "en" }} />
       <Composition id="ConnDemoKO" component={Demo} durationInFrames={durationInFrames} fps={fps} width={1920} height={1080} defaultProps={{ language: "ko" }} />
       <Still id="ConnPoster" component={Poster} width={1920} height={1080} />
@@ -142,15 +153,15 @@ export const FootageStage: React.FC<{ id: ClipId; language: Language; accent: st
         trimBefore={Math.round(clip.trimBeforeSeconds * fps)} playbackRate={clip.playbackRate}
         style={{ width: "100%", height: "100%" }} />
     </Interactive.Div>
-    <div style={{ position: "absolute", left: 76, top: 45, height: 36, display: "flex", alignItems: "center", gap: 16 }}>
+    <div style={{ position: "absolute", left: 76, top: 45, height: 46, display: "flex", alignItems: "center", gap: 16 }}>
       <BrandMark size={30} color={accent} animated={false} />
-      <Interactive.Div name="Scene headline" style={{ fontSize: 31, fontWeight: 700, lineHeight: 1.15, letterSpacing: -0.65 }}>
+      <Interactive.Div name="Scene headline" style={{ fontSize: 38, fontWeight: 700, lineHeight: 1.15, letterSpacing: -0.65 }}>
         {text.title}
       </Interactive.Div>
     </div>
     <Interactive.Div name="Scene caption" style={{
       position: "absolute", left: 84, right: 84, top: 996,
-      textAlign: "center", fontSize: language === "ko" ? 29 : 28,
+      textAlign: "center", fontSize: 32,
       color: "#c2c6d2", lineHeight: 1.3, fontWeight: 400,
     }}>
       {text.caption}
@@ -196,6 +207,228 @@ export const BrandMark: React.FC<{ size?: number; color?: string; animated?: boo
       style={{ opacity: animated ? interpolate(frame % 160, [0, 80, 160], [0.78, 1, 0.78], { easing: Easing.bezier(0.4, 0, 0.6, 1) }) : 1 }} />
     <rect x="42" y="26" width="8" height="12" rx="4" fill="#eeeaff" />
   </svg>;
+};
+import { CanvasImage, staticFile, useVideoConfig } from "remotion";
+import { BrandMark } from "../BrandMark";
+import { Stage } from "../Stage";
+import { handoffCopy, type HandoffLanguage } from "./edit";
+
+/** The product screenshot is a frame from the real recording, never a mockup. */
+export const HandoffPoster: React.FC<{ language: HandoffLanguage }> = ({ language }) => {
+  const { width } = useVideoConfig();
+  const ratio = width / 1920;
+  const copy = handoffCopy[language];
+  return <Stage>
+    <div style={{ position: "absolute", width: 1920, height: 1080, left: 0, top: 0,
+      scale: ratio, transformOrigin: "top left" }}>
+      <div style={{ position: "absolute", left: 980, top: -130, width: 950, height: 950,
+        background: "radial-gradient(circle, #9980ed14, transparent 67%)" }} />
+      <div style={{ position: "absolute", left: 82, top: 84, display: "flex", gap: 16, alignItems: "center",
+        fontSize: 32, fontWeight: 700, letterSpacing: 4, color: "#e7e2f9" }}>
+        <BrandMark size={51} animated={false} /> CONN
+      </div>
+      <div style={{ position: "absolute", left: 81, top: 260, width: 638, fontSize: language === "ko" ? 70 : 72,
+        fontWeight: 700, lineHeight: 1.24, letterSpacing: -2.8 }}>
+        {copy.poster.map((line) => <div key={line}>{line}</div>)}
+      </div>
+      <div style={{ position: "absolute", left: 84, top: 622, width: 572, fontSize: 30,
+        color: "#b6b7c6", lineHeight: 1.5, whiteSpace: "pre-line", wordBreak: "keep-all" }}>{copy.posterDetail}</div>
+      <div style={{ position: "absolute", left: 746, top: 255, width: 1098, height: 618, overflow: "hidden",
+        borderRadius: 16, border: "1px solid #a99fca38", boxShadow: "0 30px 75px #00000070" }}>
+        <CanvasImage src={staticFile("footage/handoff/poster.png")}
+          style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+      </div>
+      <div style={{ position: "absolute", top: 890, left: 747, color: "#a4a1b8", fontSize: 23 }}>
+        Codex CLI + Conn · {language === "ko" ? "실제 녹화" : "Actual recording"}
+      </div>
+      <div style={{ position: "absolute", left: 84, top: 830, display: "flex", gap: 15, alignItems: "center",
+        fontSize: 30, color: "#ddd3ff" }}>
+        <span style={{ width: 48, height: 48, borderRadius: "50%", border: "1px solid #bba6fa60",
+          display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <svg width="15" height="18" viewBox="0 0 15 18"><path d="M1 1L14 9L1 17Z" fill="#c7b7ff" /></svg>
+        </span>{copy.watch}
+      </div>
+      <div style={{ position: "absolute", left: 85, bottom: 82, fontSize: 26, color: "#88879d" }}>github.com/eggplantiny/conn</div>
+    </div>
+  </Stage>;
+};
+import { CanvasImage, Easing, Interactive, interpolate, staticFile, useCurrentFrame } from "remotion";
+import { Stage } from "../Stage";
+import { handoffCopy, type HandoffLanguage } from "./edit";
+
+export const ClosingScene: React.FC<{ language: HandoffLanguage; short?: boolean }> = ({ language, short = false }) => {
+  const frame = useCurrentFrame();
+  const copy = handoffCopy[language];
+  return <Stage>
+    <div style={{ position: "absolute", left: 615, top: 10, width: 690, height: 690,
+      background: "radial-gradient(circle, #b6a2ff16, transparent 69%)" }} />
+    <CanvasImage src={staticFile("conn-icon.svg")} style={{ position: "absolute", top: 148, left: 907,
+      width: 106, height: 106, borderRadius: 25 }} />
+    <Interactive.Div name="Keep your agent. Share your terminal." style={{
+      position: "absolute", top: 326, left: 130, right: 130, fontSize: language === "ko" ? 91 : 100,
+      fontWeight: 700, lineHeight: 1.16, letterSpacing: -3, textAlign: "center",
+      opacity: interpolate(frame, [0, short ? 6 : 12], [0, 1], { extrapolateRight: "clamp" }),
+      translate: interpolate(frame, [0, short ? 6 : 16], ["0px 10px", "0px 0px"], {
+        extrapolateRight: "clamp", easing: Easing.bezier(0.16, 1, 0.3, 1),
+      }),
+    }}>{copy.headline[0]}<br />{copy.headline[1]}</Interactive.Div>
+    <Interactive.Div name="Download Conn" style={{ position: "absolute", top: 631, left: 120, right: 120,
+      textAlign: "center", fontSize: 31, color: "#b5b4c6" }}>{copy.closing}</Interactive.Div>
+    <Interactive.Div name="Repository URL" style={{ position: "absolute", top: 714, left: 120, right: 120,
+      textAlign: "center", fontSize: 36, color: "#c5bafa" }}>github.com/eggplantiny/conn</Interactive.Div>
+    <Interactive.Div name="Recording disclosure" style={{ position: "absolute", bottom: 86, left: 100, right: 100,
+      textAlign: "center", fontSize: 24, color: "#9999ac" }}>{copy.disclosure}</Interactive.Div>
+  </Stage>;
+};
+import { TransitionSeries } from "@remotion/transitions";
+import { ClosingScene } from "./ClosingScene";
+import { RecordedScene } from "./RecordedScene";
+import { handoffClips, handoffCopy, hookTrim, shortTrim, type HandoffLanguage } from "./edit";
+
+/** Clean cuts; the 30-second handoff remains one source sequence. */
+export const HandoffFilm: React.FC<{ language: HandoffLanguage }> = ({ language }) => {
+  const cues = handoffCopy[language].main;
+  return <TransitionSeries>
+    <TransitionSeries.Sequence durationInFrames={180} name="The correction">
+      <RecordedScene file={handoffClips.handoff.file} trim={hookTrim} cues={cues} />
+    </TransitionSeries.Sequence>
+    <TransitionSeries.Sequence durationInFrames={570} name="A moment earlier: ask your agent">
+      <RecordedScene file={handoffClips.request.file} trim={handoffClips.request.trim} cues={cues} offset={6} />
+    </TransitionSeries.Sequence>
+    <TransitionSeries.Sequence durationInFrames={900} name="Human correction, fresh observation, continuation">
+      <RecordedScene file={handoffClips.handoff.file} trim={handoffClips.handoff.trim} cues={cues} offset={25} />
+    </TransitionSeries.Sequence>
+    <TransitionSeries.Sequence durationInFrames={270} name="Check the actual result">
+      <RecordedScene file={handoffClips.result.file} trim={handoffClips.result.trim} cues={cues} offset={55} />
+    </TransitionSeries.Sequence>
+    <TransitionSeries.Sequence durationInFrames={180} name="Keep your agent. Share your terminal.">
+      <ClosingScene language={language} />
+    </TransitionSeries.Sequence>
+  </TransitionSeries>;
+};
+
+export const HandoffShort: React.FC<{ language: HandoffLanguage }> = ({ language }) => <TransitionSeries>
+  <TransitionSeries.Sequence durationInFrames={180} name="Human corrects the directory">
+    <RecordedScene file={handoffClips.handoff.file} trim={shortTrim} cues={handoffCopy[language].short} />
+  </TransitionSeries.Sequence>
+  <TransitionSeries.Sequence durationInFrames={180} name="Agent continues and confirms the result">
+    <RecordedScene file={handoffClips.result.file} trim={0} cues={handoffCopy[language].short} offset={6} />
+  </TransitionSeries.Sequence>
+  <TransitionSeries.Sequence durationInFrames={90} name="Try Conn">
+    <ClosingScene language={language} short />
+  </TransitionSeries.Sequence>
+</TransitionSeries>;
+/**
+ * Fresh, real Codex CLI + Conn recordings. Editorial text lives only in the
+ * reserved gutters. No terminal output or application UI is recreated here.
+ *
+ * Source contract: 1920 × 1080, Codex left / Conn right, 72px top and 80px
+ * bottom gutters. handoff.mp4 preserves the order of human correction,
+ * refreshed observation and agent continuation. Any removed waiting is
+ * documented in the accompanying edit map and disclosed in the closing card.
+ */
+export const handoffFps = 30;
+export const handoffDuration = 70 * handoffFps;
+export const shortDuration = 15 * handoffFps;
+export const handoffClips = {
+  request: { file: "footage/handoff/request.mp4", duration: 19, trim: 0 },
+  handoff: { file: "footage/handoff/handoff.mp4", duration: 30, trim: 0 },
+  result: { file: "footage/handoff/result.mp4", duration: 9, trim: 0 },
+} as const;
+
+// These offsets select actual footage; change them only against the edit map.
+export const hookTrim = 3;
+export const shortTrim = 0;
+
+export type HandoffLanguage = "en" | "ko";
+export type CaptionCue = { start: number; end: number; title: string; caption: string };
+
+export const handoffCopy: Record<HandoffLanguage, {
+  main: CaptionCue[];
+  short: CaptionCue[];
+  headline: string[];
+  closing: string;
+  disclosure: string;
+  poster: string[];
+  posterDetail: string;
+  watch: string;
+}> = {
+  en: {
+    main: [
+      { start: 0, end: 6, title: "A small correction. Keep going.", caption: "“I changed the directory. Read the terminal and continue here.”" },
+      { start: 6, end: 12, title: "A moment earlier", caption: "Ask your existing agent to work in the shared terminal." },
+      { start: 12, end: 25, title: "Your agent, in your terminal.", caption: "Codex checks the draft folder, then waits before writing." },
+      { start: 25, end: 39, title: "Take a turn.", caption: "Type in Conn to take control. Change the folder yourself." },
+      { start: 39, end: 55, title: "Continue from what you changed.", caption: "Codex reads the terminal again and works in the new folder." },
+      { start: 55, end: 64, title: "The result, where you wanted it.", caption: "The file is in workspace. Nothing was written in draft." },
+    ],
+    short: [
+      { start: 0, end: 6, title: "I changed the directory.", caption: "Take control by typing in Conn." },
+      { start: 6, end: 12, title: "Continue from here.", caption: "Your agent reads the change and keeps going." },
+    ],
+    headline: ["Keep your agent.", "Share your terminal."],
+    closing: "Download Conn · macOS, Windows, Linux",
+    disclosure: "Real Codex CLI + Conn · Human role automated · Waiting shortened",
+    poster: ["Your agent works.", "You step in.", "Keep going."],
+    posterDetail: "One shared terminal. A correction that becomes the next step.",
+    watch: "Watch the collaboration",
+  },
+  ko: {
+    main: [
+      { start: 0, end: 6, title: "직접 고치고, 함께 이어갑니다.", caption: "“경로는 내가 고쳤어. 터미널을 다시 읽고 여기서 이어가.”" },
+      { start: 6, end: 12, title: "그 직전", caption: "쓰던 에이전트에게 같은 터미널에서 작업을 부탁합니다." },
+      { start: 12, end: 25, title: "내 터미널에서 일하는 에이전트.", caption: "Codex가 draft 폴더를 확인하고, 쓰기 전에 기다립니다." },
+      { start: 25, end: 39, title: "이번에는 내 차례.", caption: "Conn에 직접 입력해 제어권을 가져오고, 폴더를 바꿉니다." },
+      { start: 39, end: 55, title: "내가 바꾼 곳에서 이어갑니다.", caption: "Codex가 터미널을 다시 읽고, 새 폴더에서 작업합니다." },
+      { start: 55, end: 64, title: "원하던 위치에, 원하는 결과.", caption: "파일은 workspace에 생겼고, draft에는 만들지 않았습니다." },
+    ],
+    short: [
+      { start: 0, end: 6, title: "경로는 내가 고쳤어.", caption: "Conn에 직접 입력하면 제어권을 가져옵니다." },
+      { start: 6, end: 12, title: "여기서 이어가.", caption: "에이전트가 바뀐 화면을 읽고, 작업을 이어갑니다." },
+    ],
+    headline: ["쓰던 에이전트와,", "같은 터미널에서."],
+    closing: "Conn 다운로드 · macOS, Windows, Linux",
+    disclosure: "실제 Codex CLI + Conn · 사람 역할 자동 조작 · 대기 시간 단축",
+    poster: ["에이전트가 일하고,", "내가 직접 고치고,", "함께 이어갑니다."],
+    posterDetail: "같은 터미널에서.\n내가 바꾼 곳부터 이어가세요.",
+    watch: "협업 영상 보기",
+  },
+};
+import { Video } from "@remotion/media";
+import { AbsoluteFill, Interactive, staticFile, useCurrentFrame } from "remotion";
+import { BrandMark } from "../BrandMark";
+import { Stage } from "../Stage";
+import { handoffFps, type CaptionCue } from "./edit";
+
+/** Full-frame recording at a fixed scale; source gutters keep all UI visible. */
+export const RecordedScene: React.FC<{
+  file: string;
+  trim?: number;
+  cues: CaptionCue[];
+  offset?: number;
+}> = ({ file, trim = 0, cues, offset = 0 }) => {
+  const frame = useCurrentFrame();
+  const second = frame / handoffFps + offset;
+  const cue = cues.find((item) => second >= item.start && second < item.end);
+
+  return <Stage>
+    <AbsoluteFill>
+      <Video name="Actual Codex CLI and Conn recording" src={staticFile(file)}
+        trimBefore={Math.round(trim * handoffFps)} muted objectFit="contain"
+        style={{ width: "100%", height: "100%" }} />
+    </AbsoluteFill>
+    <div style={{ position: "absolute", left: 38, right: 38, top: 15, height: 44,
+      display: "flex", alignItems: "center", gap: 14 }}>
+      <BrandMark size={33} color="#c6bef5" animated={false} />
+      <Interactive.Div name="Editorial headline" style={{ fontSize: 34, fontWeight: 700,
+        lineHeight: 1.16, letterSpacing: -0.5 }}>{cue?.title}</Interactive.Div>
+    </div>
+    <Interactive.Div name="Editorial subtitle in recording gutter" style={{
+      position: "absolute", left: 60, right: 60, bottom: 24, height: 42,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: 30, color: "#d0d1dc", lineHeight: 1.35, textAlign: "center",
+    }}>{cue?.caption}</Interactive.Div>
+  </Stage>;
 };
 import { FootageStage } from "../FootageStage";
 import type { Language } from "../copy";

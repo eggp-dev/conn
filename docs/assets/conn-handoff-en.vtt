@@ -1,0 +1,23 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:06.000
+“I changed the directory. Read the terminal and continue here.”
+
+00:00:06.000 --> 00:00:12.000
+Ask your existing agent to work in the shared terminal.
+
+00:00:12.000 --> 00:00:25.000
+Codex checks the draft folder, then waits before writing.
+
+00:00:25.000 --> 00:00:39.000
+Type in Conn to take control. Change the folder yourself.
+
+00:00:39.000 --> 00:00:55.000
+Codex reads the terminal again and works in the new folder.
+
+00:00:55.000 --> 00:01:04.000
+The file is in workspace. Nothing was written in draft.
+
+00:01:04.000 --> 00:01:10.000
+Keep your agent. Share your terminal.
+Real Codex CLI + Conn · Human role automated · Waiting shortened

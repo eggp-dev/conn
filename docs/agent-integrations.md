@@ -11,6 +11,9 @@ Available in Conn v0.4.0 and newer. Upgrade from v0.3.0 to use the setup buttons
 3. Restart or reconnect the client using the hint on its card. Keep Conn running.
 4. Ask: “Use Conn to read my current terminal. Do not run a command yet.”
 
+For Codex, the current card is labelled **Codex / ChatGPT**. It configures local
+Codex desktop, CLI and IDE tasks; it does not configure the separate ChatGPT app.
+
 Conn registers the bundled executable as an MCP stdio server and installs the
 collaboration skill in the same action. Rust, Node.js and PATH changes are not
 required. The skill is embedded in the app; setup does not download or execute
@@ -25,7 +28,7 @@ built-in instructions independently.
 
 | Client | Default personal MCP configuration | Skill | After setup |
 |---|---|---|---|
-| Codex / ChatGPT local desktop tasks | `~/.codex/config.toml` → `mcp_servers.conn` | `~/.agents/skills/conn/SKILL.md` | Restart the local client / start a new task; inspect MCP tools |
+| Codex · local desktop / CLI / IDE | `~/.codex/config.toml` → `mcp_servers.conn` | `~/.agents/skills/conn/SKILL.md` | Restart the local client / start a new task; inspect MCP tools |
 | Claude Code | `~/.claude.json` → `mcpServers.conn` | `~/.claude/skills/conn/SKILL.md` | New session; `/mcp`, `/skills` |
 | Cursor | `~/.cursor/mcp.json` → `mcpServers.conn` | `~/.cursor/skills/conn/SKILL.md` | Restart; enable Conn in MCP settings |
 | GitHub Copilot in VS Code | Default user profile `mcp.json` → `servers.conn` | `~/.copilot/skills/conn/SKILL.md` | Reload; **MCP: List Servers** → start Conn |
@@ -46,8 +49,9 @@ Project configurations, policy controls, other profiles and already-installed
 plugins may take precedence; a saved personal configuration alone does not prove
 the client has loaded it.
 
-ChatGPT web/cloud tasks and remote agents cannot reach this local stdio server
-through this setup. This release path does not expose a network shell service.
+ChatGPT web and cloud tasks, and agents running on another machine, cannot reach
+this local stdio server through this setup. This release path does not expose a
+network shell service.
 
 ## Update, conflicts and removal
 

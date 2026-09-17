@@ -1,0 +1,33 @@
+{
+  "recordedAt": "2026-09-17",
+  "productVersion": "0.6.0",
+  "releaseCommit": "7421968c1b9670a007107cef693c97d270632eab",
+  "captureSourceCommit": "b23a92a7b3854a5c94f1043e1f5dcb562eb50906",
+  "productSourceMatchesRelease": true,
+  "environment": "Ubuntu; unchanged Svelte frontend + native Rust backend through loopback browser test adapter",
+  "client": "Codex CLI 0.153.0",
+  "model": "gpt-6-astra",
+  "reasoning": "medium",
+  "humanRole": "Automated operator; no independent human participant recorded",
+  "scenario": "Read current directory, pause with lease, human changes directory, fresh snapshot, exclusive file creation in corrected workspace, verify original destination empty, release control",
+  "agentCommands": "Chosen and executed by actual Codex through Conn MCP, not prequeued by recording operator",
+  "preparedInstructions": "Conn-only tool route, pause after pwd, on follow-up create one non-overwriting text file with prescribed content and verify both paths",
+  "frameSize": [
+    1920,
+    1080
+  ],
+  "fps": 30,
+  "edits": "Original speed; cuts only; waiting and setup omitted; hook repeats later correction with explicit return to earlier scene",
+  "verifiedResult": {
+    "contentMatchesExactly": true,
+    "originalDestinationAbsent": true,
+    "leaseReleased": true
+  },
+  "privateSources": "Raw frames, PTY logs, app state and transport credentials retained outside public assets",
+  "limits": [
+    "Reconstruction of a human collaboration experience, not an unscripted user study",
+    "Native installer and other clients/operating systems were not tested by this recording",
+    "Codex chose Python 3 for exclusive creation; the first-use exercise does not prescribe Python",
+    "Product source matches v0.6.0; capture harness, fonts, and editing arrangement are production tooling"
+  ]
+}

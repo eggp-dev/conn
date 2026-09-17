@@ -2,12 +2,12 @@
 
 [한국어](external-automation.ko.md)
 
-**UNRELEASED — private external automation.** This guide describes the replacement
-contract under implementation, not protections available in v0.5.1. That release
-uses the earlier recorded, agent-based automation path. The first replacement
-adapters target macOS Apple Silicon and Linux D-Bus; the Windows adapter is not
-implemented. Native Apple Event and external-launcher acceptance checks remain
-release gates.
+**Available in v0.6.0 and newer — private external automation.** This guide
+describes the replacement for v0.5.1's recorded, agent-based automation path;
+that older release does not provide these protections. The adapters target macOS
+Apple Silicon and Linux D-Bus; the Windows adapter is not implemented. The
+validation section below separates implementation and CI checks from native
+Apple Event and external-launcher acceptance testing.
 
 ## Enable once, choose profiles
 
@@ -155,16 +155,18 @@ clipboard, crash dumps and external-application logs are separate surfaces. Ther
 is no password detector, authentication-success detector or credential vault.
 Same-user tools may use their own shells and files outside Conn's API gates.
 
-This checkout also disables raw human-input command history in ordinary sessions. Existing
-audit files, saved timeline records and backups are not automatically erased.
-Review historical data separately before sharing it. See the
-[trust model](security.md#private-external-sessions-unreleased).
+Ordinary sessions also do not reconstruct commands from raw human input. Their
+supported local Bash/Zsh hooks can record human commands at shell execution;
+application input is not collected as command history. Private external sessions
+never install those hooks. Existing audit files, saved timeline records and
+backups are not automatically erased. Review historical data separately before
+sharing it. See the [trust model](security.md#private-external-sessions).
 
 ## Validation and release gates
 
 ### Quick check on an Apple Silicon Mac
 
-Use a **new build containing this unreleased change**, not the v0.5.1 download.
+Use **v0.6.0 or newer**, not the v0.5.1 download.
 Use synthetic markers only and confirm which Conn app your script targets.
 
 1. Open **Settings → Automation**, keep a local default profile selected and
@@ -207,7 +209,10 @@ recording/public-IPC route. Actual agent policy tests must continue to pass.
 
 macOS CI checks bundle metadata, the scripting dictionary and example compilation.
 Compiling a script does not execute Apple Events or establish consent behavior.
-Before release, test the signed Apple Silicon build with a disposable launcher:
+The development-app checks included hidden and masked synthetic input on macOS;
+they do not establish every launcher's behavior or the signed installer's full
+coverage. See [v0.6.0 validation limits](releases/v0.6.0-validation.md#coverage-limits).
+For each release, test the signed Apple Silicon build with a disposable launcher:
 
 - Cold and warm launch; first macOS consent accepted and denied.
 - Direct startup program, explicit shell syntax, Unicode and quote boundaries.
@@ -220,7 +225,11 @@ Later AI sharing remains separate work. Ordinary local Bash/Zsh sessions now hav
 [shell command integration](shell-integration.md). External private sessions never
 install it and remain unrecorded, including after human takeover.
 
-## Linux D-Bus adapter (unreleased)
+<a id="linux-d-bus-adapter-unreleased"></a>
+
+## Linux D-Bus adapter
+
+Available in v0.6.0 and newer.
 
 The native Linux app exports `dev.eggp.Conn` on the user session bus, object
 `/dev/eggp/Conn/Automation`, interface `dev.eggp.Conn.Automation1`.
