@@ -31,6 +31,12 @@ class ScriptingTests(unittest.TestCase):
             with self.assertRaises(scripting.ToolingUnavailable):
                 scripting.run("sdef", "/tmp/candidate.app")
 
+    def test_unaccepted_xcode_license_is_blocked(self):
+        error = subprocess.CalledProcessError(69, ["sdef"], stderr="You have not agreed to the Xcode license agreements.")
+        with patch.object(scripting.subprocess, "run", side_effect=error):
+            with self.assertRaises(scripting.ToolingUnavailable):
+                scripting.run("sdef", "/tmp/candidate.app")
+
     def test_dictionary_native_adapter_and_bundle_metadata_agree(self):
         commands = scripting.validate_adapter()
         self.assertIn("create session", commands.values())

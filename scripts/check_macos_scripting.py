@@ -68,6 +68,8 @@ def run(*args: str) -> str:
     except subprocess.CalledProcessError as error:
         if args[0] == "sdef" and "requires Xcode" in (error.stderr or ""):
             raise ToolingUnavailable("sdef requires full Xcode; Command Line Tools alone cannot run this check") from error
+        if args[0] == "sdef" and "not agreed to the Xcode license" in (error.stderr or ""):
+            raise ToolingUnavailable("Xcode license acceptance is pending; the user must review it before this check can run") from error
         raise ScriptingError(f"macOS bundle check failed: {args[0]} (exit {error.returncode})") from error
 
 
