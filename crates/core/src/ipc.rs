@@ -4,11 +4,9 @@
 //! Response: `{"id":1,"result":{...}}` or `{"id":1,"error":{"code":"...","message":"..."}}`
 //! Event:    `{"event":"control_revoked", ...}` (no id; pushed by the server)
 //!
-//! Three kinds of client, declared with `hello`:
-//! * `agent`    — MCP adapter. Gets `tools_changed` and events about its own lease/approvals.
-//! * `human`    — CLI. No events.
-//! * `frontend` — a UI. Gets every event; with `streamOutput: true` also raw PTY output
-//!   (`output` events, base64) and may send `input` / `resize`.
+//! Public connections identify as agents. Owner UI operations and raw output
+//! are in-process native capabilities; a socket client cannot claim either role.
+//! Responses use protocol version 2 and owner-presented frames only.
 //!
 //! See docs/protocol.md for the full method list.
 
@@ -73,6 +71,7 @@ impl From<SessionError> for RpcError {
             SessionError::Suspended => "suspended",
             SessionError::NotAvailable(_) => "not_available",
             SessionError::Io(_) => "io",
+            SessionError::SurfaceUnavailable => "surface_unavailable",
         };
         RpcError { code: code.into(), message: e.to_string() }
     }
@@ -95,7 +94,21 @@ fn bytes_param(params: &Value, key: &str) -> Result<Vec<u8>, RpcError> {
 
 /// Synchronous dispatch. Runs under the session lock; must not block.
 pub fn dispatch(session: &SharedSession, conn: ConnId, method: &str, params: &Value) -> Result<Value, RpcError> {
-    if session.lock().is_private() { return Err(session_unavailable()); }
+    {
+        let s = session.lock();
+        if s.is_private() { return Err(session_unavailable()); }
+        if !s.participant_allowed(conn) { return Err(session_unavailable()); }
+        if s.conn_kind(conn) != Some(ConnKind::Agent) {
+            return Err(RpcError { code: "owner_required".into(), message: "public connections must identify as agents".into() });
+        }
+    }
+    if !matches!(method, "affordances" | "snapshot" | "request_control" | "release_control" | "type" | "send_key" | "interrupt" | "request_attention" | "check_approval" | "control_request_state" | "proposal_state" | "exec_state" | "status") {
+        return Err(RpcError { code: "owner_required".into(), message: "this operation belongs to the local owner UI".into() });
+    }
+    if method == "status" {
+        let s = session.lock();
+        return Ok(json!({"controller": s.status().controller, "mode": s.mode(), "effectiveMode": s.effective_mode(), "attended": s.attended(), "shared": !s.is_private(), "surfaceAvailable": s.status().surface_available }));
+    }
     dispatch_trusted(session, conn, method, params)
 }
 
@@ -108,6 +121,10 @@ pub fn dispatch_trusted(session: &SharedSession, conn: ConnId, method: &str, par
         ConnKind::Agent => Actor::Agent { conn },
         _ => Actor::Human,
     };
+    if kind == ConnKind::Agent && matches!(method, "check_approval" | "control_request_state" | "proposal_state" | "exec_state") {
+        let key = match method { "check_approval" => "approvalId", "control_request_state" => "requestId", "proposal_state" => "proposalId", _ => "execId" };
+        if !s.owns_request(conn, method, params[key].as_str().unwrap_or_default()) { return Err(session_unavailable()); }
+    }
     let r: Result<Value, SessionError> = match method {
         "affordances" => Ok(json!(s.affordances(actor).iter().map(|a| a.name()).collect::<Vec<_>>())),
         "snapshot" => s.snapshot(actor).map(|v| serde_json::to_value(v).unwrap()),
@@ -186,7 +203,6 @@ pub fn dispatch_trusted(session: &SharedSession, conn: ConnId, method: &str, par
             s.reject_proposal(&id).map(|_| json!({ "rejected": id }))
         }
         "hand_back" => s.hand_back().map(|l| serde_json::to_value(l).unwrap()),
-        "entrust" => s.entrust().map(|a| json!({ "entrustedTo": a })),
         "request_attention" => s.agent_request_attention(conn, str_param(params, "reason")).map(|_| json!({ "requested": true })),
         "set_mode" => {
             match serde_json::from_value::<AgentMode>(params.get("mode").cloned().unwrap_or(Value::Null)) {
@@ -281,13 +297,23 @@ pub struct Hub {
     sessions: parking_lot::Mutex<Vec<(SessionId, SharedSession)>>,
     attended: parking_lot::Mutex<Option<SessionId>>,
     opener: parking_lot::Mutex<Option<TabOpener>>,
+    agents: parking_lot::Mutex<HashMap<ConnId, (String, std::time::Instant)>>,
 }
 
 pub type SharedHub = Arc<Hub>;
 
 impl Hub {
     pub fn new() -> SharedHub {
-        Arc::new(Self { sessions: parking_lot::Mutex::new(Vec::new()), attended: parking_lot::Mutex::new(None), opener: parking_lot::Mutex::new(None) })
+        Arc::new(Self { sessions: parking_lot::Mutex::new(Vec::new()), attended: parking_lot::Mutex::new(None), opener: parking_lot::Mutex::new(None), agents: parking_lot::Mutex::new(HashMap::new()) })
+    }
+
+    /// Registered agent identities, including connections waiting for a private session to be shared.
+    pub fn agent_connections(&self) -> Vec<crate::session::AgentConnection> {
+        let mut out: Vec<_> = self.agents.lock().iter().map(|(conn, (name, at))| crate::session::AgentConnection {
+            conn_id: *conn, agent_id: name.clone(), idle_secs: at.elapsed().as_secs(),
+        }).collect();
+        out.sort_by_key(|a| a.conn_id);
+        out
     }
 
     pub fn single(id: &str, session: SharedSession) -> SharedHub {
@@ -402,12 +428,20 @@ impl Hub {
         self.attended_id().filter(|id| self.get_public(id).is_some())
     }
 
-    fn public_index_of(&self, id: &str) -> Option<usize> {
-        self.public_ids().iter().position(|candidate| candidate == id).map(|i| i + 1)
+    fn public_attended_for(&self, conn: ConnId) -> Option<SessionId> {
+        self.public_attended_id().filter(|id| self.get_public(id).is_some_and(|s| s.lock().participant_allowed(conn)))
     }
 
-    fn find_public_tab(&self, tab: &Value) -> Option<(SessionId, SharedSession)> {
-        let ids = self.public_ids();
+    fn public_ids_for(&self, conn: ConnId) -> Vec<SessionId> {
+        self.public_ids().into_iter().filter(|id| self.get_public(id).is_some_and(|s| s.lock().participant_allowed(conn))).collect()
+    }
+
+    fn public_index_of(&self, id: &str, conn: ConnId) -> Option<usize> {
+        self.public_ids_for(conn).iter().position(|candidate| candidate == id).map(|i| i + 1)
+    }
+
+    fn find_public_tab(&self, tab: &Value, conn: ConnId) -> Option<(SessionId, SharedSession)> {
+        let ids = self.public_ids_for(conn);
         let id = match tab {
             Value::Number(n) => ids.get(n.as_u64()?.checked_sub(1)? as usize),
             Value::String(id) => ids.iter().find(|i| *i == id).or_else(|| id.parse::<usize>().ok().and_then(|i| ids.get(i.checked_sub(1)?))),
@@ -440,12 +474,15 @@ impl Hub {
 /// Events leave a session tagged with its id.
 struct TokioSink {
     session: SessionId,
-    tx: tokio::sync::mpsc::UnboundedSender<(SessionId, ServerEvent)>,
+    tx: tokio::sync::mpsc::UnboundedSender<(SessionId, u64, ServerEvent)>,
 }
 
 impl EventSink for TokioSink {
     fn send(&self, event: ServerEvent) {
-        let _ = self.tx.send((self.session.clone(), event));
+        self.send_scoped(event, 0);
+    }
+    fn send_scoped(&self, event: ServerEvent, generation: u64) {
+        let _ = self.tx.send((self.session.clone(), generation, event));
     }
 }
 
@@ -506,54 +543,59 @@ impl Drop for ServerGuard {
 /// Per-connection identity, so a connection can be registered lazily in every
 /// session it touches.
 #[derive(Clone)]
-struct ConnIdentity {
-    kind: ConnKind,
-    name: String,
-    stream_output: bool,
-}
+struct ConnIdentity { name: String }
 
 async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: SharedHub) {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     let (rd, mut wr) = tokio::io::split(stream);
-    let (out_tx, mut out_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    struct Outbound { line: String, guard: Option<(SessionId, u64, Option<u64>)> }
+    let (out_tx, mut out_rx) = tokio::sync::mpsc::unbounded_channel::<Outbound>();
+    let writer_hub = hub.clone();
     let writer = tokio::spawn(async move {
-        while let Some(line) = out_rx.recv().await {
-            if wr.write_all(line.as_bytes()).await.is_err() || wr.write_all(b"\n").await.is_err() {
+        while let Some(mut message) = out_rx.recv().await {
+            if let Some((sid, generation, frame_generation)) = &message.guard {
+                let allowed = writer_hub.get(sid).is_some_and(|s| {
+                    let s = s.lock(); s.participant_allowed(conn) && s.participation_generation() == *generation && frame_generation.is_none_or(|g| s.surface_generation() == g)
+                });
+                if !allowed {
+                    let id = serde_json::from_str::<Value>(&message.line).ok().and_then(|v| v["id"].as_u64());
+                    let Some(id) = id else { continue; };
+                    message.line = serde_json::to_string(&Response { id, result: None, error: Some(session_unavailable()) }).unwrap();
+                }
+            }
+            if wr.write_all(message.line.as_bytes()).await.is_err() || wr.write_all(b"\n").await.is_err() {
                 break;
             }
         }
     });
-    let (ev_tx, mut ev_rx) = tokio::sync::mpsc::unbounded_channel::<(SessionId, ServerEvent)>();
+    let (ev_tx, mut ev_rx) = tokio::sync::mpsc::unbounded_channel::<(SessionId, u64, ServerEvent)>();
     let out_ev = out_tx.clone();
     let forwarder = tokio::spawn(async move {
-        while let Some((sid, ev)) = ev_rx.recv().await {
+        while let Some((sid, generation, ev)) = ev_rx.recv().await {
             if let Ok(mut v) = serde_json::to_value(&ev) {
                 if let Some(o) = v.as_object_mut() {
-                    o.insert("session".into(), Value::String(sid));
+                    o.insert("session".into(), Value::String(sid.clone()));
                 }
-                let _ = out_ev.send(v.to_string());
+                let _ = out_ev.send(Outbound { line: v.to_string(), guard: Some((sid, generation, None)) });
             }
         }
     });
 
-    let mut identity = ConnIdentity { kind: ConnKind::Human, name: "cli".into(), stream_output: false };
+    let mut identity = ConnIdentity { name: "client".into() };
     let mut registered: Vec<SessionId> = Vec::new();
     // A connection is bound to the session it first lands in (the attended one at
     // hello time). It does not drift when the human changes tabs — an agent whose
     // human walked away must see `unattended`, not another tab's screen. Requests may
     // still name a `session` explicitly.
     let mut bound: Option<SessionId> = None;
+    let mut introduced = false;
     let register = |sid: &SessionId, s: &SharedSession, id: &ConnIdentity, registered: &mut Vec<SessionId>| {
         if registered.iter().any(|r| r == sid) {
             return;
         }
         let sink = Box::new(TokioSink { session: sid.clone(), tx: ev_tx.clone() });
         let mut g = s.lock();
-        if id.kind == ConnKind::Frontend {
-            g.register_frontend(conn, &id.name, sink, id.stream_output);
-        } else {
-            g.register_conn(conn, id.kind, &id.name, sink);
-        }
+        g.register_conn(conn, ConnKind::Agent, &id.name, sink);
         registered.push(sid.clone());
     };
 
@@ -565,47 +607,47 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
         let req: Request = match serde_json::from_str(&line) {
             Ok(r) => r,
             Err(e) => {
-                let _ = out_tx.send(
-                    serde_json::to_string(&Response { id: 0, result: None, error: Some(RpcError { code: "parse".into(), message: e.to_string() }) }).unwrap(),
-                );
+                let _ = out_tx.send(Outbound {
+                    line: serde_json::to_string(&Response { id: 0, result: None, error: Some(RpcError { code: "parse".into(), message: e.to_string() }) }).unwrap(), guard: None,
+                });
                 continue;
             }
         };
         for sid in &registered {
             if let Some(s) = hub.get_public(sid) { s.lock().note_connection_activity(conn); }
         }
-        let result = if req.method == "hello" && str_param(&req.params, "session").is_some_and(|id| hub.get_public(&id).is_none()) {
+        if let Some((_, last)) = hub.agents.lock().get_mut(&conn) { *last = std::time::Instant::now(); }
+        let disclosure = str_param(&req.params, "session").or_else(|| bound.clone()).or_else(|| hub.public_attended_for(conn))
+            .and_then(|id| hub.get(&id).map(|s| { let generation = s.lock().participation_generation(); (id, generation, None::<u64>) }));
+        let result = if !introduced && req.method != "hello" {
+            Err(RpcError { code: "hello_required".into(), message: "identify as an agent with hello first".into() })
+        } else if req.method == "hello" && introduced {
+            Err(RpcError { code: "invalid_input".into(), message: "identity is immutable for this connection".into() })
+        } else if req.method == "hello" && str_param(&req.params, "kind").as_deref() != Some("agent") {
+            Err(RpcError { code: "owner_required".into(), message: "public transport accepts agents only; use the native owner UI".into() })
+        } else if req.method == "hello" && str_param(&req.params, "session").is_some_and(|id| hub.get_public(&id).is_none()) {
             Err(session_unavailable())
         } else if req.method == "hello" {
             let name = str_param(&req.params, "agentId").or_else(|| str_param(&req.params, "name")).unwrap_or_else(|| "client".into());
-            let kind = match str_param(&req.params, "kind").as_deref() {
-                Some("agent") => ConnKind::Agent,
-                Some("frontend") => ConnKind::Frontend,
-                _ => ConnKind::Human,
-            };
-            identity = ConnIdentity { kind, name, stream_output: req.params.get("streamOutput").and_then(|v| v.as_bool()).unwrap_or(false) };
-            // Frontends hear every session; agents and humans attach lazily where they act.
-            if kind == ConnKind::Frontend {
-                for sid in hub.public_ids() {
-                    if let Some(s) = hub.get_public(&sid) {
-                        register(&sid, &s, &identity, &mut registered);
-                    }
-                }
-            } else if let Some((sid, s)) = hub.resolve_public(None) {
+            hub.agents.lock().insert(conn, (name.clone(), std::time::Instant::now()));
+            introduced = true;
+            identity = ConnIdentity { name };
+            if let Some((sid, s)) = hub.resolve_public(str_param(&req.params, "session").as_deref()).filter(|(_, s)| s.lock().participant_allowed(conn)) {
                 register(&sid, &s, &identity, &mut registered);
                 bound = Some(sid);
             }
-            let target = bound.clone().or_else(|| hub.public_attended_id());
+            let target = bound.clone().or_else(|| hub.public_attended_for(conn));
             let modes = target.as_deref().and_then(|id| hub.get_public(id)).map(|s| { let s = s.lock(); (s.mode(), s.effective_mode()) });
-            Ok(json!({ "conn": conn, "kind": match kind { ConnKind::Agent => "agent", ConnKind::Frontend => "frontend", ConnKind::Human => "human" }, "attended": hub.public_attended_id(), "session": target, "mode": modes.map(|m| m.0), "effectiveMode": modes.map(|m| m.1) }))
+            Ok(json!({ "protocolVersion": 2, "conn": conn, "kind": "agent", "attended": hub.public_attended_for(conn), "session": target, "mode": modes.map(|m| m.0), "effectiveMode": modes.map(|m| m.1) }))
         } else if req.method == "sessions" || req.method == "list_tabs" {
             let list: Vec<Value> = hub.public_ids().into_iter().enumerate().filter_map(|(i, sid)| {
                 let s = hub.get_public(&sid)?;
                 let g = s.lock();
+                if !g.participant_allowed(conn) { return None; }
                 let st = g.status();
-                Some(json!({ "tab": i + 1, "id": sid, "current": bound.as_deref() == Some(sid.as_str()), "attended": st.attended, "controller": st.controller, "pending": st.pending.len(), "entrustedTo": st.entrusted_to, "attentionRequest": st.attention_request, "openedBy": st.opened_by, "processAlive": st.process_alive, "mode": st.mode, "effectiveMode": st.effective_mode }))
-            }).collect();
-            Ok(json!({ "sessions": list, "tabs": list.len(), "attended": hub.public_attended_id(), "current": bound }))
+                Some(json!({ "tab": i + 1, "id": sid, "current": bound.as_deref() == Some(sid.as_str()), "attended": st.attended, "controller": st.controller, "pending": st.pending.len(), "processAlive": st.process_alive, "mode": st.mode, "effectiveMode": st.effective_mode }))
+            }).enumerate().map(|(i, mut row)| { row["tab"] = json!(i + 1); row }).collect();
+            Ok(json!({ "sessions": list, "tabs": list.len(), "attended": hub.public_attended_for(conn), "current": bound }))
         } else if req.method == "open_tab" {
             // Agent: open a tab. It starts unattended; the human sees it knock.
             let reason = str_param(&req.params, "reason");
@@ -623,7 +665,7 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
                                 register(&sid, &ns, &identity, &mut registered);
                                 ns.lock().agent_opened_tab(conn, reason);
                                 bound = Some(sid.clone());
-                                Ok(json!({ "session": sid, "tab": hub.public_index_of(&sid), "attended": false, "note": "the human is not looking at this tab yet; request_attention is queued — wait for attention or entrust" }))
+                                Ok(json!({ "session": sid, "tab": hub.public_index_of(&sid, conn), "attended": false, "note": "the human is not looking at this tab yet; request_attention is queued — wait for the human to show this tab" }))
                             }
                         },
                     }
@@ -633,7 +675,7 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
         } else if req.method == "switch_tab" {
             let want = req.params.get("tab").cloned().or_else(|| req.params.get("session").cloned()).unwrap_or(Value::Null);
             let cur = bound.clone().and_then(|b| hub.get_public(&b).map(|s| (b, s))).or_else(|| hub.resolve_public(None));
-            match (cur, hub.find_public_tab(&want)) {
+            match (cur, hub.find_public_tab(&want, conn)) {
                 (None, _) => Err(RpcError { code: "not_found".into(), message: "no session".into() }),
                 (_, None) => Err(session_unavailable()),
                 (Some((from, s)), Some((to, ts))) => {
@@ -648,14 +690,13 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
                                 bound = Some(to.clone());
                             }
                             let attended = ts.lock().status().attended;
-                            Ok(json!({ "session": to, "tab": hub.public_index_of(&to), "attended": attended }))
+                            Ok(json!({ "session": to, "tab": hub.public_index_of(&to, conn), "attended": attended }))
                         }
                     }
                 }
             }
         } else if req.method == "set_attended" {
-            let sid = str_param(&req.params, "session").unwrap_or_default();
-            if hub.get_public(&sid).is_some() && hub.set_attended(&sid) { Ok(json!({ "attended": sid })) } else { Err(session_unavailable()) }
+            Err(RpcError { code: "owner_required".into(), message: "only the native owner can select the presented tab".into() })
         } else {
             let target = str_param(&req.params, "session").or_else(|| bound.clone());
             match hub.resolve_public(target.as_deref()) {
@@ -673,12 +714,16 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
             Ok(v) => Response { id: req.id, result: Some(v), error: None },
             Err(e) => Response { id: req.id, result: None, error: Some(e) },
         };
-        if out_tx.send(serde_json::to_string(&resp).unwrap()).is_err() {
+        let guard = if resp.error.is_none() && !matches!(req.method.as_str(), "hello" | "sessions" | "list_tabs") {
+            disclosure.map(|(sid, epoch, _)| (sid, epoch, if req.method == "snapshot" { resp.result.as_ref().and_then(|r| r["generation"].as_u64()) } else { None }))
+        } else { None };
+        if out_tx.send(Outbound { line: serde_json::to_string(&resp).unwrap(), guard }).is_err() {
             break;
         }
     }
+    hub.agents.lock().remove(&conn);
     for sid in registered {
-        if let Some(s) = hub.get_public(&sid) {
+        if let Some(s) = hub.get(&sid) {
             s.lock().connection_closed(conn);
         }
     }
@@ -694,7 +739,20 @@ async fn call_with_pacing(session: &SharedSession, conn: ConnId, method: &str, p
         // Let the shell echo settle so the VT cursor line reflects the typed text.
         tokio::time::sleep(Duration::from_millis(60)).await;
     }
+    let initial_generation = session.lock().participation_generation();
     let mut result = dispatch(session, conn, method, params);
+    if matches!(method, "snapshot" | "request_control" | "type" | "send_key" | "interrupt") {
+        let generation = session.lock().surface_generation();
+        for _ in 0..15 {
+            if !matches!(&result, Err(e) if e.code == "surface_unavailable") { break; }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            {
+                let s = session.lock();
+                if s.surface_generation() != generation || s.participation_generation() != initial_generation { break; }
+            }
+            result = dispatch(session, conn, method, params);
+        }
+    }
     for _ in 0..200 {
         match &result {
             Err(e) if e.code == "rate_limited" => {
@@ -711,6 +769,7 @@ async fn call_with_pacing(session: &SharedSession, conn: ConnId, method: &str, p
             let id = v["requestId"].as_str().unwrap_or_default().to_string();
             loop {
                 tokio::time::sleep(Duration::from_millis(100)).await;
+                if session.lock().participation_generation() != initial_generation { return Err(session_unavailable()); }
                 let st = session.lock().control_request_state(&id);
                 match st {
                     Some(ControlRequestState::Pending) => continue,
@@ -729,6 +788,7 @@ async fn call_with_pacing(session: &SharedSession, conn: ConnId, method: &str, p
             let cmd = v["cmd"].as_str().unwrap_or_default().to_string();
             loop {
                 tokio::time::sleep(Duration::from_millis(50)).await;
+                if session.lock().participation_generation() != initial_generation { return Err(session_unavailable()); }
                 let st = session.lock().proposal_state(&id);
                 match st {
                     Some(ProposalState::Ready) | Some(ProposalState::Drafting) => continue,
@@ -744,6 +804,7 @@ async fn call_with_pacing(session: &SharedSession, conn: ConnId, method: &str, p
             let cmd = v["cmd"].as_str().unwrap_or_default().to_string();
             loop {
                 tokio::time::sleep(Duration::from_millis(20)).await;
+                if session.lock().participation_generation() != initial_generation { return Err(session_unavailable()); }
                 let state = session.lock().exec_state(&exec_id);
                 match state {
                     Some((ExecState::Scheduled, _)) => continue,
@@ -765,7 +826,7 @@ async fn call_with_pacing(session: &SharedSession, conn: ConnId, method: &str, p
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
-    #[error("conn proxy is not running ({0})")]
+    #[error("Conn app is not running ({0})")]
     NotRunning(String),
     #[error("connection lost")]
     Disconnected,
@@ -872,7 +933,5 @@ impl Client {
         self.call("hello", json!({ "kind": kind, "agentId": name, "name": name }))
     }
 
-    pub fn hello_frontend(&self, name: &str, stream_output: bool) -> Result<Value, ClientError> {
-        self.call("hello", json!({ "kind": "frontend", "name": name, "streamOutput": stream_output }))
-    }
+
 }

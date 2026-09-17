@@ -17,7 +17,7 @@ fn names(evs: &[ServerEvent]) -> Vec<String> {
 
 #[test]
 fn frontend_receives_lifecycle_events() {
-    let mut h = Harness::new();
+    let mut h = Harness::headless();
     let fe = h.frontend("ui");
     h.agent(1, "copilot");
     h.session.agent_request_control(1).unwrap();
@@ -26,6 +26,7 @@ fn frontend_receives_lifecycle_events() {
     h.session.resolve_approval(&approval_id, Decision::Grant, "frontend").unwrap();
     h.session.human_input(b"x");
     h.session.pty_output(b"out");
+    common::present(&mut h.session, vec!["out".into()]);
     h.session.tick(Instant::now());
     let evs = fe.lock().unwrap().clone();
     let n = names(&evs);
@@ -62,7 +63,7 @@ fn output_streaming_to_subscribers() {
     h.session.subscribe("ui", Box::new(common::VecSink(events.clone())), true);
     h.session.pty_output(b"hello");
     let evs = events.lock().unwrap();
-    let data = evs.iter().find_map(|e| match e { ServerEvent::Output { data } => Some(data.clone()), _ => None }).unwrap();
+    let data = evs.iter().find_map(|e| match e { ServerEvent::Output { data, .. } => Some(data.clone()), _ => None }).unwrap();
     use base64::Engine as _;
     assert_eq!(base64::engine::general_purpose::STANDARD.decode(data).unwrap(), b"hello");
 }

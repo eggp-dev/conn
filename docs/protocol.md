@@ -1,167 +1,153 @@
-# Socket protocol
+# Agent socket protocol v2
 
-`~/.conn/conn.sock` on Unix (directory 0700, socket 0600); a local owner-only Named Pipe on Windows. Override the endpoint with `CONN_SOCKET` or `--socket`. Newline-delimited JSON: one line, one message. Windows accepts a `\\.\pipe\...` name; path-like overrides are mapped to a stable pipe name.
+**Unreleased hardcut.** v2 removes public owner/frontend operations and headless
+observation. Released v0.6.0 still uses the previous contract. Update the app, CLI and
+MCP adapter together; there is no downgrade to a raw-output or Rust-screen fallback.
 
-Sessions report `profileId`, `profileName` and `reviewRequired` in `status`. A selected profile is resolved when the session starts; subsequent profile edits apply to new sessions. See [shell backends](backends.md).
+On Unix, `~/.conn/conn.sock` is local and owner-only (directory 0700, socket 0600).
+Windows uses an owner-only local Named Pipe. Override with `CONN_SOCKET` or `--socket`;
+Windows accepts `\\.\pipe\...` and maps path-like overrides to a stable pipe name.
+Messages are newline-delimited JSON. Responses are `{"id", "result"}` or
+`{"id", "error":{"code","message"}}`; events have no request ID.
 
-**Unreleased private external sessions:** the native AppleScript contract is a
-separate entry point, not a new role or bypass flag in this protocol. External
-private sessions are omitted from public IPC/MCP discovery and cannot be accessed
-by explicit ID, subscriptions, snapshots or detailed status. Public callers cannot
-select private origin, disable recording or share such a session with an agent.
-See [external automation](external-automation.md) for its owner-bound,
-metadata-only status API. These changes are not present in released v0.5.1.
+## Identity and owner boundary
 
+The first message must be `hello` with `kind: "agent"`. Identity is immutable for that
+connection. `name`/`agentId` are labels, not permissions. The server assigns `conn`, and
+owner sharing selections bind to that actual connection ID. Reconnecting with the same
+label creates a new identity and does not inherit explicit membership.
+
+```json
+{"id":1,"method":"hello","params":{"kind":"agent","name":"my-agent"}}
 ```
-→ {"id":1,"method":"hello","params":{"kind":"frontend","name":"my-ui","streamOutput":true}}
-← {"id":1,"result":{"conn":3,"kind":"frontend"}}
-← {"event":"output","data":"<base64>"}
-→ {"id":2,"method":"input","params":{"data":"<base64>"}}
-← {"id":2,"result":{"written":3}}
+
+Example response (IDs and modes vary):
+
+```json
+{"id":1,"result":{"protocolVersion":2,"conn":3,"kind":"agent","attended":"t1","session":"t1","mode":"copilot","effectiveMode":"copilot"}}
 ```
 
-A response is `{"id", "result"}` or `{"id", "error":{"code","message"}}`. Events have no `id`: `{"event": ...}`.
+A connection binds to the currently attended shared session it may participate in at hello. When the human
+changes tabs the binding does not follow. A request can name `session` explicitly, or
+use `switch_tab`. Hello may return null session/mode fields when no shared session is
+available; the connection can still appear as a sharing candidate in the owner UI.
 
-## Sessions (tabs)
+`kind: "human"`, `kind: "frontend"`, raw output subscriptions, `input`, `take`, approvals,
+mode/settings changes, `set_attended`, frame publication and sharing are unavailable
+on this transport. These belong to the window-bound native owner bridge. The browser
+test adapter uses that same in-process owner bridge behind its development authentication;
+it is not an agent-provided frontend identity. Never expose it publicly.
 
-One socket can front several sessions (the app's tabs). Exactly one is **attended** — the one the human is looking at — and a connection is **bound** to the attended session at `hello` time. When the human moves to another tab the connection does not follow. A request may name a `session` explicitly. Every event carries a `session` field.
+## Sessions and participation
 
-| method | params | result |
-|---|---|---|
-| `sessions` / `list_tabs` | — | `{sessions: [{tab, id, current, attended, controller, pending, entrustedTo, attentionRequest, openedBy, processAlive, mode, effectiveMode}], tabs, attended, current}` — `tab` counts from 1, `current` is the session this connection is bound to |
-| `set_attended` | `{session}` | the human now looks at this session (frontend) |
-| `entrust` | `{session?}` | arm delegation while attended, or grant while away; returning clears delegation and its lease |
-| `request_attention` | `{reason?}` | the agent asks the human to come back |
-| `open_tab` | `{reason?}` | the agent opens a new session (tab) and moves its connection there. `{session, tab, attended: false}`. `unsupported` when the host has no opener |
-| `switch_tab` | `{tab}` (number or id) | the agent moves its own connection to another session. The human's view does not change. `{session, tab, attended}` |
+| Method | Parameters | Result |
+| --- | --- | --- |
+| `sessions` / `list_tabs` | — | Discovery of sessions this connection may participate in, count, bound session and attended session. Private and unselected sessions are omitted. |
+| `open_tab` | `{reason?}` | New tab and connection binding; starts unattended. Requires the host opener and the matching capability. |
+| `switch_tab` | `{tab}` number or ID | Changes this agent's binding, not the human's displayed tab. |
+| `request_attention` | `{reason?}` | Requests that the human return to the bound tab. |
 
-In a session the human is not looking at, an agent's `snapshot` is refused with `unattended` and writes with `suspended`. An entrusted agent continues within the policy's `unattended` cap (a mode). Events: `attention_changed{attended}`, `entrusted{agentId, cap}`, `attention_requested{agentId, reason}`, `control_suspended{reason}`, `control_resumed`.
+Discovery is not access. Per-session operations require participation, and observation
+and execution require a current presented surface. A selected agent can be denied on
+an unattended tab or while its owner surface is obscured. Entrust no longer permits
+background observation/execution. An agent-opened tab must be visited by the human before
+it can be observed; the agent cannot mark it attended itself.
 
-**A tab opened by an agent starts unattended.** The new session emits `tab_opened{agentId, reason}` and carries a pending attention request. Until the human comes to it (`set_attended`) or entrusts it (`entrust`) the agent can neither see nor write there. `switch_tab` emits `agent_switched_tab{agentId, from, to}` on both sessions. Both methods can be masked through the `open_tab` / `switch_tab` affordances and exist only on hosts that install an opener (the app). `switch_tab` remains available while unattended so an agent can return to the tab the human is watching.
+## Presented snapshot
 
-## hello
+`snapshot` returns the actual owner-rendered terminal viewport, never independent
+scrollback, raw PTY bytes or the internal command-policy tracker. The response includes:
 
-The result includes `session`, `mode` and `effectiveMode` for the bound session (`null` if none). `mode` is the human setting; `effectiveMode` includes the unattended policy cap. Agents also receive `mode_changed` and can refresh these values through `list_tabs` or `snapshot`.
+| Field | Meaning |
+| --- | --- |
+| `surfaceId` | Owner surface identity |
+| `generation` | Surface invalidation boundary |
+| `revision` | Rendered-frame revision |
+| `outputSeq` | PTY output sequence acknowledged by that frame |
+| `size` | `{rows,cols}` |
+| `cursor` | Visible `{row,col}`, or null when outside the viewport |
+| `screen` | Displayed text rows, with concealed text excluded |
+| `alternateScreen` | Whether the active rendered buffer is the alternate screen |
+| `image` | Optional `{mimeType:"image/png",data:"base64"}` rendered image |
+| `imageUnavailable` | True when the renderer supplied text without a raster image |
+| `controller`, `processAlive` | Current collaboration/process state |
+| `mode`, `effectiveMode` | Configured and current agent behavior |
 
-| Field | Value |
-|---|---|
-| `kind` | `agent` / `human` / `frontend` (default `human`) |
-| `name` / `agentId` | the name written to the audit log |
-| `streamOutput` | frontend only. `true` streams PTY output as `output` events |
+Publication must match the current output and generation. Missing/old owner frames
+return `surface_unavailable`; unattended observation returns `unattended`. The server
+may briefly wait for a matching render, but never substitutes hidden backing state.
+A sharing transition invalidates previous snapshots and pending response disclosure.
+See [visibility and trust limits](security.md#one-terminal-one-presented-surface).
 
-When a connection drops, its lease, pending approvals and scheduled executions are all cleaned up.
+## Agent operations
 
-## Methods
-
-### Agent
-
-| method | params | result |
-|---|---|---|
-| `affordances` | — | `["snapshot", ...]` what this connection may do right now |
-| `snapshot` | — | `{revision,size,cursor,screen[],alternateScreen,controller,processAlive,mode,effectiveMode}` |
-| `request_control` | `{reason?, command?}` | `{status: granted, leaseId, agentId, ttlSecs}` — with the gate on, the server waits for the human's decision before answering, or errors with `control_denied` |
+| Method | Parameters | Result |
+| --- | --- | --- |
+| `affordances` | — | The currently available agent capabilities |
+| `status` | — | Limited controller, mode, effectiveMode, attended, shared and surfaceAvailable state |
+| `request_control` | `{reason?,command?}` | Granted lease; with the control gate, waits for the human decision or errors |
 | `release_control` | — | `{released}` |
-| `type` | `{text}` | `{typed}` — no newlines |
-| `send_key` | `{key, intent?}` | `{status: sent \| executed \| cancelled \| rejected \| denied \| pending, ...}` — ENTER requires `intent` (policy `require_intent`); missing → `intent_required` |
-| `analyse` | `{cmd}` | `LineAnalysis { cwd, segments[{text, command, opaque, policy, label, targets[{path, exists, isDir, gitRepo, entries, protected}]}], policy, label, isolationViolation }` — verdict only, nothing runs |
-| `interrupt` | — | `{interrupted}` — sends Ctrl-C to the PTY in Autopilot and Co-pilot, cancels own pending proposal/approval/grace; requires a current lease and attention/entrustment |
-| `check_approval` | `{approvalId}` | `{approvalId, state, cmd, label}` |
-| `exec_state` | `{execId}` | `{execId, state: scheduled\|executed\|cancelled, reason}` |
-| `proposal_state` | `{proposalId}` | `{proposalId, state: drafting\|ready\|executed\|rejected\|denied}` |
-| `control_request_state` | `{requestId}` | `{requestId, state: pending\|granted\|denied\|expired}` |
+| `type` | `{text}` | `{typed}`; no execution newline |
+| `send_key` | `{key,intent?}` | Sent/executed/cancelled/rejected/denied result; Enter requires intent when policy specifies it |
+| `interrupt` | — | Ctrl-C through the same PTY; requires this agent's current authority |
+| `check_approval` | `{approvalId}` | State of the caller's command approval |
+| `control_request_state` | `{requestId}` | Pending/granted/denied/expired control request |
+| `proposal_state` | `{proposalId}` | Drafting/ready/executed/rejected/denied proposal |
+| `exec_state` | `{execId}` | Scheduled/executed/cancelled execution |
 
-In copilot mode `type` does not write to the shell; it accumulates in a proposal (ghost text), and `send_key(ENTER)` waits for the human to commit or reject before answering `executed` / `rejected` / `denied`.
+Co-pilot accumulates an agent proposal rather than immediately typing it. Enter waits
+for human acceptance and policy evaluation. Autopilot may write while holding control;
+control approval is separate from command policy. Grace and pacing waits are handled by
+the adapter. Surface/participation changes cancel or suspend work instead of creating
+an invisible continuation path. A disconnected connection loses its lease and pending work.
 
-`send_key(ENTER)` waits 60 ms for the echo to settle before evaluating policy. `rate_limited` never reaches the client: the server waits and retries. Likewise `scheduled` is held by the server until the grace ends and answered as `executed` / `cancelled`.
+There is no public `analyse` filesystem-inspection route or full owner status payload.
+Use the review UI for structural policy details and the current snapshot for terminal
+context. `conn log` is an explicit local file read using the CLI process's OS privileges,
+not a screen/history capability granted by this protocol.
 
-### Human / frontend
+## Original control request
 
-| method | params | result |
-|---|---|---|
-| `status` | — | controller, processAlive, revision, size, pending[], scheduled, sessionAllows, policyPath, connectedAgents, agentConnections[{connId,agentId,idleSecs}], connectedFrontends, pacing, affordanceMask, promptActive, mode, effectiveMode, attended, entrustedTo, attentionRequest, openedBy, controlGate, controlRequests, proposal, lastAgent |
-| `take` | — | `{revoked: "lease#N" \| null}` |
-| `approve` | `{approvalId, decision: grant\|deny\|allow_session}` | `{approvalId, state, cmd, label}` — the id is required; `allow_session` is rejected for review-required profiles |
-| `cancel_exec` | `{execId}` | `{cancelled}` |
-| `execute_now` | `{execId}` | `{executed}` — the human co-signs a scheduled execution and runs it now |
-| `set_mode` | `{mode: observe\|copilot\|autopilot}` | `{mode, effectiveMode}` — returns `input_pending` without changing mode if physical shell input remains; clear/cancel it first |
-| `set_control_gate` | `{ask: bool}` | `{ask}` — when on, every `request_control` waits for the human |
-| `decide_control` | `{requestId, grant: bool}` | `ControlRequest` |
-| `accept_proposal` | `{proposalId}` | `KeyResult` — types the proposal into the shell and runs it after the policy check. `confirm` counts as approved because the human just read and committed it; `deny` still blocks |
-| `reject_proposal` | `{proposalId}` | `{rejected}` |
-| `hand_back` | — | `{leaseId, agentId, ttlSecs}` — returns the conn to the agent that last held it |
-| `revoke_session_allow` | `{label}` | `{revoked}` |
-| `input` | `{data: base64}` | `{written}` — the human input path (takeover) |
-| `resize` | `{rows, cols}` | `{rows, cols}` |
-| `get_pacing` | — | `Pacing` |
-| `set_pacing` | a subset of `Pacing` | the merged `Pacing` |
-| `set_affordances` | `{allow: [..] \| null}` | `{allow}` |
+Include `command` when a planned command is known; it is a declaration, not execution
+or permission. Control requests preserve submitted JSON parameter values in
+`originalRequest: {method:"request_control",params:{...}}`. The payload is an object of
+at most 64 KiB; reason/command are strings or null. Retrying a pending request with a
+different non-null command is rejected. Transport whitespace is not retained.
 
-## Events
+The owner's timeline can show the original request separately from its reason and
+actual execution. Denied/expired decisions retain the submitted request where recorded.
+Older records without original data remain unavailable, not reconstructed. Sensitive
+arguments in explicit agent requests can be recorded; never use request metadata as a
+credential channel.
 
-| event | recipients | fields |
-|---|---|---|
-| `tools_changed` | agent | — |
-| `control_granted` | frontend | `lease, agentId, reason` |
-| `control_revoked` | agent (holder), frontend | `lease, agentId, reason: human_input\|taken\|released\|expired\|disconnected\|process_exited` |
-| `agent_input` | frontend | `agentId, len` |
-| `approval_requested` | frontend | `request{id, agentId, cmd, label, intent, analysis, requestedAt, state}` |
-| `approval_resolved` | agent (requester), frontend | `approvalId, state, by` |
-| `exec_scheduled` | frontend | `execId, agentId, cmd, graceMs, intent` |
-| `exec_cosigned` | frontend | `execId, agentId` |
-| `exec_cancelled` | frontend | `execId, reason` |
-| `agent_exec` | frontend | `agentId, cmd, intent, policy: allow\|deny\|confirm:granted\|...` |
-| `human_exec` | frontend | `cmd` |
-| `screen_changed` | frontend | `revision` (coalesced per tick) |
-| `output` | frontend (streamOutput) | `data` base64 |
-| `process_exited` | frontend | `exitCode` |
-| `pacing_changed` | frontend | `pacing` |
-| `affordance_mask_changed` | frontend | `allow` |
-| `mode_changed` | frontend, agents | `mode, effectiveMode` — includes attention-driven cap changes |
-| `control_gate_changed` | frontend | `ask` |
-| `control_requested` | frontend | `request{requestId, agentId, reason, state}` |
-| `control_request_resolved` | agent (requester), frontend | `requestId, state` |
-| `proposal_changed` | frontend | `proposal{proposalId, agentId, text, intent, state}` |
-| `proposal_resolved` | agent (author), frontend | `proposalId, state, cmd, policy` |
-| `control_handed_back` | agent (recipient), frontend | `lease, agentId, lastCmd` |
-| `session_allows_changed` | frontend | `allows[]` |
-| `attention_changed` | frontend, agents | `attended` |
-| `entrusted` | frontend, agents | `agentId, cap` |
-| `attention_requested` | frontend | `agentId, reason` |
-| `control_suspended` / `control_resumed` | agent (holder) | `reason` / — |
-| `tab_opened` | frontend, agents | `agentId, reason` |
-| `agent_switched_tab` | frontend, agents (both sessions) | `agentId, from, to` |
+## Events and invalidation
 
-## Error codes
+Native frontend events are not a public event feed. Agents receive relevant changes
+such as `tools_changed`, `mode_changed`, attention changes, their control revocation,
+approval resolution and proposal/execution results. Events are session-tagged. Raw
+`output`, owner approval cards, other actors' original request payloads and owner settings
+are not made available by setting an agent's `streamOutput` flag.
 
-`busy` `not_controller` `lease_expired` `process_exited` `invalid_input` `input_pending` `not_found` `approval_pending` `exec_pending` `proposal_pending` `intent_required` `rate_limited` `masked` `control_denied` `wrong_mode` `unattended` `suspended` `not_available` `unsupported` `io` `parse`
+Queued agent events and successful responses carry a participation generation check.
+Snapshots additionally carry the surface generation. Before writing to the transport,
+the server rechecks the session's current permission boundary and drops obsolete
+content. Revocation cannot recall bytes already delivered to the client/model.
 
-## In-process (Rust)
+## Relevant errors
 
-The same thing without a socket:
+`hello_required`, `owner_required`, `surface_unavailable`, `not_available`, `unattended`,
+`suspended`, `busy`, `not_controller`, `lease_expired`, `process_exited`, `invalid_input`,
+`not_found`, `rate_limited`, `input_pending`, `approval_pending`, `exec_pending`, `proposal_pending`, `intent_required`,
+`masked`, `control_denied`, `wrong_mode`, `unsupported`, `io`, `parse`.
 
-```rust
-use conn_core::{Engine, EngineConfig, ServerEvent};
+Private/unauthorized session access uses a generic unavailable response. A client should
+not automatically bypass an unavailable surface, switch to a separate shell, or claim a
+command ran merely because it received a lease. Ask the human to restore the shared
+view and take a fresh snapshot.
 
-let engine = Engine::spawn(EngineConfig { rows: 40, cols: 120, render_prompt: false, ..Default::default() })?;
-engine.subscribe("ui", Box::new(|ev: ServerEvent| { /* ServerEvent::Output { data } etc. */ }), true);
-engine.write_input(b"ls\r");
-let session = engine.session();
-session.lock().set_pacing(Pacing { enter_grace_ms: 1500, ..Default::default() });
-// open the socket as well so agents can attach
-let hub = conn_core::ipc::Hub::single("t1", session);
-let _guard = conn_core::ipc::serve_in_background(conn_core::paths::socket_path(), hub)?;
-```
+## Native automation and extensions
 
-### Original control request
-
-Agents should include `command` when the exact planned shell command is known. `conn agent run` sends it automatically; `conn agent request --reason R --command COMMAND` requests control without typing or executing that command. MCP `terminal_request_control` accepts the same optional field.
-
-Control request events/status and the request/resolution audit records carry `originalRequest: {method: "request_control", params: {...}}`. This preserves submitted JSON parameter values, including whitespace inside strings, rather than transport framing or JSON whitespace. Resolution audit records are self-contained so denied/expired requests can be restored independently. Request parameters must be an object of at most 64 KiB; reason/command must be strings or null. A pending request retains its first payload; resubmitting a different non-null command is rejected.
-
-The UI exposes this payload in a collapsed original-request section. Planned commands are metadata, not authorization or evidence of execution. Actual execution retains its own command record. Older records without a payload and clients without a planned command are shown as unavailable, never reconstructed from a reason.
-
-## Connection diagnostics and execution records
-
-`connectedAgents` contains unique, sorted names. `agentConnections` lists actual open connections, including duplicate names, with their distinct connection IDs and seconds since the latest inbound request. Idle sockets are not assumed dead and are not removed merely for being idle; transport closure removes them. Connection activity does not renew a write lease.
-
-`exec_cosigned{execId,agentId}` is emitted before `agent_exec` when the human runs a grace-period command immediately. Its saved `exec` audit entry has `by: "human_cosign"`. A Co-pilot commit instead has `by: "human_commit"`; neither implies a separate command approval.
+[External automation](external-automation.md) is a separate owner-bound native adapter,
+not another public socket role. Only the human owner may transition its private session
+to shared participation. [Native extensions](extensions.md) receive an authorized frame
+from the host; they cannot call owner operations through agent IPC either.

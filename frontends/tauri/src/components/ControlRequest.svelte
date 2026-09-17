@@ -26,7 +26,7 @@
 {/if}
 
 <style>
-  .req { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); z-index: 19; display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: 8px 16px; width: min(640px, calc(100% - 32px)); padding: 14px 16px; border-radius: 12px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--c) 50%, var(--line)); box-shadow: var(--shadow); font-size: 13px; }
+  .req { position: relative; margin: 6px 16px; box-sizing:border-box; z-index: 19; display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: 8px 16px; width: calc(100% - 32px); padding: 14px 16px; border-radius: 12px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--c) 50%, var(--line)); box-shadow: var(--shadow); font-size: 13px; }
   .heading { display: flex; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
   .who { color: var(--c); font-weight: 700; overflow-wrap: anywhere; }
   .reason { grid-column: 1; min-width: 0; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 30vh; overflow-y: auto; }

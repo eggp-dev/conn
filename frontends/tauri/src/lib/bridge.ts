@@ -22,5 +22,5 @@ export async function changeMode(mode: Mode, session = st.active): Promise<boole
 export const log = (msg: string) => invoke("log", { msg }).catch(() => {});
 export const onEvent = (h: (ev: Ev) => void) => listen<Ev>("ss:event", (e) => h(e.payload));
 export const onTabOpened = (h: (p: { session: string; agentId: string; reason?: string | null; focus?: boolean }) => void) => listen<{ session: string; agentId: string; reason?: string | null; focus?: boolean }>("ss:tab_opened", (e) => h(e.payload));
-export const onOutput = (h: (p: { session: string; data: string }) => void) => listen<{ session: string; data: string }>("ss:output", (e) => h(e.payload));
+export const onOutput = (h: (p: { session: string; data: string; outputSeq: number; generation: number }) => void) => listen<{ session: string; data: string; outputSeq: number; generation: number }>("ss:output", (e) => h(e.payload));
 export const b64ToBytes = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));

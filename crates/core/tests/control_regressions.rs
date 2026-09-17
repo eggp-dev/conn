@@ -50,31 +50,29 @@ fn dirty_history_input_blocks_mode_switch_even_when_tracker_text_is_empty() {
 }
 
 #[test]
-fn entrusted_return_revokes_lease_and_gate_requires_a_new_decision() {
+fn return_requires_new_frame_and_control_decision() {
     let mut h = Harness::headless();
     h.agent(1, "claude");
     h.session.agent_request_control(1).unwrap();
-    h.session.entrust().unwrap();
     h.session.set_attended(false);
     h.session.set_control_gate(true);
     h.session.set_attended(true);
-    assert!(h.session.entrusted_agent().is_none());
+    common::present(&mut h.session, vec![]);
     assert!(h.session.current_lease().is_none());
     assert!(matches!(h.session.agent_request_control_with(1, None).unwrap(), ControlOutcome::Pending { .. }));
 }
 
 #[test]
-fn arming_entrust_while_attended_does_not_bypass_gate() {
+fn human_return_does_not_bypass_control_gate() {
     let mut h = Harness::headless();
     h.agent(1, "claude");
     h.session.agent_request_control(1).unwrap();
     h.session.human_take();
     h.session.set_control_gate(true);
-    h.session.entrust().unwrap();
     assert!(h.session.current_lease().is_none());
     assert!(matches!(h.session.agent_request_control_with(1, None).unwrap(), ControlOutcome::Pending { .. }));
     h.session.set_attended(true);
-    assert!(h.session.entrusted_agent().is_none(), "re-attend clears even without a false→true transition");
+    common::present(&mut h.session, vec![]);
 }
 
 #[test]
@@ -94,18 +92,14 @@ fn copilot_interrupt_reaches_pty_and_rejects_proposal() {
 }
 
 #[test]
-fn attention_cap_cannot_append_proposal_to_existing_shell_input() {
-    let mut h = Harness::headless();
-    h.agent(1, "claude");
-    h.session.agent_request_control(1).unwrap();
-    h.session.agent_type(1, "echo stale").unwrap();
-    h.session.entrust().unwrap();
-    h.session.set_attended(false);
-    h.session.agent_type(1, "echo proposed").unwrap();
-    let KeyResult::Proposed { proposal_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
-    assert!(matches!(h.session.accept_proposal(&proposal_id), Err(SessionError::InputPending)));
-    h.session.agent_interrupt(1).unwrap();
-    assert_eq!(h.pty_str(), "echo stale\x03");
+fn hidden_surface_cannot_append_to_existing_shell_input() {
+    let mut h=Harness::headless();h.agent(1,"claude");h.session.agent_request_control(1).unwrap();
+    h.session.agent_type(1,"echo stale").unwrap();h.session.set_attended(false);
+    assert!(h.session.agent_type(1,"echo proposed").is_err());
+    assert!(h.session.agent_interrupt(1).is_err());
+    h.session.set_attended(true);common::present(&mut h.session,vec!["echo stale".into()]);
+    h.session.human_input(b"\x15");
+    assert_eq!(h.pty_str(),"echo stale\x15");
 }
 
 #[test]
@@ -118,7 +112,7 @@ fn review_required_allow_session_rejection_keeps_request_pending() {
     h.session.agent_type(1, "Write-Output hello").unwrap();
     let KeyResult::Pending { approval_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
     let session = std::sync::Arc::new(parking_lot::Mutex::new(h.session));
-    let err = conn_core::ipc::dispatch(&session, 99, "approve", &json!({"approvalId":approval_id,"decision":"allow_session"})).unwrap_err();
+    let err = conn_core::ipc::dispatch_trusted(&session, 99, "approve", &json!({"approvalId":approval_id,"decision":"allow_session"})).unwrap_err();
     assert_eq!(err.code, "invalid_input");
     let mut s = session.lock();
     assert_eq!(s.check_approval(&approval_id).unwrap().state, ApprovalState::Pending);
@@ -129,19 +123,13 @@ fn review_required_allow_session_rejection_keeps_request_pending() {
 }
 
 #[test]
-fn modes_are_available_in_snapshot_and_sent_to_agents_when_cap_changes() {
-    let mut h = Harness::headless();
-    let events = h.agent(1, "claude");
-    h.session.agent_request_control(1).unwrap();
-    h.session.entrust().unwrap();
-    h.session.set_attended(false);
-    let snap = h.session.snapshot(Actor::Agent { conn: 1 }).unwrap();
-    assert_eq!(snap.mode, AgentMode::Autopilot);
-    assert_eq!(snap.effective_mode, AgentMode::Copilot);
-    assert!(events.lock().unwrap().iter().any(|e| matches!(e, ServerEvent::ModeChanged {mode: AgentMode::Autopilot, effective_mode: AgentMode::Copilot})));
-    h.session.set_attended(true);
+fn modes_are_available_in_presented_snapshot_and_changes_reach_agents() {
+    let mut h=Harness::headless();let events=h.agent(1,"claude");
+    h.session.set_mode(AgentMode::Copilot).unwrap();
+    let snap=h.session.snapshot(Actor::Agent{conn:1}).unwrap();
+    assert_eq!(snap.mode,AgentMode::Copilot);assert_eq!(snap.effective_mode,AgentMode::Copilot);
     h.session.set_mode(AgentMode::Observe).unwrap();
-    assert!(events.lock().unwrap().iter().any(|e| matches!(e, ServerEvent::ModeChanged {mode: AgentMode::Observe, effective_mode: AgentMode::Observe})));
+    assert!(events.lock().unwrap().iter().any(|e| matches!(e,ServerEvent::ModeChanged {mode:AgentMode::Observe,effective_mode:AgentMode::Observe})));
 }
 
 #[test]
@@ -199,6 +187,7 @@ fn real_pty_copilot_interrupt_stops_running_shell_command() {
     {
         let mut s = session.lock();
         let id = s.subscribe_agent("interrupt-test", Box::new(|_: ServerEvent| {}));
+        common::present(&mut s, vec![]);
         s.agent_request_control(id).unwrap();
         s.agent_type(id, "sleep 30").unwrap();
         s.agent_send_key(id, "ENTER").unwrap();
@@ -209,6 +198,7 @@ fn real_pty_copilot_interrupt_stops_running_shell_command() {
     {
         let mut s = session.lock();
         let id = s.status().agent_connections[0].conn_id;
+        common::present(&mut s, vec!["sleep 30".into()]);
         s.agent_interrupt(id).unwrap();
     }
     // A terminal's signal handling may flush bytes queued with Ctrl-C. Wait for

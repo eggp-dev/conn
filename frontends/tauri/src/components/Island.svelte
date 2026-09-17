@@ -36,11 +36,11 @@
   const words = $derived(st.announcement ? st.announcement.text.split(" ") : []);
 </script>
 
-{#if t.externalPrivate}
+{#if !t.shared}
   <div class="private" title={tr("private.description")}>
     <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
-    <span>{tr(t.externalStarting ? "private.preparing" : t.processAlive ? "private.label" : "private.finished")}</span>
-    {#if t.processAlive && !t.externalStarting}<button disabled={stopping || !t.externalInputAvailable} onclick={stopExternal}>{tr(!t.externalInputAvailable ? "private.stopped" : "private.stop")}</button>{/if}
+    <button class="sharing-trigger" onclick={onopen}><span>{tr(t.externalStarting ? "private.preparing" : t.processAlive ? "private.label" : "private.finished")}</span></button>
+    {#if t.externalOrigin && t.processAlive && !t.externalStarting}<button disabled={stopping || !t.externalInputAvailable} onclick={stopExternal}>{tr(!t.externalInputAvailable ? "private.stopped" : "private.stop")}</button>{/if}
   </div>
 {:else}
 <!-- dot (idle state) -->

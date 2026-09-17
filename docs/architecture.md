@@ -1,168 +1,80 @@
 # Architecture
 
-> v0.2: the core lives in `crates/core` (library `conn-core`), the binary in `crates/cli`, the reference frontend in `frontends/tauri`. The big picture is in [PRD.md](PRD.md) §4; the socket contract in [protocol.md](protocol.md).
+**Shared-surface hard cut · unreleased.** [Product contract](PRD.md) · [한국어](architecture.ko.md)
 
-## Three deployments
-
-```
-1. terminal mode   Terminal.app ─ stdin/stdout ─ conn(proxy) ─ Engine
-2. embedded        Tauri ─ Engine::write_input / subscribe ─ Engine          (+ ipc::serve_in_background for the agent socket)
-3. headless        any frontend ─ UDS (input/output streaming) ─ conn serve ─ Engine
-```
-
-In all three the same `Session` upholds the same invariants.
-
-## Terminal mode (v0.1)
-
-```
-        Terminal.app  (does the rendering)
-              │ stdin (human keyboard)
-              ▼
-      ┌───────────────────────┐
-      │         conn          │
-      │  session/  ── core    │
-      │   authority  policy   │
-      │   approval   audit    │
-      │   screen     input    │
-      └───────┬───────────────┘
-              │ PTY master
-              ▼
-            zsh ──> ssh ──> ...
-              │ stdout → Terminal.app (passed through untouched)
-
-  conn ◀─ UDS ─ conn mcp   ◀─ MCP stdio ─ Copilot CLI
-       ◀─ UDS ─ conn status/take/approve
+```mermaid
+flowchart LR
+  H[Human] --> U[Native owner UI]
+  U -->|input and decisions| S[Session authority and policy]
+  S --> P[PTY and child]
+  P -->|sequenced output| U
+  U -->|presented viewport| F[Surface frame gate]
+  A[External MCP actor] -->|observation and control request| S
+  S --> F
+  F -->|authorized frame| A
+  F --> E[Extension host]
+  E --> M[Native model adapter]
+  K[OS credential store] --> M
+  M -->|proposal| U
 ```
 
-## Two doors
+## Ports and owners
 
-Humans come in through **stdin**, agents through a **Unix domain socket**. Because the origin is structurally distinct:
+- `conn-core::Engine` manages the PTY and lifetime. Session serializes authority,
+  mode, policy, proposals, grace and sharing transitions under one lock.
+- The native owner supplies a sequenced output callback before PTY reading begins.
+  Output buffering preserves startup rendering; callbacks never relock Session.
+- Tauri and the token/Origin-protected browser harness use `conn-frontend::Harness`.
+  Each command carries the adapter-established owning window, never a public
+  caller's claimed window identity.
+- The Svelte/xterm renderer publishes the actual DOM viewport after rendering.
+  Offscreen scrollback and hidden cell data are not a second observation channel.
+- Public IPC is an agent endpoint. MCP does not decide permission; core checks it
+  for every request. The native owner bridge is not available through IPC.
 
-1. audit attribution (human vs agent) is exact at the byte level, and
-2. the invariant "human input revokes the agent's lease" is enforced in one place.
+## Frame identity and freshness
 
-## Modules
+A frame identifies `surfaceId`, `generation`, `revision`, `outputSeq`, terminal
+size, visible lines, nullable cursor and alternate-screen state. A raster image is
+optional and explicitly unavailable when the renderer cannot capture it. Text must
+come from presented cells, never from the private terminal buffer as a fallback.
 
-| Module | Role | Depends on |
-|---|---|---|
-| `session` | the core: all state and invariants, frontend events, pacing, mask | authority, policy, approval, audit, screen, input, config |
-| `engine` | PTY creation, reader / tick / child-wait threads, the embedder handle | session |
-| `config` | `Pacing` | — |
-| `authority` | lease grant / revoke / expiry. `Controller::{Human, Agent(Lease)}` | — |
-| `policy` | YAML loading, `deny → confirm → default` evaluation, session allows, reload | regex |
-| `analysis` | line splitting, tokenising, wrapper peeling, opaque constructs, `cd` simulation, target resolution | — |
-| `approval` | pending queue, TTL, approval prompt rendering | — |
-| `audit` | append-only JSONL | — |
-| `screen` | headless VT model (`vt100`), used only for the agent's projection | — |
-| `input` | input-line tracking with a VT fallback | — |
-| `affordance` | `affordances_for(actor, state)`: the single permission API shared by MCP and CLI | authority |
-| `ipc` | UDS server (tokio) + synchronous client; maps methods to `Session` calls; the `Hub` of sessions | session |
-| `proxy` (cli) | raw mode, stdin thread, SIGWINCH, shutdown — a thin layer over Engine | engine, ipc |
-| `serve` (cli) | headless: Engine + socket only | engine, ipc |
-| `mcp` | JSON-RPC stdio ↔ UDS bridge. No permission logic | ipc |
-| `cli` | status / take / approve / log … | ipc, audit |
+Output is monotonically sequenced. Sharing, attention and explicit invalidation
+advance the surface generation. Consumers require a current generation, current
+output sequence, visible owner surface and a recent publication. Periodic refresh
+keeps an unchanged visible frame alive; it does not authorize stale output.
 
-Boundaries:
+No frame provider means no agent observation. Internal VT parsing remains only
+where command-policy tracking requires it. It is never a replacement observation.
 
-```
-session  ≠  mcp / cli / ipc      (the core knows nothing of sockets or MCP; tests/session.rs runs on the core alone)
-authority ≠ approval UI          (an approval prompt on screen has no bearing on lease state)
-screen   ≠ human output          (the VT model is never shown to the human)
-```
+## Transitions
 
-## Frontend events and controls
+| Transition | Required effects |
+| --- | --- |
+| Human input | Revoke conflicting authority; cancel stale proposals; deliver human input |
+| Start sharing | End external writer and queue; select actual connections; invalidate old frame; human retains control |
+| Stop sharing | Cancel agent work/observations; invalidate frame; keep PTY/process |
+| Hide/blur/cover | Invalidate observation; pause agent execution; cancel completion jobs. Existing human decisions require a fresh frame to continue |
+| New visible frame | Validate owner/generation/sequence; replace bounded frame |
+| Disconnect | Remove connection identity; revoke its authority; never transfer selection by name |
+| Close | Cancel jobs, writer and sessions owned by that window |
 
-`Session` distinguishes connections as `Agent / Human / Frontend`. A frontend connection (or `Engine::subscribe`) receives every lifecycle event and, on request, the PTY output as base64 `Output` events. A frontend may change only `Pacing` and the affordance mask, and both only ever **narrow** the agent.
+Origin and participation are independent. An external-origin session has no
+startup activity audit or execution hooks. Sharing can start new collaboration
+history under the same session ID; it never reconstructs prior private activity.
 
-`enterGraceMs` holds an ENTER judged allow as a `ScheduledExec` and runs it from the tick (50 ms). Human input, `take`, `cancel_exec`, interrupt, loss of the lease and a mask change all cancel it. The socket layer (`call_with_pacing`) waits until the grace ends and returns the final result, so the agent-side protocol is the same as v0.1.
+## Extension host
 
-## Concurrency
+A typed manifest registry owns API compatibility, declared capabilities and
+reviewed implementation selection. The first extension kinds are theme, provider
+and completion. Themes are bounded data; arbitrary code and global event buses are
+not extension contracts.
 
-`Session` is protected by a single `Arc<parking_lot::Mutex<Session>>`.
+Native mediation constructs visible context from the core frame while its
+cancellation is registered in the same session transaction. Workers obtain a key
+from the OS store and make bounded, cancellable requests. Results carry the session,
+surface, generation and frame identity. Acceptance checks them again and uses the
+normal human-input path, without Enter. Theme and provider configuration persist;
+keys, private frames and completion jobs do not enter configuration files.
 
-- stdin reader thread: `read(0)` → `human_input()`
-- PTY reader thread: `read(master)` → `pty_output()` (writes stdout + feeds the VT model)
-- tick thread (50 ms): lease/approval expiry, grace execution, coalesced screen_changed, policy reload
-- tokio: UDS connections (and SIGWINCH/SIGHUP/SIGTERM in proxy mode)
-- child-wait thread: child exit → cleanup
-
-Every write decision is taken under the lock, so the "revoke → PTY write" order inside `human_input` never interleaves with an agent write. `tests/session.rs::preemptive_takeover_order` checks that order directly.
-
-## Preemptive takeover
-
-```
-human_input(bytes):
-  1. authority.revoke()          lease revoked, controller = Human
-  2. pty.write(bytes)
-  3. control_revoked event to the agent
-  4. audit takeover
-```
-
-1 precedes 2. Keys pressed while an approval prompt is up are consumed as the answer and never reach the PTY, so they are not a takeover.
-
-## When policy is checked
-
-`terminal_type` is not checked. `terminal_send_key(ENTER)` treats the accumulated input line as the command and checks it.
-
-The line is reconstructed by `input::InputTracker` from agent-submitted bytes written to the PTY. Human bytes are never fed into this tracker; only a content-free unfinished-input flag prevents unsafe appends. Input that makes the shell redraw the line — tab completion, history (↑/↓), cursor movement — marks it `dirty`, and at ENTER the value is taken from the VT model's cursor row with the prompt prefix (the cursor column at the first keystroke) removed. Clean tracked input remains authoritative even when the terminal wraps it. On the agent path, dirty input gives the echo 60 ms to settle before using the VT fallback. This fallback covers only the cursor row and can be incomplete for wrapped edited commands; see [the trust model](security.md).
-
-Per verdict:
-
-| Verdict | PTY | Response |
-|---|---|---|
-| allow | `\r` | `executed` |
-| deny | `Ctrl-U` (clear the line) | `denied` |
-| confirm | nothing; the prompt is shown | `pending { approvalId }` |
-
-Approval sends `\r`; denial, expiry, disconnect and interrupt send `Ctrl-U`. While an approval is pending, `type`/`send_key` from the same agent are refused so the approved command and the executed command cannot diverge.
-
-## Approval prompt
-
-Drawn directly on stdout in the alternate screen. PTY output produced while the prompt is up is buffered and released afterwards. `conn approve <id>` can decide it too.
-
-## IPC protocol
-
-Newline-delimited JSON.
-
-```
-→ {"id":1,"method":"hello","params":{"kind":"agent","agentId":"copilot"}}
-← {"id":1,"result":{"conn":2,"kind":"agent"}}
-→ {"id":2,"method":"send_key","params":{"key":"ENTER","intent":"list files"}}
-← {"id":2,"result":{"status":"pending","approvalId":"apr-1","cmd":"...","label":"..."}}
-← {"event":"control_revoked","lease":"lease#1","reason":"human_input"}
-```
-
-Methods: `hello affordances snapshot request_control release_control type send_key interrupt check_approval status take approve …` — the full list is in [protocol.md](protocol.md).
-When a connection drops, the lease it held and its pending approvals are cleaned up immediately.
-
-## Session lifetime
-
-`conn` ends when the child shell ends. It removes the socket file and restores termios. There is no detach/reattach.
-
-## Client integration adapters
-
-The shared frontend owns local MCP/skill setup through a client registry, lossless
-config editors and a guarded file transaction layer. Terminal and permission
-semantics remain in the core. See [the adapter contract](agent-integrations.md#adapter-contract).
-
-## External automation (unreleased)
-
-The [external automation contract](external-automation.md) ([한국어](external-automation.ko.md))
-describes the **UNRELEASED replacement** for the recorded automation path in
-v0.5.1. The macOS AppleScript adapter binds a native caller to its own private
-session. A startup program replaces the allowed local profile's executable and
-argv; later input follows a dedicated external writer, not agent control or policy.
-
-Private origin is established before spawn. The existing native window and PTY
-renderer are reused, while private input/output is excluded from public IPC/MCP
-and Conn activity recording. Settings keep permissions only; request polling keeps
-bounded, volatile metadata with generic error codes. Human input, cancellation or
-revocation invalidates the external writer. Upgrades require one explicit
-re-enable of old permissions. Native Apple Event and external-launcher acceptance
-checks remain release gates.
-
-Sharing an external private session with an AI agent and a Windows external adapter
-remain future work. Linux external automation is implemented behind explicit
-permissions. Local Bash/Zsh [shell integration](shell-integration.md) supplies
-command boundaries for ordinary sessions; it is never installed in private sessions.
-See [the design](automation-design.md) and [the trust model](security.md) for limits.
+See [extension contract](extensions.md), [protocol](protocol.md) and [trust model](security.md).

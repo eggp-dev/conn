@@ -1,0 +1,40 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Conn surface contract test</title>
+<style>body{background:#101216;color:#eee;font:14px sans-serif;margin:24px;}#terminal{background:#000;width:800px;height:320px;margin:20px 0;}button{padding:8px 14px;}pre{white-space:pre-wrap;}img{max-width:800px;border:1px solid #444;}</style>
+<button id="run">Run renderer tests</button><div id="terminal"></div><pre id="results">Ready</pre><img id="raster" alt="Actual rendered terminal raster" />
+<script type="module">
+import { Terminal } from '@xterm/xterm';
+import '@xterm/xterm/css/xterm.css';
+import { renderedViewportFrame, rasterizeSurface } from '../../src/lib/surface.ts';
+const host=document.querySelector('#terminal');
+const term=new Terminal({cols:60,rows:12,fontSize:16,cursorBlink:false,allowProposedApi:true,theme:{background:'#000000',foreground:'#ffffff'}});
+term.open(host);term.focus();
+const stamp={surfaceId:'fixture',generation:1,revision:1,outputSeq:1};
+const wait=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+const write=text=>new Promise(r=>term.write(text,r));
+const report=[];
+const check=(name,ok)=>{report.push(`${ok?'PASS':'FAIL'} ${name}`);if(!ok)throw Error(name);};
+const frame=()=>renderedViewportFrame(term,host,stamp);
+document.querySelector('#run').onclick=async()=>{
+ report.length=0;
+ try{
+  await write('\x1bcID: demo-user\r\nPassword: ******\r\n\x1b[8mHIDDEN-CANARY-비밀\x1b[0m visible e\u0301🙂\r\n\x1b[38;2;0;0;0mSAME-COLOR-CANARY\x1b[0m visible');await wait();
+  let f=frame();
+  check('DOM renderer available',!!f);
+  check('visible ID and stars retained',f.screen[0]==='ID: demo-user'&&f.screen[1]==='Password: ******');
+  check('concealed cell text excluded',!JSON.stringify(f).includes('HIDDEN-CANARY')&&!JSON.stringify(f).includes('비밀'));
+  check('same-color cell text excluded',!JSON.stringify(f).includes('SAME-COLOR-CANARY'));
+  check('combining and wide visible characters retained',f.screen[2].includes('visible e\u0301🙂'));
+  const image=await rasterizeSurface(host.querySelector('.xterm-screen'));
+  check('actual DOM raster available',!!image&&image.mimeType==='image/png');
+  document.querySelector('#raster').src=`data:image/png;base64,${image.data}`;
+  for(let n=0;n<20;n++)await write(`\r\nrow-${n}`);await wait();
+  f=frame();check('bottom viewport excludes earlier ID',!f.screen.join('\n').includes('demo-user'));
+  term.scrollToTop();await wait();f=frame();check('human scroll is the exported viewport',f.screen[0]==='ID: demo-user'&&f.cursor===null);
+  term.scrollToBottom();await write('\x1b[?1049h\x1b[HEDITOR');await wait();f=frame();check('alternate screen excludes normal history',f.alternateScreen&&f.screen[0].startsWith('EDITOR')&&!f.screen.join().includes('row-'));
+  const editor=host.querySelector('.xterm-rows').firstElementChild.firstElementChild;editor.style.color='rgba(255,255,255,0)';
+  f=frame();check('transparent foreground is not exported',!f.screen.join().includes('EDITOR'));
+  await write('\x1b[?1049l');await wait();
+ }catch(e){report.push(`ERROR ${e.message}`);}
+ document.querySelector('#results').textContent=report.join('\n');
+};
+</script></html>

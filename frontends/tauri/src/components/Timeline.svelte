@@ -42,7 +42,7 @@
   const actor = (it: TimelineItem) => it.actor === "human" ? t("tl.you") : it.actor === "shell" ? t("tl.shell") : it.actor;
   const fmt = (ms: number) => new Date(ms).toLocaleTimeString();
   const kind = (it: TimelineItem) => t(`tl.kind.${it.kind}`);
-  const status = (it: TimelineItem) => t(isPolicyBlocked(it) ? "tl.policyBlocked" : it.kind === "control" && it.status === "granted" ? "tl.step.control_granted" : `tl.status.${it.status}`);
+  const status = (it: TimelineItem) => it.kind === "sharing" ? t(it.shared ? "tl.sharing.started" : "tl.sharing.stopped") : t(isPolicyBlocked(it) ? "tl.policyBlocked" : it.kind === "control" && it.status === "granted" ? "tl.step.control_granted" : `tl.status.${it.status}`);
   function blockReason(it: TimelineItem) {
     const label = policyBlockLabel(it);
     const keys: Record<string, string> = { "run dangerous commands alone": "tl.block.isolation", "protected path": "tl.block.protected", "delete root": "tl.block.root", "fork bomb": "tl.block.fork" };
@@ -99,6 +99,9 @@
     <ol aria-label={t("tl.title")}>
       {#each items as it (it.id)}
         <li>
+          {#if it.kind === "sharing"}
+            <div class="sharing-boundary"><span class="marker collab" style:--c={color(it)} aria-hidden="true"></span><b>{status(it)}</b><time>{fmt(it.t)}</time></div>
+          {:else}
           <details open={selected === it.id} ontoggle={(e) => { if (e.currentTarget.open) selected = it.id; else if (selected === it.id) selected = null; }}>
             <summary>
               <span class="marker" class:collab={!isCommand(it)} class:problem={isProblem(it)} style:--c={color(it)} aria-hidden="true"></span>
@@ -133,6 +136,7 @@
               {/if}
             </div>
           </details>
+          {/if}
         </li>
       {:else}<li class="empty muted">{t("tl.empty.filtered")}</li>{/each}
     </ol>
@@ -156,6 +160,7 @@
 </div>
 
 <style>
+  .sharing-boundary { display:flex; align-items:center; gap:10px; min-height:32px; font-size:12px; color:var(--muted); } .sharing-boundary b { font-weight:500; } .sharing-boundary time { margin-left:auto; font-size:11px; }
   .tl { position: absolute; left: 0; right: 0; bottom: 0; height: 22px; z-index: 15; }
   .hit { position: absolute; inset: 0; background: transparent; border: 0; cursor: pointer; }
   .strip-nav { position: absolute; left: 10px; right: 190px; bottom: 0; height: 24px; display: flex; align-items: center; gap: 2px; }

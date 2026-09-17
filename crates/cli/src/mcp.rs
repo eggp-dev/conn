@@ -1,5 +1,5 @@
 //! MCP stdio adapter. A thin bridge from JSON-RPC 2.0 on stdin/stdout to the
-//! proxy's Unix socket. Implements no permission logic: `tools/list` is whatever
+//! app's local agent endpoint. Implements no permission logic: `tools/list` is whatever
 //! the core says this agent may do right now.
 
 use std::io::{BufRead, Write};
@@ -28,10 +28,10 @@ If status is `pending`, wait by polling terminal_check_approval. Do not work aro
 
 A human shares this session. Commands you did not run may appear on the screen.
 
-You only see what the human is looking at. When the human moves to another tab, snapshot and writes are refused with `unattended` / `suspended`. Ask them to come back with terminal_request_attention and wait. If the human entrusts the session to you, you may continue within the policy's `unattended` cap.
+You only see what the human is looking at. When the human moves to another tab, snapshot and writes are refused with `unattended` / `suspended`. Ask them to come back with terminal_request_attention and wait. Hidden, covered or unavailable surfaces return `surface_unavailable`; wait for the human to return. There is no unattended observation fallback.
 
 Modes: snapshot and terminal_list_tabs report mode and effectiveMode. In copilot mode typing creates a proposal; tell the human to press Enter to accept it. Mode can change between calls.
-Tabs: terminal_list_tabs shows the tabs and which one the human is looking at. A tab you open with terminal_open_tab is not being watched yet: you can neither see nor write there until the human comes to it or entrusts it — open it, then wait. terminal_switch_tab moves only your connection; it never moves the human's view.";
+Tabs: terminal_list_tabs shows the tabs and which one the human is looking at. A tab you open with terminal_open_tab is not being watched yet: you can neither see nor write there until the human comes to it — open it, then wait. terminal_switch_tab moves only your connection; it never moves the human's view.";
 
 struct ToolDef {
     name: &'static str,
@@ -46,7 +46,7 @@ const TOOLS: &[ToolDef] = &[
         name: "terminal_snapshot",
         affordance: "snapshot",
         method: "snapshot",
-        description: "Returns the current terminal screen — exactly what the human sees. No scrollback.",
+        description: "Returns the owner-rendered visible terminal viewport, including the human scroll position. Hidden or unavailable surfaces are refused.",
         schema: || json!({ "type": "object", "properties": {}, "additionalProperties": false }),
     },
     ToolDef {
@@ -88,21 +88,21 @@ const TOOLS: &[ToolDef] = &[
         name: "terminal_request_attention",
         affordance: "request_attention",
         method: "request_attention",
-        description: "Asks the human to come back to this session (tab) when they are not looking at it. While they are away you can neither see nor write (unattended / suspended). You can continue once they return or entrust the session to you.",
+        description: "Asks the human to come back to this session (tab) when they are not looking at it. While they are away you can neither see nor write (unattended / suspended). You can continue once they return.",
         schema: || json!({ "type": "object", "properties": { "reason": { "type": "string", "description": "Why they should look, one line" } }, "additionalProperties": false }),
     },
     ToolDef {
         name: "terminal_list_tabs",
         affordance: "*",
         method: "list_tabs",
-        description: "Lists the tabs (sessions): number, mode, effectiveMode (including unattended cap), whether the human is looking at it (attended), who has the conn, who opened it, and which one your connection is bound to (current). No screen contents.",
+        description: "Lists the tabs (sessions): number, mode, effectiveMode, whether the human is looking at it (attended), who has the conn, who opened it, and which one your connection is bound to (current). No screen contents.",
         schema: || json!({ "type": "object", "properties": {}, "additionalProperties": false }),
     },
     ToolDef {
         name: "terminal_open_tab",
         affordance: "open_tab",
         method: "open_tab",
-        description: "Opens a new tab (shell) and moves your connection to it. The human is not looking at the new tab yet: snapshot and writes are refused (unattended) until they come to it or entrust it to you. `reason` is shown on the tab. Open one only when you really need it.",
+        description: "Opens a new tab (shell) and moves your connection to it. The human is not looking at the new tab yet: snapshot and writes are refused (unattended) until they come to it. `reason` is shown on the tab. Open one only when you really need it.",
         schema: || json!({ "type": "object", "properties": { "reason": { "type": "string", "description": "Why you need a new tab, one line (shown to the human)" } }, "additionalProperties": false }),
     },
     ToolDef {
@@ -148,7 +148,10 @@ impl Bridge {
             return Ok(c.clone());
         }
         let client = Arc::new(Client::connect(&self.socket)?);
-        client.hello("agent", &self.agent_id)?;
+        let hello = client.hello("agent", &self.agent_id)?;
+        if hello["protocolVersion"] != 2 {
+            return Err(ClientError::Rpc { code: "upgrade_required".into(), message: "Update the Conn app and agent adapter together; a presented-surface endpoint is required".into() });
+        }
         if let Some(events) = client.take_events() {
             let out = self.out.clone();
             std::thread::spawn(move || {
@@ -187,7 +190,7 @@ impl Bridge {
                         );
                     }
                 }
-                // proxy went away: tools changed too
+                // app endpoint went away: tools changed too
                 write_msg(&out, &json!({ "jsonrpc": "2.0", "method": "notifications/tools/list_changed" }));
             });
         }
@@ -229,7 +232,7 @@ impl Bridge {
             return tool_error(format!("unknown tool '{name}'"));
         };
         match self.call(tool.method, args) {
-            Ok(v) => json!({ "content": [{ "type": "text", "text": serde_json::to_string_pretty(&v).unwrap() }] }),
+            Ok(v) => tool_success(v),
             Err(ClientError::Rpc { code, message }) => {
                 let hint = match code.as_str() {
                     "not_controller" | "lease_expired" => " — call terminal_request_control first (tools/list has changed)",
@@ -242,7 +245,8 @@ impl Bridge {
                     "proposal_pending" => " — your proposal is waiting for the human to commit or reject",
                     "intent_required" => " — resend ENTER with an `intent` (one line: what this command does and changes)",
                     "unattended" => " — the human is not looking at this session; call terminal_request_attention and wait",
-                    "suspended" => " — the human left this session; wait for control_resumed (they return or entrust it to you)",
+                    "surface_unavailable" => " — the owner viewport is hidden, changing or expired; wait for a fresh visible frame",
+                    "suspended" => " — the human left this session; wait for them to return, then read a fresh snapshot",
                     _ => "",
                 };
                 tool_error(format!("{code}: {message}{hint}"))
@@ -250,6 +254,15 @@ impl Bridge {
             Err(e) => tool_error(e.to_string()),
         }
     }
+}
+
+fn tool_success(mut value: Value) -> Value {
+    let image = value.as_object_mut().and_then(|v| v.remove("image"));
+    let mut content = vec![json!({"type":"text","text":serde_json::to_string_pretty(&value).unwrap()})];
+    if let Some(image) = image.filter(|v| v["mimeType"] == "image/png" && v["data"].is_string()) {
+        content.push(json!({"type":"image","mimeType":"image/png","data":image["data"]}));
+    }
+    json!({"content":content})
 }
 
 fn tool_error(msg: String) -> Value {
@@ -283,7 +296,7 @@ pub fn run(socket: PathBuf, agent_id: Option<String>, tool_mode: ToolMode) -> st
     let agent_id_fixed = agent_id.is_some();
     let bridge = Arc::new(Mutex::new(Bridge { socket, agent_id: agent_id.unwrap_or_else(|| "agent".into()), agent_id_fixed, tool_mode, client: None, out: out.clone() }));
 
-    // The proxy may start after us (or restart). Keep trying to attach in the
+    // The app may start after us (or restart). Keep trying to attach in the
     // background and tell the harness to re-list tools the moment we connect.
     {
         let bridge = bridge.clone();
@@ -327,7 +340,7 @@ pub fn run(socket: PathBuf, agent_id: Option<String>, tool_mode: ToolMode) -> st
                     bridge.tool_mode = if n.contains("codex") || n.contains("openai") { ToolMode::Static } else { ToolMode::Dynamic };
                     eprintln!("[conn mcp] client={client_name:?} agent={} tools={:?}", bridge.agent_id, bridge.tool_mode);
                 }
-                // Connect now that we know who we are; tolerate the proxy not being up yet.
+                // Connect now that we know who we are; tolerate the app not being up yet.
                 let _ = bridge.ensure();
                 let requested = params.get("protocolVersion").and_then(|v| v.as_str()).unwrap_or("2025-06-18");
                 let version = if ["2024-11-05", "2025-03-26", "2025-06-18"].contains(&requested) { requested } else { "2025-06-18" };
@@ -360,4 +373,19 @@ pub fn run(socket: PathBuf, agent_id: Option<String>, tool_mode: ToolMode) -> st
         write_msg(&out, &resp);
     }
     Ok(())
+}
+
+#[cfg(test)] mod shared_surface_tests {
+    use super::*;
+    #[test] fn image_payload_is_mcp_image_not_a_base64_text_dump() {
+        let result=tool_success(json!({"screen":["visible"],"image":{"mimeType":"image/png","data":"synthetic-raster"}}));
+        assert_eq!(result["content"][1]["type"],"image");
+        assert_eq!(result["content"][1]["data"],"synthetic-raster");
+        assert!(!result["content"][0]["text"].as_str().unwrap().contains("synthetic-raster"));
+    }
+    #[test] fn text_only_renderers_remain_explicitly_text_only() {
+        let result=tool_success(json!({"screen":["visible"],"imageUnavailable":true}));
+        assert_eq!(result["content"].as_array().unwrap().len(),1);
+        assert!(result["content"][0]["text"].as_str().unwrap().contains("imageUnavailable"));
+    }
 }

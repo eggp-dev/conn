@@ -10,6 +10,7 @@
   import { shortcutLabel } from "../lib/shortcuts";
   let { onnew, onpalette, ontimeline, onsettings }: { onnew: () => void; onpalette: () => void; ontimeline: () => void; onsettings: () => void } = $props();
   let now = $state(performance.now());
+  $effect(() => { st.menuOpen = open || updates; return () => { st.menuOpen = false; }; });
   const active = $derived(cur());
   const preparing = $derived(active.externalStarting || (!st.active && st.externalPending));
   const mark = $derived(preparing ? "human" : connMarkState(active, st.backendOnline, now));
@@ -37,7 +38,7 @@
   const entries = $derived([
     { label: t("menu.new"), key: "⌘T", action: onnew, disabled: st.externalPending },
     { label: t("menu.palette"), key: "⌘K", action: onpalette },
-    ...(!active.externalPrivate ? [{ label: t("menu.timeline"), key: "⌘J", action: ontimeline, disabled: false }] : []),
+    ...(!!active.shared ? [{ label: t("menu.timeline"), key: "⌘J", action: ontimeline, disabled: false }] : []),
     { label: t("center.settings") + "…", key: "⌘,", action: onsettings },
     { label: (updater.status.phase === "ready" ? t("update.restart") : t("update.title")) + "…", key: "", action: () => { updates = true; } },
   ]);

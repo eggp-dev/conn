@@ -4,21 +4,13 @@
   import { st, cur } from "../lib/store.svelte";
   import { cmd } from "../lib/bridge";
   const a = $derived(cur().approval!);
-  const c = $derived(cur().cursor);
   const targets = $derived(a.analysis?.segments.flatMap((s) => s.targets) ?? []);
   const multi = $derived((a.analysis?.segments.length ?? 0) > 1);
-  let innerHeight = $state(700);
-  let holdH = $state(0);
-  // Under the cursor line when it fits above the timeline strip; otherwise above it.
-  const below = $derived(c.y + c.h + 8 + holdH + 30 <= innerHeight);
-  const top = $derived(below ? c.y + c.h + 8 : Math.max(48, c.y - holdH - 8));
 </script>
 
-<svelte:window bind:innerHeight />
 
 {#if cur().approval}
-  <div class="rowglow" style:top="{c.y - 2}px" style:height="{c.h + 4}px"></div>
-  <div class="hold" style:top="{top}px" bind:clientHeight={holdH} transition:fly={{ y: below ? -6 : 6, duration: 160 }} role="dialog" aria-label={a.label}>
+  <div class="hold" transition:fly={{ y: 6, duration: 160 }} role="dialog" aria-label={a.label}>
     <div class="top">
       <span class="label">⚠ {a.label}</span>
       {#if a.intent}<span class="intent">{a.intent}</span>{:else}<span class="intent muted">{t("hold.no_intent")}</span>{/if}
@@ -58,7 +50,7 @@
 
 <style>
   .rowglow { position: absolute; left: 8px; right: 8px; z-index: 7; pointer-events: none; border-radius: 6px; background: color-mix(in srgb, var(--warn) 10%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--warn) 35%, transparent), 0 0 24px color-mix(in srgb, var(--warn) 25%, transparent); }
-  .hold { position: absolute; left: 16px; right: 16px; z-index: 9; display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(12px); border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line)); box-shadow: var(--shadow); font-size: 12.5px; }
+  .hold { position: relative; margin: 6px 16px; z-index: 9; display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(12px); border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line)); box-shadow: var(--shadow); font-size: 12.5px; }
   .top { display: flex; gap: 12px; align-items: baseline; }
   .label { color: var(--warn); font-weight: 700; white-space: nowrap; }
   .intent { flex: 1; font-size: 13.5px; font-weight: 600; }

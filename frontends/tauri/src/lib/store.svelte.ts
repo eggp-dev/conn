@@ -15,7 +15,13 @@ export type TabState = {
   /** Privacy is resolved before the terminal subscribes to output. */
   statusReady: boolean;
   shellIntegration: { state: string; shell?: string; reason?: string };
-  externalPrivate: boolean;
+  shared: boolean;
+  externalOrigin: boolean;
+  surfaceGeneration: number;
+  outputSeq: number;
+  surfaceAvailable: boolean;
+  surfacePublishedSerial: number;
+  inputPending: boolean;
   externalStarting: boolean;
   externalInputAvailable: boolean;
   profileId: string | null;
@@ -24,7 +30,6 @@ export type TabState = {
   processAlive: boolean;
   policyBlockedUntil: number;
   attended: boolean;
-  entrustedTo: string | null;
   attention: null | { agentId: string; reason?: string };
   /** The agent that opened this tab, if an agent did. */
   openedBy: string | null;
@@ -37,6 +42,8 @@ export type TabState = {
   allows: string[];
   agents: string[];
   typing: boolean;
+  /** Content-free signal for optional suggestions; input bytes are never retained here. */
+  humanInputRevision: number;
   proposal: null | { id: string; agentId: string; text: string; ready: boolean; intent?: string };
   approval: null | { id: string; agentId: string; cmd: string; label: string; at: number; intent?: string; analysis?: Analysis };
   grace: null | { execId: string; cmd: string; ms: number; start: number; intent?: string };
@@ -52,10 +59,10 @@ export type TabState = {
 
 export function newTab(id: string, n: number): TabState {
   return {
-    id, title: `Terminal ${n}`, statusReady: false, shellIntegration: { state: "unavailable" }, externalPrivate: false, externalStarting: false, externalInputAvailable: false, profileId: null, profileName: null, reviewRequired: false, processAlive: true, policyBlockedUntil: 0, attended: false, entrustedTo: null, attention: null, openedBy: null,
+    id, title: `Terminal ${n}`, statusReady: false, shellIntegration: { state: "unavailable" }, shared: false, externalOrigin: false, surfaceGeneration: 1, outputSeq: 0, surfaceAvailable: false, surfacePublishedSerial: 0, inputPending: false, externalStarting: false, externalInputAvailable: false, profileId: null, profileName: null, reviewRequired: false, processAlive: true, policyBlockedUntil: 0, attended: false, attention: null, openedBy: null,
     controller: { type: "human" }, mode: "autopilot", effectiveMode: "autopilot", gate: false,
     pacing: { minWriteIntervalMs: 0, enterGraceMs: 0, leaseTtlSecs: 60, approvalTtlSecs: 300 },
-    mask: null, allows: [], agents: [], typing: false, proposal: null, approval: null, grace: null, ctlReq: null,
+    mask: null, allows: [], agents: [], typing: false, humanInputRevision: 0, proposal: null, approval: null, grace: null, ctlReq: null,
     lastAgent: null, handback: false, timeline: newTimeline(), cursor: { x: 0, y: 0, w: 8, h: 16, row: 0 }, wash: null, paused: false,
   };
 }
@@ -76,16 +83,20 @@ export const st = $state({
   tabSeq: 0,
   toasts: [] as Toast[],
   announcement: null as Announcement | null,
-  leaveChip: null as null | { session: string; agentId: string; until: number },
+  themeRevision: 0,
   theme: (localStorage.getItem("ss:theme") as ThemeId) || "midnight",
   followSystem: localStorage.getItem("ss:followSystem") === "1",
   effects: localStorage.getItem("ss:effects") !== "0",
   fontSize: Number(localStorage.getItem("ss:fontSize") || 13),
   paletteOpen: false,
   centerOpen: false,
+  menuOpen: false,
+  sharingOpen: false,
+  completionOpen: false,
+  completionRequest: 0,
   settingsOpen: false,
   timelineOpen: false,
-  settingsTab: "agents" as "profiles" | "agents" | "automation" | "pacing" | "policy" | "appearance" | "diagnostics",
+  settingsTab: "agents" as "profiles" | "agents" | "automation" | "pacing" | "policy" | "appearance" | "extensions" | "diagnostics",
 });
 
 /** The tab the human is looking at. Safe to call before boot (returns a placeholder). */

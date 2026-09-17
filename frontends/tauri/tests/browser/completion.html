@@ -1,0 +1,47 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Conn completion presentation checks</title>
+<style>body{background:#0b0d12;color:#d7dae0;font:14px system-ui;padding:24px}button{padding:8px}li{margin:8px 0}#component{--line:#232833;--muted:#7d8590;--bg:#0b0d12;max-width:760px}</style>
+<h1>Completion presentation checks</h1><p>Fixture transport only. No network model request or API key is used.</p><button id="run">Run checks</button><ol id="results"></ol><div id="component"></div>
+<script type="module">
+ import { mount,unmount } from 'svelte';
+ import CompletionBar from '../../src/components/CompletionBar.svelte';
+ import { st,newTab } from '../../src/lib/store.svelte.ts';
+ import { extensions } from '../../src/lib/extensions.svelte.ts';
+ const calls=[];let publishing=true;let promptReady=false;let responseStatus='ready';let requestCount=0;
+ window.__TAURI_INTERNALS__={invoke:async(_,{name,args})=>{
+  calls.push({name,args});
+  if(name==='status')return {surfaceAvailable:true,completionPromptReady:promptReady,shared:true,controller:{type:'human'}};
+  if(name==='completion_request')return {id:String(++requestCount),session:'fixture',status:'pending'};
+  if(name==='completion_status')return {id:args.id,session:'fixture',status:responseStatus,text:responseStatus==='ready'?"printf 'fixture-only'":undefined};
+  return {};
+ }};
+ const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+ const count=name=>calls.filter(call=>call.name===name).length;
+ const report=(name,ok)=>{const li=document.createElement('li');li.textContent=`${ok?'PASS':'FAIL'} ${name}`;li.dataset.pass=String(ok);document.querySelector('#results').append(li);if(!ok)throw new Error(name);};
+ document.querySelector('#run').onclick=async()=>{
+  document.querySelector('#run').disabled=true;
+  st.tabs.fixture=newTab('fixture',1);st.active='fixture';Object.assign(st.tabs.fixture,{shared:true,attended:true,statusReady:true});
+  extensions.catalog={apiVersion:1,extensions:[],themes:[],keyStatus:'stored',settings:{theme:'conn.theme.midnight',model:'fixture',completionEnabled:true,providerEnabled:true}};
+  const component=mount(CompletionBar,{target:document.querySelector('#component')});
+  const publication=setInterval(()=>{if(publishing)st.tabs.fixture.surfacePublishedSerial++;},60);
+  try {
+   await wait(1000);report('initial/configured state does not request a model',count('completion_request')===0);
+   st.tabs.fixture.humanInputRevision++;await wait(1050);report('unknown prompt quietly skips automatic requests',count('completion_request')===0&&!st.completionOpen);
+   promptReady=true;st.tabs.fixture.humanInputRevision++;await wait(1100);
+   report('verified prompt debounces one automatic request',count('completion_request')===1&&calls.find(c=>c.name==='completion_request').args.explicit===false);
+   report('ready proposal does not execute or insert itself',document.querySelector('#component code')?.textContent==="printf 'fixture-only'"&&count('completion_accept')===0&&count('input')===0);
+   [...document.querySelectorAll('#component button')].find(b=>b.textContent==='Insert').click();await wait(80);
+   report('human Insert uses the common accept command without Enter',count('completion_accept')===1&&count('input')===0&&!st.completionOpen);
+   promptReady=false;st.completionRequest++;await wait(150);
+   report('explicit palette request remains available at unknown prompts',count('completion_request')===2&&calls.filter(c=>c.name==='completion_request').at(-1).args.explicit===true);
+   st.completionOpen=false;await wait(50);extensions.catalog.settings.completionEnabled=false;
+   promptReady=true;st.tabs.fixture.humanInputRevision++;await wait(1050);
+   report('disabled suggestions never start an automatic request',count('completion_request')===2);
+   extensions.catalog.settings.completionEnabled=true;extensions.catalog.keyStatus='missing';st.tabs.fixture.humanInputRevision++;await wait(1050);
+   report('missing credentials skip automatic requests quietly',count('completion_request')===2&&!st.completionOpen);
+   publishing=false;st.completionRequest++;await wait(240);
+   report('pre-dock surfaceAvailable cannot start a request without a new renderer acknowledgement',count('completion_request')===2);
+   publishing=true;await wait(200);report('post-layout acknowledgement releases the waiting request',count('completion_request')===3);
+   report('model requests carry no raw input or screen strings from the UI',calls.filter(c=>c.name==='completion_request').every(c=>Object.keys(c.args).sort().join(',')==='explicit,session'));
+  }catch(error){report(String(error),false);}finally{clearInterval(publication);await unmount(component);}
+ };
+</script></html>

@@ -2,7 +2,7 @@
   // The control centre: grows out of the island. The eight-tenths of settings you
   // touch while working — mode, ask-first, grace, who is here and what they may do.
   import { fade } from "svelte/transition";
-  import { st, cur, toast } from "../lib/store.svelte";
+  import { st, cur } from "../lib/store.svelte";
   import { cmd, changeMode } from "../lib/bridge";
   import { agentColor } from "../lib/themes";
   import { t, fmtMs } from "../lib/i18n.svelte";
@@ -17,9 +17,6 @@
   $effect(() => { void st.active; poll(); const i = setInterval(poll, 1500); return () => clearInterval(i); });
 
   const MODES = ["observe", "copilot", "autopilot"] as const;
-  async function entrust() {
-    try { await cmd("entrust"); toast(t("entrust.set"), "ok"); } catch (e) { toast(String(e), "warn"); }
-  }
   function key(e: KeyboardEvent) { if (e.key === "Escape") { e.stopPropagation(); onclose(); } }
 </script>
 
@@ -32,12 +29,15 @@
     {#if isAgent}<button class="btn mini" onclick={() => cmd("take")}>{t("center.take")}</button>{/if}
   </header>
 
+  <div class="sharing-row"><span>{t(tb.shared ? "sharing.on" : "sharing.off")}</span><button class="btn mini" onclick={() => { onclose(); st.sharingOpen = true; }}>{t(tb.shared ? "sharing.manage" : "sharing.start")}</button></div>
+  {#if tb.inputPending}<p class="muted note">{t("sharing.pendingInput")}</p>{/if}
+  {#if tb.shared}
   <div class="seg">
     {#each MODES as m}
       <button class:on={tb.mode === m} onclick={() => changeMode(m)} title={t(`mode.${m}.desc`)}>{t(`mode.${m}`)}</button>
     {/each}
   </div>
-  {#if tb.effectiveMode !== tb.mode}<p class="muted note">→ {t(`mode.${tb.effectiveMode}`)} · {t("badge.entrusted")}</p>{/if}
+  {#if tb.effectiveMode !== tb.mode}<p class="muted note">→ {t(`mode.${tb.effectiveMode}`)}</p>{/if}
 
   <label class="row">
     <span>{t("gate.short")}</span>
@@ -63,15 +63,15 @@
             {#each a.affordances as f}<code>{f}</code>{/each}
           {:else}<span class="muted">{t("center.nothing")}</span>{/if}
         </span>
-        {#if tb.lastAgent?.agentId === a.agentId && !tb.entrustedTo}<button class="btn mini" onclick={entrust}>{t("center.entrust")}</button>{/if}
       </div>
     {/each}
   {/if}
 
-
+  {/if}
 </section>
 
 <style>
+  .sharing-row { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:10px 0; }
   .scrim { position: absolute; inset: 0; z-index: 30; }
   .center { position: absolute; top: 44px; right: 14px; z-index: 31; width: min(360px, 92vw); padding: 12px 14px; outline: 0;
     --popover-origin: calc(100% - 20px) -10px; font-size: 12.5px; }

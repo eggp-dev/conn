@@ -15,8 +15,10 @@ fn wrapped_unicode_redirect_is_reviewed_and_audited_in_full() {
         h.agent(1, "agent");
         h.session.agent_request_control(1).unwrap();
         h.session.pty_output("사용자@conn$ ".as_bytes());
+        common::present(&mut h.session, vec!["사용자@conn$ ".into()]);
         h.session.agent_type(1, &command).unwrap();
         h.session.pty_output(command.as_bytes());
+        common::present(&mut h.session, vec![command.clone()]);
         assert_ne!(h.session.screen().cursor_line(), command, "echo wraps at {cols} columns");
 
         let result = h.session.agent_send_key(1, "ENTER").unwrap();
@@ -46,8 +48,10 @@ fn wrapping_cannot_hide_a_dangerous_prefix_from_policy() {
     h.agent(1, "agent");
     h.session.agent_request_control(1).unwrap();
     h.session.pty_output(b"dev$ ");
+    common::present(&mut h.session, vec!["dev$ ".into()]);
     h.session.agent_type(1, &command).unwrap();
     h.session.pty_output(command.as_bytes());
+        common::present(&mut h.session, vec![command.clone()]);
     let result = h.session.agent_send_key(1, "ENTER").unwrap();
     assert!(matches!(result, KeyResult::Denied { ref cmd, ref label }
         if cmd == &command && label == "run dangerous commands alone"), "{result:?}");
@@ -130,6 +134,7 @@ fn unicode_write(shell: &str, args: &[&str], locale: &str, expect_wrapping: bool
     {
         let mut s = session.lock();
         s.register_conn(1, ConnKind::Agent, "agent", Box::new(common::VecSink(events)));
+        common::present(&mut s, vec![]);
         s.agent_request_control(1).unwrap();
         s.agent_type(1, &command).unwrap();
     }
@@ -142,6 +147,7 @@ fn unicode_write(shell: &str, args: &[&str], locale: &str, expect_wrapping: bool
         if expect_wrapping {
             assert!(s.screen().cursor().row > 0, "real echo wraps onto multiple rows");
         }
+        common::present(&mut s, vec![command.clone()]);
         let result = s.agent_send_key_with(1, "ENTER", Some("write a temporary fixture".into())).unwrap();
         let KeyResult::Pending { approval_id, cmd, .. } = result else {
             panic!("wrapped redirect bypassed approval: {result:?}");
@@ -150,7 +156,11 @@ fn unicode_write(shell: &str, args: &[&str], locale: &str, expect_wrapping: bool
         assert!(!target.exists());
         approval_id
     };
-    session.lock().resolve_approval(&approval_id, Decision::Grant, "test").unwrap();
+    {
+        let mut s = session.lock();
+        common::present(&mut s, vec![command.clone()]);
+        s.resolve_approval(&approval_id, Decision::Grant, "test").unwrap();
+    }
     assert!(wait_for(|| std::fs::read_to_string(&target).is_ok_and(|s| s == text)),
         "shell {shell} ({locale}) did not write the submitted Unicode text; file: {:?}; screen: {:?}",
         std::fs::read(&target), session.lock().screen().rows());

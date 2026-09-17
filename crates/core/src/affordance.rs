@@ -28,7 +28,7 @@ pub enum Affordance {
     /// Agent, when the human is not looking at this session: ask them to come back.
     RequestAttention,
     /// Agent: open a new tab (session). It starts unattended — the human decides
-    /// whether to look at it or entrust it.
+    /// whether to look at it.
     OpenTab,
     /// Agent: move this connection to another tab. Never moves the human's view.
     SwitchTab,
@@ -60,7 +60,7 @@ pub struct AffordanceState<'a> {
     pub has_pending_approval: bool,
     /// Any approval is pending (relevant to the human).
     pub any_pending_approval: bool,
-    /// The human is looking at this session, or has explicitly left it to this actor.
+    /// The human is looking at this session.
     pub attended: bool,
     /// The host can open and list tabs (a hub with an opener). Headless single
     /// sessions cannot.
@@ -84,7 +84,7 @@ pub fn affordances_for(actor: Actor, state: &AffordanceState<'_>) -> Vec<Afforda
                 return out;
             }
             if !state.attended {
-                // Unattended and not entrusted: the agent may only knock, and poll an
+                // Unattended: the agent may only knock, and poll an
                 // approval it already has. It cannot even look — the human is not looking.
                 out.clear();
                 out.push(RequestAttention);

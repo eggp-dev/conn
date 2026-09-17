@@ -59,3 +59,9 @@ The timeline brings commands and collaboration decisions together, including den
 **Preview · MIT licensed.** Commands use your account's permissions; Conn is not an OS sandbox. [Trust model](docs/security.md) · [Report a security issue](SECURITY.md)
 
 Useful for your workflow? **Star Conn** to help others discover it. We'd especially like to hear when you wanted to take the keyboard back.
+
+## Development contract
+
+The current hard-cut branch introduces same-session sharing and a native extension
+host. These changes are **unreleased**; the download links above remain v0.6.0.
+See the [product contract](docs/PRD.md) and [extensions](docs/extensions.md).

@@ -90,25 +90,31 @@ The open-C icon shows human control, pending requests, agent control and executi
 
 Denied, blocked, cancelled, expired and executed are separate outcomes. **Executed** means input reached the shell, not that the command succeeded. The timeline does not save terminal output or scrollback.
 
-## Existing-terminal and CLI use
+## CLI and MCP (shared-surface development version)
 
-Download the CLI archive for [Linux x64](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-x86_64-unknown-linux-gnu-cli.tar.gz), [Mac Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-aarch64-apple-darwin-cli.tar.gz), or [Windows x64](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-x86_64-pc-windows-msvc-cli.zip). Extract `conn` (`conn.exe` on Windows) to a directory on your user `PATH` and reopen your terminal.
+Open the **Conn desktop app** first. The CLI connects an agent to that visible
+session; it no longer launches a terminal proxy or a headless collaboration shell.
+Choose the mode, control gate and pacing in Conn's control centre or Settings.
 
 ```sh
 conn --version
-conn
+conn mcp --agent-id my-client
 ```
 
-Keep that session open. In another terminal, configure the walkthrough and send a read-only request:
+Agent clients normally launch `conn mcp` themselves using the configuration from
+Settings. Keep that connection alive when the user selects it as a participant;
+a different CLI process receives a different connection ID, even with the same name.
+
+For a one-off read-only request in an ordinary shared tab:
 
 ```sh
-conn mode autopilot
-conn gate --ask
-conn pacing --enter-grace-ms 2000
 conn agent --agent-id demo run "pwd" --reason "Show the current directory without changing files"
 ```
 
-Use `cd` instead of `pwd` for cmd.exe. `conn take` reclaims control; `conn log -n 30` reads recent audit entries. `agent run` prints a snapshot after submission and does not track shell exit status. Non-POSIX and remote profiles require command review.
+Use `cd` for cmd.exe. Human takeover, approval and mode changes belong in the app.
+`conn log -n 30` explicitly reads the local audit file using your OS permissions;
+it is not an agent observation endpoint. Remote and non-POSIX execution still
+requires command review. These CLI changes are unreleased and differ from v0.6.0.
 
 ## Common questions
 
@@ -118,7 +124,8 @@ Use `cd` instead of `pwd` for cmd.exe. `conn take` reclaims control; `conn log -
 | Agent cannot connect | Keep Conn open and use its current endpoint. Copy the configuration again after moving the app. |
 | Agent reads but cannot type | Check Observe mode, tool permissions, control ownership, and whether its tab is visible. |
 | Request stays pending | Look for a control request, command approval, or Co-pilot proposal. |
-| `unattended` or `suspended` | Return to that tab or explicitly entrust it. The agent cannot change your visible tab. |
+| `unattended` or `suspended` | Return to that tab and obtain a fresh snapshot. The agent cannot change your visible tab. |
+| `surface_unavailable` | Show and focus the terminal, close covering panels, and retry after it renders. |
 | Compound command is blocked | With `isolate_dangerous: true`, submit navigation, the dangerous action, and verification separately. |
 | Command is still running | Wait and read another snapshot; a submission result is not an exit status. |
 
@@ -137,7 +144,7 @@ npm ci
 npm run tauri dev
 ```
 
-For the existing-terminal frontend, run `conn` after the Cargo installation; Node.js and Tauri are unnecessary for that path.
+The shared-surface development version requires a visible Conn frontend. For browser testing with the same native backend, see [browser testing](browser-testing.md).
 
 Next: [backends](backends.md), [policy](policy.md), [trust model](security.md), or [contributing](../CONTRIBUTING.md).
 
@@ -148,3 +155,15 @@ Conn checks in the background and downloads signed updates. The Conn menu shows 
 Use **Check for updates → Update preferences** to disable automatic checks/downloads or change the preview channel. Preview builds include previews by default; stable builds do not. A channel change never downgrades your app. No GitHub account or token is needed.
 
 In-app installation supports Apple Silicon macOS, Windows x64 and Linux AppImage. `.deb` installations use your package manager or a new installer from Releases. Existing 0.5.x installations need one manual installation of 0.6.0 to receive the updater. Failed checks/downloads leave your running shell untouched; use Retry or the release page.
+
+## Same-session sharing and extensions (unreleased)
+
+External launches start private. Use the sharing control in that window to choose
+connected agents and share its current viewport. The existing external writer is
+revoked; the shell and SSH connection continue. Stop sharing to continue alone.
+Earlier private input/output is not added to history.
+
+**Settings → Extensions** contains themes and opt-in command suggestions. Choose a
+model and save an API key in the OS credential store. The current shared viewport
+may be sent to the provider. Suggestions insert text only after acceptance; Enter
+is a separate action. [Extension guide](extensions.md)

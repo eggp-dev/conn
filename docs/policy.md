@@ -1,6 +1,6 @@
 # Policy
 
-`~/.conn/policy.yaml` (or `--policy PATH`). An example file is written on first run.
+`~/.conn/policy.yaml` (or the app's selected configuration directory). An example file is written on first run.
 
 ## Format (v0.3)
 
@@ -20,7 +20,7 @@ And three switches.
 | `isolate_dangerous` | `true` | when a confirm/deny-level segment shares a line with other segments, deny instead of asking. One approval = one dangerous action |
 | `require_intent` | `true` | an agent's ENTER without a one-line intent does not run |
 
-Plus `unattended` (default `copilot`): the highest mode an entrusted agent may use while the human is away from the tab.
+The shared-surface version removes unattended execution. A legacy `unattended` key cannot grant observation or writes when the owner surface is unavailable.
 
 ### The basic form
 

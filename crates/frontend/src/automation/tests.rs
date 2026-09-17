@@ -1,7 +1,7 @@
 use super::*;
 use crate::Harness;
 use conn_core::backend::Profile;
-use conn_core::affordance::Actor;
+use base64::Engine as _;
 fn caller() -> Caller { Caller { identity:"test-sender:1".into(), name:"Synthetic launcher".into(), still_alive:Arc::new(|| true) } }
 fn harness() -> (tempfile::TempDir, Arc<Harness>) { harness_with_ack(true) }
 fn harness_with_ack(ack: bool) -> (tempfile::TempDir, Arc<Harness>) {
@@ -25,7 +25,7 @@ fn harness_with_events(ack: bool) -> (tempfile::TempDir, Arc<Harness>, Arc<Mutex
                 let window = value["window"].as_str().unwrap();
                 let session = value["session"].as_str().unwrap();
                 let status = h.invoke_in_window(window,"status",json!({"session":session})).unwrap();
-                assert_eq!(status["externalPrivate"],true); assert_eq!(status["externalStarting"],true);
+                assert_eq!(status["shared"],false); assert_eq!(status["externalOrigin"],true); assert_eq!(status["externalStarting"],true);
                 h.invoke_in_window(window,"attach_output",json!({"session":session})).unwrap();
             }
         }
@@ -45,7 +45,15 @@ fn done(h:&Harness,id:&str)->Value {
     let mut value=Value::Null;
     wait_for(|| { value=h.automate(caller(),"request.status",json!({"requestId":id})).unwrap(); matches!(value["state"].as_str(),Some("delivered"|"cancelled"|"failed")) }); value
 }
-fn screen(h:&Harness,id:&str)->String { h.state.hub.get(id).unwrap().lock().snapshot(Actor::Human).unwrap().projection.screen.join("\n") }
+// Capture the output delivered to the owning renderer. This is deliberately not
+// an agent snapshot: no renderer has published a SurfaceFrame in these tests.
+fn owner_output(events:&Arc<Mutex<Vec<(String,Value)>>>,id:&str,window:&str)->String {
+    let bytes: Vec<u8> = events.lock().iter()
+        .filter(|(name,value)| name == "ss:output" && value["session"] == id && value["window"] == window)
+        .flat_map(|(_,value)| base64::engine::general_purpose::STANDARD.decode(value["data"].as_str().unwrap()).unwrap())
+        .collect();
+    String::from_utf8_lossy(&bytes).into_owned()
+}
 fn assert_unrecorded(h:&Harness,secret:&str) {
     let audit=h.state.config_dir.join("audit.jsonl");
     let text=std::fs::read_to_string(audit).unwrap_or_default(); assert!(!text.contains(secret));
@@ -81,23 +89,24 @@ fn launch_waits_for_window_and_never_creates_fallback_shell() {
     h.invoke_in_window("external-1","ui_ready",json!({})).unwrap();
     let handle=task.join().unwrap().unwrap()["session"].as_str().unwrap().to_owned();let id=physical(&h,&handle);
     wait_for(||proof.exists());assert_eq!(std::fs::read_to_string(proof).unwrap(),"SYNTHETIC_STARTUP_비밀");assert!(!end.exists());
-    assert_eq!(h.invoke_in_window("external-1","status",json!({"session":id})).unwrap()["externalPrivate"],true);
+    assert_eq!(h.invoke_in_window("external-1","status",json!({"session":id})).unwrap()["shared"],false);
     h.invoke_in_window("external-1","input",json!({"session":id,"data":"\r"})).unwrap();
     wait_for(||end.exists());wait_for(||!h.state.hub.get(&id).unwrap().lock().process_alive());
     assert_unrecorded(&h,"SYNTHETIC_STARTUP_비밀");assert_eq!(h.state.hub.ids().len(),1);
 }
 #[test]
 fn private_writes_deliver_without_approval_and_discard_completed_payloads() {
-    let (_tmp,h)=harness();ready(&h);enable(&h);let handle=open(&h);let id=physical(&h,&handle);
+    let (_tmp,h,events)=harness_with_events(true);ready(&h);enable(&h);let handle=open(&h);let id=physical(&h,&handle);
     let secret="SYNTHETIC_DIRECT_비밀";
     let args=json!({"session":handle,"text":format!("printf '%s\\n' '{secret}'"),"intent":secret,"requestId":"once"});
     let rid=h.automate(caller(),"session.write",args.clone()).unwrap();assert_eq!(done(&h,rid.as_str().unwrap())["state"],"delivered");
-    wait_for(||screen(&h,&id).contains(secret));
+    wait_for(||owner_output(&events,&id,"main").contains(secret));
     assert_eq!(h.automate(caller(),"session.write",args).unwrap(),rid);
     assert!(h.automate(caller(),"session.write",json!({"session":handle,"text":"echo changed","requestId":"once"})).is_err());
     assert_unrecorded(&h,secret);
     for method in ["snapshot","status","input","affordances"] { assert!(conn_core::ipc::dispatch(&h.state.hub.get(&id).unwrap(),1,method,&json!({"data":"x"})).is_err()); }
-    assert!(h.invoke("status",json!({"session":id})).is_err());
+    assert!(h.invoke_in_window("wrong-window","status",json!({"session":id})).is_err());
+    assert_eq!(h.invoke("status",json!({"session":id})).unwrap()["shared"],false);
     let status=h.invoke_in_window("main","status",json!({"session":id})).unwrap();assert!(status["controlRequests"].as_array().unwrap().is_empty());
 }
 #[test]
@@ -123,7 +132,7 @@ fn sender_ownership_exit_and_revocation_are_checked_at_delivery() {
 }
 #[test]
 fn cancelled_pending_jobs_release_payload_and_do_not_write_late() {
-    let (_tmp,h)=harness();ready(&h);enable(&h);let handle=open(&h);
+    let (_tmp,h,events)=harness_with_events(true);ready(&h);enable(&h);let handle=open(&h);
     let b=h.state.automation.bindings.lock()[&handle].clone();
     let id=b.session_id.clone();
     // Cancellation is set before publication; even an immediate worker cannot write.
@@ -134,17 +143,17 @@ fn cancelled_pending_jobs_release_payload_and_do_not_write_late() {
     b.queue.lock().push_back(job.clone());
     h.state.automation.stop_binding(&b);
     wait_for(||job.done());assert!(job.payload.lock().is_none());
-    assert!(!screen(&h,&id).contains("SYNTHETIC_CANCELLED"));
+    assert!(!owner_output(&events,&id,"main").contains("SYNTHETIC_CANCELLED"));
     assert_unrecorded(&h,"SYNTHETIC_CANCELLED");
 }
 #[test]
 fn closing_a_private_session_releases_its_screen_but_keeps_minimal_polling_status() {
-    let (_tmp,h)=harness();ready(&h);enable(&h);let handle=open(&h);let id=physical(&h,&handle);
+    let (_tmp,h,events)=harness_with_events(true);ready(&h);enable(&h);let handle=open(&h);let id=physical(&h,&handle);
     let private=Arc::downgrade(&h.state.hub.get(&id).unwrap());
     let binding=Arc::downgrade(&h.state.automation.bindings.lock()[&handle]);
     let request=h.automate(caller(),"session.write",json!({"session":handle,"text":"printf CLOSED_SCREEN_SENTINEL"})).unwrap();
     assert_eq!(done(&h,request.as_str().unwrap())["state"],"delivered");
-    wait_for(||screen(&h,&id).contains("CLOSED_SCREEN_SENTINEL"));
+    wait_for(||owner_output(&events,&id,"main").contains("CLOSED_SCREEN_SENTINEL"));
     h.invoke_in_window("main","close_tab",json!({"session":id})).unwrap();
     wait_for(||private.upgrade().is_none() && binding.upgrade().is_none());
     assert!(h.state.automation.bindings.lock().is_empty());
@@ -201,7 +210,7 @@ fn private_child_waits_for_its_owner_renderer_and_uses_prelaunch_dimensions() {
     wait_for(||!h.state.pending_sessions.lock().is_empty());
     let id=h.state.pending_sessions.lock().keys().next().unwrap().clone();
     assert!(!proof.exists()); assert!(h.state.hub.ids().is_empty());
-    assert!(h.invoke("attach_output",json!({"session":id})).is_err());
+    assert!(h.invoke_in_window("wrong-window","status",json!({"session":id})).is_err());
     assert!(h.invoke_in_window("wrong-window","attach_output",json!({"session":id})).is_err());
     assert!(!proof.exists());
     h.invoke_in_window("main","resize",json!({"session":id,"rows":33,"cols":111})).unwrap();
@@ -276,4 +285,69 @@ fn linux_executable_permission_is_explicit_and_revocable() {
     assert!(h.linux_automation_allowed(&exe));
     h.invoke("automation_save", json!({"config":{"enabled":false,"profiles":["test-shell"],"linuxExecutables":["/bin/sh"]}})).unwrap();
     assert!(!h.linux_automation_allowed(&exe));
+}
+
+#[test]
+fn hidden_and_masked_authentication_can_share_the_same_process_without_backfilling_secrets() {
+    use conn_core::ipc::Client;
+    let (tmp,h,events)=harness_with_events(true);ready(&h);enable(&h);
+    // The child controls echo, just as an interactive authentication program does.
+    // The masked field emits one star per received character and keeps echo off.
+    let script=r#"printf 'ID: '; IFS= read -r user
+stty -echo; printf 'Password (hidden): '; IFS= read -r secret; unset secret
+stty -icanon min 1 time 0; printf '\nPassword (masked): '
+while :; do character=$(dd bs=1 count=1 2>/dev/null); [ -z "$character" ] && break; printf '*'; done
+stty echo icanon; unset character
+printf '\nID: %s\nAUTH TEST PASSED\n' "$user"
+export CONN_SHARED_MARKER=AUTHENTICATED_PROCESS_RETAINED
+exec /bin/sh -i"#;
+    let command=format!("/bin/sh -c '{}'",script.replace('\n',"; ").replace('\'',"'\\''"));
+    let handle=h.automate(caller(),"session.create",json!({"command":command})).unwrap().as_str().unwrap().to_owned();
+    let id=physical(&h,&handle);let original_session=h.state.hub.get(&id).unwrap();
+    wait_for(||owner_output(&events,&id,"main").contains("ID: "));
+    let selected=Client::connect(&tmp.path().join("conn.sock")).unwrap();
+    let selected_id=selected.hello("agent","selected-auth-collaborator").unwrap()["conn"].as_u64().unwrap();
+    let other=Client::connect(&tmp.path().join("conn.sock")).unwrap();
+    other.hello("agent","unselected-collaborator").unwrap();
+    assert!(selected.call("snapshot",json!({"session":id})).is_err());
+    assert!(selected.call("publish_surface",json!({"session":id})).is_err());
+    assert!(selected.call("set_sharing",json!({"session":id,"shared":true})).is_err());
+    let hidden="SYNTHETIC_HIDDEN_PASSWORD";let masked="SYNTHETIC_MASKED_PASSWORD";
+    for (text,prompt) in [("demo-user","Password (hidden): "),(hidden,"Password (masked): "),(masked,"external-test$ ")] {
+        let request=h.automate(caller(),"session.write",json!({"session":handle,"text":text})).unwrap();
+        assert_eq!(done(&h,request.as_str().unwrap())["state"],"delivered");
+        wait_for(||owner_output(&events,&id,"main").contains(prompt));
+    }
+    let output=owner_output(&events,&id,"main");
+    assert!(output.contains("ID: demo-user") && output.contains("AUTH TEST PASSED"));
+    assert!(output.contains(&"*".repeat(masked.len())));
+    assert!(!output.contains(hidden) && !output.contains(masked));
+    assert_unrecorded(&h,hidden);assert_unrecorded(&h,masked);
+    let shared=h.invoke_in_window("main","set_sharing",json!({"session":id,"shared":true,"connectionIds":[selected_id]})).unwrap();
+    assert_eq!(shared["shared"],true);assert_eq!(shared["externalOrigin"],true);
+    assert_eq!(shared["externalInputAvailable"],false);
+    assert!(Arc::ptr_eq(&original_session,&h.state.hub.get(&id).unwrap()));
+    assert!(h.automate(caller(),"session.write",json!({"session":handle,"text":"late external write"})).is_err());
+    assert!(selected.call("snapshot",json!({"session":id})).is_err(),"sharing does not manufacture a screen");
+    // This fixture acts as the owner renderer: only these presented rows are visible
+    // to the agent, even though the native output stream includes the earlier ID prompt.
+    let visible=json!(["ID: demo-user",format!("Password (masked): {}","*".repeat(masked.len())),"AUTH TEST PASSED","external-test$ "]);
+    let status=h.invoke("status",json!({"session":id})).unwrap();
+    let frame=json!({"surfaceId":"authentication-owner","generation":status["surfaceGeneration"],"revision":1,"outputSeq":status["outputSeq"],"rows":24,"cols":80,"cursor":null,"screen":visible,"alternateScreen":false,"visible":true});
+    h.invoke_in_window("main","publish_surface",json!({"session":id,"frame":frame})).unwrap();
+    let snapshot=selected.call("snapshot",json!({"session":id})).unwrap();
+    assert_eq!(snapshot["screen"],visible);
+    assert!(!snapshot.to_string().contains(hidden) && !snapshot.to_string().contains(masked));
+    assert!(!snapshot.to_string().contains("Password (hidden):"));
+    assert!(other.call("snapshot",json!({"session":id})).is_err());
+    // Shell-local state set before sharing proves that no replacement PTY was spawned.
+    h.invoke_in_window("main","input",json!({"session":id,"data":"printf '%s\\n' \"$CONN_SHARED_MARKER\"\r"})).unwrap();
+    wait_for(||owner_output(&events,&id,"main").contains("AUTHENTICATED_PROCESS_RETAINED"));
+    let audit=std::fs::read_to_string(h.state.config_dir.join("audit.jsonl")).unwrap();
+    assert!(audit.contains("sharing_started"));
+    assert!(!audit.contains(hidden) && !audit.contains(masked) && !audit.contains(script));
+    assert!(!audit.contains("dd bs=1") && !audit.contains("read -r secret"));
+    h.invoke_in_window("main","set_sharing",json!({"session":id,"shared":false,"connectionIds":[]})).unwrap();
+    assert!(selected.call("snapshot",json!({"session":id})).is_err());
+    assert!(h.automate(caller(),"session.write",json!({"session":handle,"text":"revoked stays revoked"})).is_err());
 }

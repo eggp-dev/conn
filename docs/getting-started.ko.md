@@ -90,25 +90,27 @@ codex mcp add conn -- conn mcp
 
 거절, 정책 차단, 취소, 만료, 실행은 서로 다른 결과입니다. **실행됨**은 입력이 셸에 도착했다는 뜻이며 명령 성공을 뜻하지 않습니다. 타임라인은 터미널 출력이나 스크롤백을 저장하지 않습니다.
 
-## 기존 터미널과 CLI 사용
+## CLI와 MCP (공유 화면 개발 버전)
 
-[Linux x64](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-x86_64-unknown-linux-gnu-cli.tar.gz), [Mac Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-aarch64-apple-darwin-cli.tar.gz), [Windows x64](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-x86_64-pc-windows-msvc-cli.zip)용 CLI 압축 파일을 받으세요. `conn`(Windows는 `conn.exe`)을 사용자 `PATH`에 포함된 폴더에 풀고 터미널을 다시 엽니다.
+먼저 **Conn 데스크톱 앱**을 여세요. CLI는 보이는 세션에 에이전트를 연결하며,
+터미널 프록시나 headless 협업 셸을 시작하지 않습니다. 모드·승인·속도는 앱에서 설정합니다.
 
 ```sh
 conn --version
-conn
+conn mcp --agent-id my-client
 ```
 
-세션을 열어 두세요. 다른 터미널에서 예제 설정과 읽기 전용 요청을 보냅니다.
+보통 에이전트 클라이언트가 설정에서 생성한 구성으로 MCP를 실행합니다. 참여자로 선택한
+연결을 유지하세요. 같은 이름이라도 별도 CLI 프로세스는 다른 연결 ID를 받습니다.
+일반 공유 탭에서 한 번만 읽기 전용 요청을 보낼 때는 다음을 사용할 수 있습니다.
 
 ```sh
-conn mode autopilot
-conn gate --ask
-conn pacing --enter-grace-ms 2000
 conn agent --agent-id demo run "pwd" --reason "Show the current directory without changing files"
 ```
 
-cmd.exe에는 `pwd` 대신 `cd`를 사용하세요. `conn take`는 제어권을 회수하고 `conn log -n 30`은 최근 기록을 읽습니다. `agent run`은 입력 후 스냅샷을 출력하며 셸 명령의 종료 상태를 추적하지 않습니다. 비-POSIX·원격 프로필에는 명령 검토가 필요합니다.
+cmd.exe에는 `cd`를 사용하세요. 사람의 제어권 회수·승인·모드 변경은 앱에서 합니다.
+`conn log -n 30`은 OS 권한으로 로컬 감사 파일을 읽는 별도 기능이며 에이전트 화면 조회가 아닙니다.
+이 CLI 변경은 미배포 개발 버전에 해당하며 v0.6.0과 다릅니다.
 
 ## 자주 묻는 문제
 
@@ -118,7 +120,8 @@ cmd.exe에는 `pwd` 대신 `cd`를 사용하세요. `conn take`는 제어권을 
 | 에이전트가 연결되지 않음 | Conn을 열어 두고 현재 주소를 사용하세요. 앱을 옮겼다면 설정을 다시 복사하세요. |
 | 읽지만 입력하지 못함 | Observe 모드, 도구 권한, 제어권 소유자, 해당 탭이 보이는지 확인하세요. |
 | 요청이 계속 대기함 | 제어 요청, 명령 승인, Co-pilot 제안이 있는지 확인하세요. |
-| `unattended` 또는 `suspended` | 해당 탭으로 돌아가거나 명시적으로 맡기세요. 에이전트는 보이는 탭을 바꿀 수 없습니다. |
+| `unattended` 또는 `suspended` | 해당 탭으로 돌아와 새 스냅샷을 확인하세요. 에이전트는 보이는 탭을 바꿀 수 없습니다. |
+| `surface_unavailable` | 터미널 창에 포커스를 두고 가리는 패널을 닫은 뒤 다시 확인하세요. |
 | 복합 명령이 차단됨 | `isolate_dangerous: true`이면 이동, 위험 작업, 검증을 각각 요청하세요. |
 | 명령이 아직 실행 중임 | 기다린 뒤 스냅샷을 다시 읽으세요. 입력 결과는 종료 상태가 아닙니다. |
 
@@ -137,7 +140,7 @@ npm ci
 npm run tauri dev
 ```
 
-기존 터미널 프런트엔드는 Cargo 설치 후 `conn`을 실행하세요. 이 경로에는 Node.js와 Tauri가 필요하지 않습니다.
+공유 화면 개발 버전에는 실제 Conn 프런트엔드가 필요합니다. 같은 네이티브 백엔드를 브라우저에서 검증하려면 [브라우저 테스트](browser-testing.md)를 확인하세요.
 
 다음 안내: [백엔드](backends.md), [정책](policy.md), [신뢰 범위](security.md#한국어-요약), [기여](../CONTRIBUTING.ko.md).
 
@@ -148,3 +151,13 @@ npm run tauri dev
 **업데이트 확인 → 업데이트 설정**에서 자동 확인·다운로드를 끄거나 프리뷰 포함 여부를 바꿀 수 있습니다. 프리뷰 빌드는 기본적으로 프리뷰를 포함하고, 정식 빌드는 포함하지 않습니다. 채널을 바꿔도 이전 버전으로 내리지 않습니다. GitHub 계정이나 토큰은 필요 없습니다.
 
 Apple Silicon macOS, Windows x64, Linux AppImage에서 앱 내 설치를 지원합니다. `.deb`는 패키지 관리자 또는 새 설치 파일을 사용하세요. 기존 0.5.x는 0.6.0을 한 번 직접 설치해야 합니다. 확인·다운로드 실패는 실행 중인 셸에 영향을 주지 않으며 다시 시도하거나 릴리스 페이지에서 받을 수 있습니다.
+
+## 같은 세션에서 공유와 확장 사용 (미배포)
+
+외부 실행 세션은 비공유로 시작합니다. 해당 창의 공유 메뉴에서 연결한 에이전트를 고르면
+현재 보이는 화면을 공유합니다. 기존 외부 입력 권한은 종료하고 셸·SSH 연결은 유지합니다.
+공유를 끄면 혼자 작업할 수 있습니다. 이전 비공유 입력·출력은 소급 기록하지 않습니다.
+
+**설정 → 확장**에서 테마와 선택형 명령 제안을 설정합니다. 모델을 선택하고 API 키를 OS
+보안 저장소에 보관합니다. 공유 중인 현재 화면이 제공자에게 전송될 수 있습니다. 제안을
+수락하면 텍스트만 삽입하고, 실행은 별도 Enter입니다. [확장 안내](extensions.ko.md)

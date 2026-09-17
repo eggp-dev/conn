@@ -6,7 +6,7 @@ use std::time::Duration;
 use common::Harness;
 use conn_core::affordance::{Actor, Affordance};
 use conn_core::ipc::Hub;
-use conn_core::session::{AgentMode, KeyResult, ServerEvent, SessionError};
+use conn_core::session::{ServerEvent, SessionError};
 
 fn names(evs: &[ServerEvent]) -> Vec<String> {
     evs.iter().map(|e| serde_json::to_value(e).unwrap()["event"].as_str().unwrap().to_string()).collect()
@@ -25,8 +25,8 @@ fn leaving_hides_the_screen_and_suspends_writes() {
     assert!(matches!(h.session.agent_type(1, "x"), Err(SessionError::Suspended)));
     assert!(matches!(h.session.agent_send_key_with(1, "ENTER", Some("t".into())), Err(SessionError::Suspended)));
     assert_eq!(h.session.affordances(Actor::Agent { conn: 1 }), vec![Affordance::RequestAttention]);
-    assert!(h.session.current_lease().is_some(), "the lease itself survives the absence");
-    assert!(names(&agent.lock().unwrap()).contains(&"control_suspended".to_string()));
+    assert!(h.session.current_lease().is_none(), "leaving revokes authority");
+    assert!(names(&agent.lock().unwrap()).contains(&"control_revoked".to_string()));
     assert!(names(&fe.lock().unwrap()).contains(&"attention_changed".to_string()));
     assert_eq!(h.pty_str(), "ls", "nothing reached the shell while away");
 
@@ -35,51 +35,22 @@ fn leaving_hides_the_screen_and_suspends_writes() {
     assert_eq!(h.session.status().attention_request.unwrap().reason.as_deref(), Some("need you to check the result"));
 
     h.session.set_attended(true);
+    common::present(&mut h.session, vec!["ls".into()]);
     assert!(h.session.snapshot(Actor::Agent { conn: 1 }).is_ok());
+    h.session.human_input(b"\x15");
+    h.session.agent_request_control(1).unwrap();
     assert!(h.session.agent_type(1, "x").is_ok());
     assert!(h.session.status().attention_request.is_none());
-    assert!(names(&agent.lock().unwrap()).contains(&"control_resumed".to_string()));
 }
 
 #[test]
-fn entrusting_keeps_the_agent_going_under_the_cap() {
-    // example policy: unattended = copilot
-    let mut h = Harness::new();
-    h.agent(1, "claude");
+fn leaving_cannot_restore_hidden_observation_or_writes() {
+    let mut h = Harness::new(); h.agent(1,"claude");
     h.session.agent_request_control(1).unwrap();
-    assert_eq!(h.session.mode(), AgentMode::Autopilot);
-    let who = h.session.entrust().unwrap();
-    assert_eq!(who, "claude");
     h.session.set_attended(false);
-    // still allowed to see and act — but as copilot, not autopilot
-    assert!(h.session.snapshot(Actor::Agent { conn: 1 }).is_ok());
-    assert_eq!(h.session.effective_mode(), AgentMode::Copilot);
-    h.session.agent_type(1, "echo hi").unwrap();
-    assert_eq!(h.pty_str(), "", "copilot cap: typing becomes a proposal, not shell input");
-    let r = h.session.agent_send_key_with(1, "ENTER", Some("greet".into())).unwrap();
-    assert!(matches!(r, KeyResult::Proposed { .. }), "{r:?}");
-    // another agent is not entrusted
-    h.agent(2, "copilot");
-    assert!(matches!(h.session.snapshot(Actor::Agent { conn: 2 }), Err(SessionError::Unattended)));
-    // returning clears the entrustment and the cap
-    h.session.set_attended(true);
-    assert!(h.session.entrusted_agent().is_none());
-    assert_eq!(h.session.effective_mode(), AgentMode::Autopilot);
-}
-
-#[test]
-fn entrust_requires_a_connected_agent() {
-    let mut h = Harness::new();
-    assert!(h.session.entrust().is_err());
-    h.agent(1, "claude");
-    h.session.agent_request_control(1).unwrap();
-    h.session.human_take();
-    assert_eq!(h.session.entrust().unwrap(), "claude", "falls back to the last agent and arms entrustment");
-    assert!(h.session.current_lease().is_none(), "arming entrustment does not grant while attended");
-    h.session.set_attended(false);
-    assert!(h.session.current_lease().is_some());
-    h.session.connection_closed(1);
-    assert!(h.session.entrusted_agent().is_none());
+    assert!(h.session.current_lease().is_none());
+    assert!(h.session.snapshot(Actor::Agent{conn:1}).is_err());
+    assert!(h.session.agent_type(1,"hidden").is_err());
 }
 
 #[test]

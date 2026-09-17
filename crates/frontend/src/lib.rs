@@ -6,6 +6,9 @@ mod integrations;
 mod diagnostics;
 pub mod automation;
 mod windows;
+mod surface_commands;
+mod extension_commands;
+mod extensions;
 
 mod updates;
 use std::collections::{HashMap, HashSet};
@@ -33,8 +36,9 @@ struct AppState {
     pending_sessions: parking_lot::Mutex<HashMap<String, PendingSession>>,
     startup: parking_lot::Mutex<()>,
     automation: automation::Automation,
+    extensions: extensions::Extensions,
     windows: parking_lot::Mutex<windows::Windows>,
-    output: parking_lot::Mutex<HashMap<String, Option<Vec<String>>>>,
+    output: parking_lot::Mutex<HashMap<String, Option<Vec<Value>>>>,
     integration_home: Option<PathBuf>,
     config_dir: PathBuf,
     socket: PathBuf,
@@ -69,27 +73,22 @@ impl Harness {
     pub fn with_setup_home(config_dir: PathBuf, socket: PathBuf, emit: Emit, integration_home: Option<PathBuf>) -> Self {
         let defaults = std::fs::read_to_string(config_dir.join("app.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(json!({}));
         let automation = automation::Automation::load(&config_dir);
-        let state = Arc::new(AppState { pending_sessions: Default::default(), startup: Default::default(), automation, windows: Default::default(), output: Default::default(), integration_home, config_dir, socket, engines: Default::default(), hub: Hub::new(), server: Default::default(), seq: parking_lot::Mutex::new(0), defaults: parking_lot::Mutex::new(defaults) });
+        let extensions = extensions::Extensions::load(&config_dir);
+        let state = Arc::new(AppState { pending_sessions: Default::default(), startup: Default::default(), automation, extensions, windows: Default::default(), output: Default::default(), integration_home, config_dir, socket, engines: Default::default(), hub: Hub::new(), server: Default::default(), seq: parking_lot::Mutex::new(0), defaults: parking_lot::Mutex::new(defaults) });
         let app = AppHandle { state: Arc::downgrade(&state), emit };
         Self { state, app }
     }
     pub fn shutdown(&self) {
         cancel_all_pending(&self.state);
         self.state.automation.stop_all();
+        self.state.extensions.cancel_all();
         self.state.server.lock().take();
         for id in self.state.hub.ids() { self.state.hub.remove(&id); }
         for e in self.state.engines.lock().drain().map(|(_,e)|e) { let _ = e.terminate(); }
     }
+    /// Trusted single-window adapter (the token-protected browser harness).
+    /// Agent IPC never reaches this owner command boundary.
     pub fn invoke(&self, name: &str, args: Value) -> Result<Value, String> {
-        if let Some(id) = args.get("session").and_then(Value::as_str) {
-            if self.state.pending_sessions.lock().contains_key(id) || self.state.hub.get(id).is_some_and(|s| s.lock().is_private()) { return Err("Session unavailable".into()); }
-        }
-        if name == "start" {
-            let sessions = self.state.windows.lock().sessions("main");
-            if sessions.iter().any(|id| self.state.pending_sessions.lock().contains_key(id) || self.state.hub.get(id).is_some_and(|s| s.lock().is_private())) {
-                return Err("Session unavailable".into());
-            }
-        }
         self.invoke_in_window("main", name, args)
     }
     /// Native adapters supply the real window label, never a webview argument.
@@ -130,6 +129,10 @@ impl Harness {
         if let Some(id) = active {
             if self.state.hub.attended_id().as_deref() != Some(&id) { self.state.hub.set_attended(&id); }
         }
+    }
+    pub fn blur_window(&self, window: &str) {
+        let ids = self.state.windows.lock().sessions(window);
+        for id in ids { surface_commands::invalidate(&self.state, &id); }
     }
     /// Closing one native window must not terminate another window's shell.
     pub fn close_window(&self, window: &str) {
@@ -188,27 +191,27 @@ fn engine(state: &AppState, session: &str) -> Result<Arc<Engine>, String> {
     state.engines.lock().get(session).cloned().ok_or_else(|| format!("no session {session}"))
 }
 
-/// Installed before Engine starts reading the PTY, so even immediate startup output
-/// is buffered until xterm has registered its listener.
-struct TerminalOutput { app: AppHandle, session: String }
-impl std::io::Write for TerminalOutput {
-    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+/// Installed before the PTY reader starts. Never locks Session from its callback.
+fn terminal_output(app: AppHandle, session: String) -> conn_core::session::OutputFrameSink {
+    Box::new(move |frame| {
         use base64::Engine as _;
-        if let Some(state) = self.app.state.upgrade() {
-            let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+        if let Some(state) = app.state.upgrade() {
+            state.extensions.cancel(&session);
+            let data = base64::engine::general_purpose::STANDARD.encode(&frame.data);
+            let value = json!({"session":session,"data":data,"outputSeq":frame.output_seq,"generation":frame.generation});
             let mut output = state.output.lock();
-            match output.get_mut(&self.session) {
+            match output.get_mut(&session) {
                 Some(Some(buffer)) => {
-                    buffer.push(data);
-                    while buffer.len() > 1 && buffer.iter().map(String::len).sum::<usize>() > 1_400_000 { buffer.remove(0); }
+                    buffer.push(value);
+                    while buffer.len() > 1 && buffer.iter().map(|v| v["data"].as_str().map_or(0, str::len)).sum::<usize>() > 1_400_000 {
+                        buffer.remove(0);
+                    }
                 }
-                Some(None) => { let _ = self.app.emit("ss:output", json!({"session":self.session,"data":data})); }
-                None => {}, // The tab has closed.
+                Some(None) => { let _ = app.emit("ss:output", value); }
+                None => {},
             }
         }
-        Ok(bytes.len())
-    }
-    fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+    })
 }
 
 fn spawn_tab(app: &AppHandle, state: &AppState, window: &str, rows: u16, cols: u16, profile_id: Option<&str>) -> Result<String, String> {
@@ -239,7 +242,7 @@ fn spawn_tab_with(app: &AppHandle, state: &AppState, window: &str, mut rows: u16
             attached: false, cancelled: false,
         });
         let prepared = (|| {
-            app.emit("ss:tab_opened", json!({"session":id,"focus":true,"externalPrivate":true,"externalStarting":true}))?;
+            app.emit("ss:tab_opened", json!({"session":id,"focus":true,"shared":false,"externalOrigin":true,"externalStarting":true}))?;
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
             loop {
                 if caller_alive.is_some_and(|alive| !alive()) || !state.windows.lock().ready(window) {
@@ -270,7 +273,7 @@ fn spawn_tab_with(app: &AppHandle, state: &AppState, window: &str, mut rows: u16
     }
     let spawned = Engine::spawn(EngineConfig {
         profile: Some(profile), rows, cols, render_prompt: false, external_private, launch,
-        output: Some(Box::new(TerminalOutput { app: app.clone(), session: id.clone() })),
+        output_frame: Some(terminal_output(app.clone(), id.clone())),
         // Both graphical frontends render with xterm, regardless of the launcher TERM.
         // Explicit profile environment overrides still take precedence in Engine.
         env: vec![("TERM".into(), "xterm-256color".into())],
@@ -294,6 +297,9 @@ fn spawn_tab_with(app: &AppHandle, state: &AppState, window: &str, mut rows: u16
             ServerEvent::Output { .. } => {}, // Raw output uses the early writer above.
             other => {
                 let mut v = serde_json::to_value(&other).unwrap_or(Value::Null);
+                if matches!(v["event"].as_str(), Some("control_granted" | "control_revoked" | "mode_changed" | "sharing_changed" | "surface_invalidated" | "attention_changed" | "process_exited")) {
+                    if let Some(state) = handle.state.upgrade() { state.extensions.cancel(&sid); }
+                }
                 if let Some(o) = v.as_object_mut() {
                     o.insert("session".into(), Value::String(sid.clone()));
                 }
@@ -323,7 +329,7 @@ fn cancel_all_pending(state: &AppState) {
 fn abort_pending(app: &AppHandle, state: &AppState, window: &str, session: &str) {
     state.pending_sessions.lock().remove(session);
     state.output.lock().remove(session);
-    let _ = app.emit("ss:tab_aborted", json!({"session":session,"externalPrivate":true}));
+    let _ = app.emit("ss:tab_aborted", json!({"session":session}));
     let mut windows = state.windows.lock();
     windows.remove(session);
     windows.finish_prepare(window);
@@ -388,7 +394,8 @@ fn start(app: &AppHandle, state: &AppState, window: &str, rows: u16, cols: u16) 
     let session = match current { Some(id) => id, None => spawn_tab(app, state, window, rows, cols, None)? };
     let e = engine(state, &session)?;
     let sessions = state.windows.lock().sessions(window);
-    Ok(json!({ "socket": state.socket, "shell": e.shell(), "session": session, "sessions": sessions, "externalPrivate": e.session().lock().is_private() }))
+    let status = e.session().lock().status();
+    Ok(json!({ "socket": state.socket, "shell": e.shell(), "session": session, "sessions": sessions, "shared": status.shared, "externalOrigin": status.external_origin }))
 }
 
 fn ensure_runtime(app: &AppHandle, state: &AppState) -> Result<(), String> {
@@ -397,7 +404,7 @@ fn ensure_runtime(app: &AppHandle, state: &AppState) -> Result<(), String> {
         let guard = conn_core::ipc::serve_in_background(socket.clone(), state.hub.clone()).map_err(|e| e.to_string())?;
         *state.server.lock() = Some(guard);
         // Agents may open tabs. The tab appears in the strip, unattended, with the
-        // agent's reason; the human decides whether to look at it or entrust it.
+        // agent's reason; the human decides whether to look at it.
         let handle = app.clone();
         state.hub.set_opener(std::sync::Arc::new(move |agent_id, reason| {
             let st = handle.state.upgrade().ok_or("frontend closed")?;
@@ -429,6 +436,7 @@ fn open_tab(app: &AppHandle, state: &AppState, window: &str, rows: u16, cols: u1
 fn close_tab(state: &AppState, session: String) -> Result<Option<String>, String> {
     state.pending_sessions.lock().remove(&session);
     state.automation.stop_session(&session);
+    state.extensions.cancel(&session);
     state.output.lock().remove(&session);
     state.hub.remove(&session);
     if let Some(e) = state.engines.lock().remove(&session) {
@@ -442,13 +450,13 @@ fn attend(state: &AppState, session: String) -> Result<bool, String> {
     Ok(state.hub.set_attended(&session))
 }
 
-fn entrust(state: &AppState, session: String) -> Result<String, String> {
-    engine(&state, &session)?.session().lock().entrust().map_err(|e| e.to_string())
-}
-
 fn input(state: &AppState, session: String, data: String) -> Result<(), String> {
     if cancel_pending(state, &session) { return Ok(()); }
-    engine(&state, &session)?.write_input(data.as_bytes());
+    let e = engine(state, &session)?;
+    let session_state = e.session();
+    let mut s = session_state.lock();
+    state.extensions.cancel(&session);
+    s.human_input(data.as_bytes());
     Ok(())
 }
 
@@ -461,13 +469,17 @@ fn resize(state: &AppState, session: String, rows: u16, cols: u16) -> Result<(),
     if let Some(pending) = state.pending_sessions.lock().get_mut(&session) {
         pending.rows = rows.max(1); pending.cols = cols.max(1); return Ok(());
     }
-    engine(&state, &session)?.resize(rows, cols);
+    let e = engine(state, &session)?;
+    let session_state = e.session();
+    let mut s = session_state.lock();
+    state.extensions.cancel(&session);
+    s.resize(rows, cols);
     Ok(())
 }
 
 fn status(state: &AppState, session: String) -> Result<Value, String> {
     if let Some(pending) = state.pending_sessions.lock().get(&session) {
-        return Ok(json!({"externalPrivate":true,"externalStarting":true,"externalInputAvailable":false,
+        return Ok(json!({"shared":false,"externalOrigin":true,"externalStarting":true,"externalInputAvailable":false,
             "profileId":pending.profile_id,"profileName":pending.profile_name,"processAlive":false,
             "attended":true,"size":{"rows":pending.rows,"cols":pending.cols}}));
     }
@@ -476,7 +488,11 @@ fn status(state: &AppState, session: String) -> Result<Value, String> {
 
 fn take(state: &AppState, session: String) -> Result<Option<String>, String> {
     if cancel_pending(state, &session) { return Ok(None); }
-    Ok(engine(&state, &session)?.session().lock().human_take())
+    let e = engine(state, &session)?;
+    let session_state = e.session();
+    let mut s = session_state.lock();
+    state.extensions.cancel(&session);
+    Ok(s.human_take())
 }
 
 fn approve(state: &AppState, session: String, approval_id: String, decision: String) -> Result<Value, String> {
@@ -576,6 +592,8 @@ fn arg<T: serde::de::DeserializeOwned>(args: &Value, key: &str) -> Result<T,Stri
     serde_json::from_value(args.get(key).cloned().unwrap_or(Value::Null)).map_err(|e|format!("{key}: {e}"))
 }
 fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Result<Value,String> {
+    if let Some(result) = surface_commands::dispatch(state, name, &args) { return result; }
+    if let Some(result) = extension_commands::dispatch(state, name, &args) { return result; }
     match name {
         "automation_settings" => Ok(state.automation.settings()),
         "automation_save" => automation::save(state, arg(&args, "config")?),
@@ -586,7 +604,7 @@ fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Resul
             {
                 let mut output = state.output.lock();
                 if let Some(entry) = output.get_mut(&id) {
-                    for data in entry.take().unwrap_or_default() { app.emit("ss:output", json!({ "session": id, "data": data }))?; }
+                    for frame in entry.take().unwrap_or_default() { app.emit("ss:output", frame)?; }
                 }
             }
             if let Some(pending) = state.pending_sessions.lock().get_mut(&id) {
@@ -603,7 +621,6 @@ fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Resul
         "policy_rules" => serde_json::to_value(policy_rules(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
         "diagnostics" => serde_json::to_value(diagnostics(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
         "log" => serde_json::to_value(log(arg::<String>(&args, "msg")?)).map_err(|e|e.to_string()),
-        "entrust" => serde_json::to_value(entrust(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
         "input" => serde_json::to_value(input(state, arg::<String>(&args, "session")?, arg::<String>(&args, "data")?)?).map_err(|e|e.to_string()),
         "terminal_response" => { terminal_response(state, arg(&args, "session")?, arg(&args, "data")?)?; Ok(Value::Null) },
         "resize" => serde_json::to_value(resize(state, arg::<String>(&args, "session")?, arg::<u16>(&args, "rows")?, arg::<u16>(&args, "cols")?)?).map_err(|e|e.to_string()),

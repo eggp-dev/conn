@@ -264,7 +264,7 @@ pub(crate) fn dispatch(app: &AppHandle, state: &Arc<AppState>, window: &str, cal
             state.hub.set_attended(&id);
             let weak = Arc::downgrade(state);
             std::thread::spawn(move || worker(weak, b));
-            app.emit("ss:tab_opened", json!({"session":id,"focus":true,"externalPrivate":true}))?;
+            app.emit("ss:tab_opened", json!({"session":id,"focus":true,"shared":false,"externalOrigin":true}))?;
             Ok(if operation == "window.create" { json!({"session":handle,"requestId":null}) } else { json!(handle) })
         },
         "session.write" => {
@@ -303,7 +303,7 @@ pub(crate) fn dispatch(app: &AppHandle, state: &Arc<AppState>, window: &str, cal
         "session.status" => {
             let b = binding(state, &caller, &field(&args, "session")?)?;
             let s = b.session.lock();
-            Ok(json!({"session":b.handle,"processAlive":s.process_alive(),"externalPrivate":true,"inputAvailable":s.external_writer_active()}))
+            Ok(json!({"session":b.handle,"processAlive":s.process_alive(),"shared":false,"externalOrigin":true,"inputAvailable":s.external_writer_active()}))
         },
         _ => Err("Unsupported automation operation".into()),
     }
