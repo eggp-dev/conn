@@ -1,65 +1,61 @@
 <p align="center">
-  <img src="frontends/tauri/public/conn-icon.svg" width="88" height="88" alt="Conn icon: an open C with a control cursor">
+  <img src="frontends/tauri/public/conn-icon.svg" width="64" height="64" alt="Conn icon: an open C with a control cursor">
 </p>
 
 <h1 align="center">Conn</h1>
 <p align="center"><strong>Keep your agent. Share your terminal.</strong></p>
 <p align="center">English · <a href="README.ko.md">한국어</a></p>
 
-Conn connects your AI agent to a terminal you can both use. Keep the conversation in your agent client, follow its work in the shared shell, and step in by typing. Ask it to read the screen again and continue from your changes.
+Work in the same shell as your AI agent. Step in, make a correction, and ask it to continue from what you changed.
 
 ## Download
 
-**Install the desktop app — no Rust or Node.js required.** It includes the Conn CLI used to connect your agent.
+**Install the desktop app.** No Rust or Node.js required; the agent connector is included.
 
-| Platform | Download v0.6.0 preview |
+| Platform | v0.6.0 preview |
 |---|---|
-| macOS · Apple Silicon | [Download for Apple Silicon](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-aarch64-apple-darwin-desktop.dmg) |
-| Windows · x64 | [Download Windows installer](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-x86_64-pc-windows-msvc-setup.exe) |
+| macOS · Apple Silicon | [Download for Mac](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-aarch64-apple-darwin-desktop.dmg) |
+| Windows · x64 | [Download installer](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-x86_64-pc-windows-msvc-setup.exe) |
 | Ubuntu · x64 | [Download .deb](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-x86_64-unknown-linux-gnu-desktop.AppImage) |
 
-[All downloads and checksums](https://github.com/eggplantiny/conn/releases/tag/v0.6.0) · [Installation help](docs/getting-started.md) · [Platform support](docs/platform-support.md)
+Mac downloads are signed and notarized. Windows previews are unsigned. Linux builds use Ubuntu 24.04; Intel Mac distribution is paused. [Installation and updates](docs/getting-started.md) · [All assets and checksums](https://github.com/eggplantiny/conn/releases/tag/v0.6.0)
 
-New releases target Apple Silicon, Windows x64 and Linux x64. Intel Mac distribution is paused; existing Intel downloads remain in [past releases](https://github.com/eggplantiny/conn/releases).
+## A small correction, without starting over
 
-Windows preview installers are unsigned and may show an unknown-publisher warning. Linux packages are built on Ubuntu 24.04. See the release notes for signing and tested platform details.
+[![Codex and Conn: the user changes the working directory, then the agent continues from the new location](docs/assets/conn-handoff-en-poster.webp)](docs/assets/conn-handoff-en.mp4)
 
-## See it work
+The agent prepares work in one folder. You want it somewhere else. Type in Conn to take control, change the directory, then tell your agent:
 
-https://github.com/user-attachments/assets/c20ec712-1915-44c2-a6a2-08b83e6951c4
+> I changed the directory. Read the terminal and continue from here.
 
-An agent fixes a failing test. You add an edge case. It reads the updated terminal and completes the fix.
+It reads the changed screen and resumes in the corrected location. The conversation stays in your agent client; the terminal is the workspace you share.
 
-[한국어 영상](https://github.com/user-attachments/assets/4f06180c-6a2c-4c10-99e1-7941db86470b) · [Recording details](docs/demo.md)
+[Watch in English](docs/assets/conn-handoff-en.mp4) · [한국어 영상](docs/assets/conn-handoff-ko.mp4) · [Recording details](docs/demo.md)
 
-*Actual Codex CLI + Conn. Prepared demo project, automated user-role input, and shortened waits.*
+*Real Codex + Conn; a prepared recreation of a collaboration session. The user role is automated, and waiting time is edited.*
 
-## Your first collaboration
+## Try it yourself
 
-1. **Open Conn.** Install the app above and choose your shell under **Settings → Profiles**.
-2. **Connect your agent.** Open **Settings → Agents**, choose Codex, Claude Code, Cursor or GitHub Copilot, and click **Set up**. Conn registers MCP and its collaboration skill using the bundled CLI. Restart your client and keep Conn open. [Connection guide](docs/agent-integrations.md)
-3. **Try one request.** In the top-right controls, select **Autopilot**, enable **Ask before granting**, and set **Grace** to 2 seconds. Ask your agent:
+1. **Open Conn.** Choose your shell under **Settings → Profiles**.
+2. **Connect your agent.** In **Settings → Agents**, select your client and choose **Set up**. Restart the client and keep Conn open. [Connection guide](docs/agent-integrations.md)
+3. **Make one correction together.** Follow the [first collaboration](docs/first-collaboration.md): a disposable local folder, one file, and a handoff. No SSH server required.
 
-   > Use Conn to read the current screen, then request control to show the current directory. Include the exact command. Do not change files. Stop if I deny the request or take control back.
+The setup supports **Codex, Claude Code, Cursor, and GitHub Copilot**. For Codex, use the desktop app, CLI, or IDE extension with a local task. Conn connects through MCP or CLI and does not run a model. Your existing client and model account still apply. This is not a ChatGPT app integration; web/cloud tasks cannot use this local connection.
 
-Review the request and allow or deny it. Type into Conn to take control yourself. When you are done, ask the agent to read the current screen and continue. **Timeline** keeps commands and control changes together, including the original requests.
+## When you step in
 
-Taking control stops further agent input; it does not cancel a command already running.
+Typing takes control back before further agent input reaches the shell. It **does not stop an already running process**; normal terminal controls still apply. Ask the agent to read the current screen before continuing.
 
-## Use the tools you already have
+The timeline brings commands and collaboration decisions together, including denied requests and their original details. Local Bash/Zsh integration records executed shell commands, not raw typing or input inside applications.
 
-Conn is a desktop app or a session inside your existing terminal. Agents connect through **MCP or CLI**; Conn does not run a model. The demo uses Codex CLI. Other local clients supporting MCP stdio can use the copied server configuration.
+## More
 
-For CLI-only use, download a `-cli` archive from the release, put `conn` on your `PATH`, and run `conn` in your terminal. [CLI setup and source builds](docs/getting-started.md)
+- [The story: a small correction in a shared terminal](docs/collaboration-story.md)
+- [FAQ: control, SSH, passwords, and history](docs/faq.md)
+- [Profiles and backends](docs/backends.md) · [CLI setup](docs/getting-started.md)
+- [Another collaboration: fixing a test after you add an edge case](https://github.com/user-attachments/assets/c20ec712-1915-44c2-a6a2-08b83e6951c4)
+- [Contribute](CONTRIBUTING.md) · [Report a problem](https://github.com/eggplantiny/conn/issues/new/choose)
 
-## Explore
+**Preview · MIT licensed.** Commands use your account's permissions; Conn is not an OS sandbox. [Trust model](docs/security.md) · [Report a security issue](SECURITY.md)
 
-| Task | Guide |
-|---|---|
-| Install, connect, and troubleshoot | [Getting started](docs/getting-started.md) |
-| Local shells, WSL, SSH, or Docker | [Backends and profiles](docs/backends.md) |
-| Approval and execution rules | [Policy](docs/policy.md) |
-| Build from source or contribute | [Contributing](CONTRIBUTING.md) |
-| Agent and frontend integration | [Protocol](docs/protocol.md) · [Architecture](docs/architecture.md) |
-
-**Preview software · MIT licensed.** Commands run with your account's permissions. Conn's approval controls are not an operating-system sandbox. See the [trust model](docs/security.md) and [security reporting policy](SECURITY.md).
+Useful for your workflow? **Star Conn** to help others discover it. We'd especially like to hear when you wanted to take the keyboard back.

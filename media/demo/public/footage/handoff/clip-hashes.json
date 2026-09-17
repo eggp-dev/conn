@@ -1,0 +1,58 @@
+[
+  {
+    "file": "request.mp4",
+    "seconds": 19.0,
+    "cuts": [
+      {
+        "take": "raw",
+        "start": 158,
+        "end": 164
+      },
+      {
+        "take": "raw",
+        "start": 175,
+        "end": 188
+      }
+    ],
+    "sha256": "1168868932c2b99e58d93142887df354328c29bdd12cdf01419a550afbcc2b88"
+  },
+  {
+    "file": "handoff.mp4",
+    "seconds": 30.0,
+    "cuts": [
+      {
+        "take": "raw",
+        "start": 222.892,
+        "end": 236.892
+      },
+      {
+        "take": "raw",
+        "start": 239.1,
+        "end": 243.1
+      },
+      {
+        "take": "raw",
+        "start": 310.813,
+        "end": 315.813
+      },
+      {
+        "take": "raw",
+        "start": 397.943,
+        "end": 404.943
+      }
+    ],
+    "sha256": "a060ff82a3e1ac2e197b59f04df54c6dfe5e75109960d89aa72bdf887aef5cea"
+  },
+  {
+    "file": "result.mp4",
+    "seconds": 9.0,
+    "cuts": [
+      {
+        "take": "raw",
+        "start": 510,
+        "end": 519
+      }
+    ],
+    "sha256": "d3985916405a66eac34a32836269368b20567cad5349c93310596368be6b0c59"
+  }
+]

@@ -1,34 +1,43 @@
-# About the Conn demo
+# A correction, then continue
 
 English · [한국어](demo.ko.md) · [Back to Conn](../README.md)
 
-[Watch in English](https://github.com/user-attachments/assets/c20ec712-1915-44c2-a6a2-08b83e6951c4) · [Watch in Korean](https://github.com/user-attachments/assets/4f06180c-6a2c-4c10-99e1-7941db86470b)
+[![An actual Codex session and the shared Conn terminal](assets/conn-handoff-en-poster.webp)](assets/conn-handoff-en.mp4)
 
-## One task, two turns
+[70-second film](assets/conn-handoff-en.mp4) · [15-second cut](assets/conn-handoff-short-en.mp4) · [Captions](assets/conn-handoff-en.vtt) · [Try it yourself](first-collaboration.md)
 
-The left side shows an actual Codex CLI session. The right side shows Conn and the shell shared by the agent and the user role. The conversation stays in Codex while both participants work in the same terminal.
+## One shell, a change of direction
 
-1. **The agent takes a turn.** Codex reads a failing discount test from Conn, requests control, fixes the calculation, and verifies that two tests pass.
-2. **The user role steps in.** Direct terminal input takes control back and adds a prepared third test: a 125% discount should produce a zero price. Running the tests exposes a result of `-30` instead of `0`.
-3. **The agent continues.** The follow-up is: “I added an edge case. Read the terminal and continue.” Codex reads the changed screen and the new test through Conn, updates the calculation to keep prices at zero or above, verifies all three tests pass, and releases control.
+1. **Codex checks the starting point.** The external client requests control through Conn, runs `pwd` in `draft`, then waits.
+2. **The human role changes the directory.** Typing directly in Conn reclaims control. `cd ../workspace` and `pwd` put the shared shell where the work should happen.
+3. **Codex reads the new state.** The follow-up is “I changed the directory. Read the terminal and continue here.” A fresh snapshot comes before the next control request and command approvals.
+4. **The work continues there.** Codex creates and reads `workspace/collaboration.txt`, checks that `draft/collaboration.txt` is absent, and returns control.
 
-The agent reads the new state when asked to continue. It receives the screen through Conn's snapshot tool; the demo does not depend on manually copying terminal output into the conversation.
+The resulting file contains `We continued from your correction.` followed by a newline. A separate byte-level check confirmed the exact contents and that no file was created in the original directory.
 
-## How it was made
+## What you are watching
 
-- The session uses **Codex CLI 0.153.0**, **gpt-6-astra**, and medium reasoning effort, connected to Conn over MCP stdio. The model chooses its commands in response to the actual terminal state; agent commands are not prequeued by a demo driver.
-- The scenario uses a disposable demo project, a prepared edge-case test, authored prompts, and separate session data. Browser automation performs the user-role approvals and terminal input. No independent human participant is portrayed.
-- A capture-only PTY bridge displays the real Codex CLI beside the unchanged Conn Svelte frontend. Conn uses its native Rust backend on Ubuntu through the local browser test adapter. This split view is a recording arrangement; users run Codex and Conn in their own windows.
-- The picture is an actual screen recording. A stable split view keeps the conversation and shared terminal visible. Captions and cuts shorten waiting time; the finished film is an edited account of the session, not a full transcript.
-- English and Korean editions use the same session footage with localized editorial text.
-- The repository uses a linked poster and MP4 files. These links do not promise an inline GitHub video player; a hosted attachment can replace the link later.
+Recorded on September 17, 2026, with **Codex CLI 0.153.0**, **gpt-6-astra**, medium reasoning effort, and Conn's native Rust backend on Ubuntu. The actual Svelte interface runs through the browser test adapter; the captured application code matches v0.6.0. The side-by-side wrapper is recording tooling, not an additional Conn product interface.
 
-See the [recording setup](../media/demo/RECORDING.md) and [browser test adapter](browser-testing.md). This footage validates the captured collaboration flow on Ubuntu; it is not a native installer test for Linux, macOS, or Windows.
+This is a prepared reconstruction of a collaboration we experienced: the operator supplies the task and automates the human-role approvals, directory change and follow-up. **There is no independent human participant in this recording.** Codex selects its commands and runs them through Conn's MCP server; its terminal output and the application's responses are real.
 
-## Reading the interaction
+Capture instructions define the pause point and the one-file continuation task in advance. That is why the visible follow-up can be short. The [first-collaboration guide](first-collaboration.md) gives a self-contained prompt for a fresh session. In this take, Codex chose exclusive file creation with Python 3; the guide does not require that exact command.
 
-Human terminal input reclaims the lease and stops subsequent agent writes. It does not undo a command or terminate a process already running; normal terminal interrupt controls still apply.
+## The edit
 
-A planned command in a request describes the agent's intent. An `executed` timeline entry records delivery to the shell, not an exit status. In the demo, the actual test output provides the result. The timeline helps review commands and control changes; it does not store terminal output or scrollback.
+- Fixed framing, no camera zooms or pans. Titles and captions sit outside both terminals.
+- The opening previews the real correction, then explicitly returns to **“A moment earlier.”** The rest preserves event order while removing waits.
+- Control permission and command-policy approval are separate real steps. The longer cut shows the renewed control request and the file-creation approval; the short cut moves from the correction to the verified result.
+- Both languages use the same footage. The [recording notes](../media/demo/RECORDING-HANDOFF.md) and [edit contract](../media/demo/HANDOFF.md) document the selected intervals and limits.
 
-For the same interaction with your own agent, follow [Getting started](getting-started.md). See the [trust model](security.md) for the scope of policy and audit records.
+The repository poster links to the video file. GitHub inline playback requires uploading the reviewed film and using the resulting attachment URL at publication; a repository MP4 link alone does not provide that player.
+
+## Reading the result
+
+Typing reclaims control and blocks subsequent agent writes. It does not stop a process already running. Here, the agent deliberately waits before the correction, and rereads the screen when asked to continue.
+
+A timeline entry records a command or collaboration decision; it does not store terminal output or scrollback, and delivery to the shell is not proof of success. This example verifies the result from the live shell and an independent file check.
+
+This capture establishes the local Ubuntu flow shown. It does not validate every client, native installer or remote workflow. The original remote experiment also hit an unresolved interactive `input_pending` case; the [case study](collaboration-story.md) keeps that limitation separate from the successful handoff.
+
+See the [trust model](security.md), [browser adapter](browser-testing.md), and the earlier [test-repair demonstration](demo-test-repair.md).

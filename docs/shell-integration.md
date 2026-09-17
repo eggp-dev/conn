@@ -1,6 +1,6 @@
 # Shell command history
 
-[한국어](shell-integration.ko.md) · Unreleased
+[한국어](shell-integration.ko.md) · Available since v0.6.0
 
 Ordinary local Bash and Zsh sessions can put human commands back in the shared
 timeline. Commands are observed at the shell's execution boundary. Conn does not
@@ -9,8 +9,8 @@ reconstruct them from keyboard input, Enter presses, terminal text or prompt pat
 ## Use
 
 Select a local Bash or Zsh profile in Settings → Profiles and open a new tab.
-The Timeline panel shows whether shell command recording is connected. Existing
-sessions need a new tab; user startup files are not edited.
+Run a command, then open Timeline to see its entry. Existing sessions need a new
+tab; user startup files are not edited.
 
 One entry moves from **Running** to **Completed**, **Failed**, or **Completion
 unconfirmed**. Expand it for the working directory, exit code and elapsed time.
@@ -31,7 +31,7 @@ request/approval entry by ID. Uncertain attribution is labelled **Shell**.
 - Bash: an initial `PROMPT_COMMAND` bootstraps hooks after normal startup. Existing
   prompt commands and their exit status are preserved. An existing DEBUG trap,
   function tracing or extended debugging prevents installation. Startup files
-  that overwrite `PROMPT_COMMAND` can prevent the bootstrap; the UI then reports
+  that overwrite `PROMPT_COMMAND` can prevent the bootstrap and leave command
   recording unavailable. Bash uses fresh history entries, so disabled history,
   history exclusions and suppressed duplicates can leave commands unrecorded.
 - Zsh: a temporary `.zshenv` restores the original `ZDOTDIR`, sources the original
@@ -59,5 +59,6 @@ input, nested shells, private sessions, existing prompt/debug hooks, suppressed
 history, agent correlation and unconfirmed completion. Frontend tests cover live
 and saved lifecycle records. Zsh can be selected with `CONN_TEST_ZSH`.
 The separate authentication fixture project covers real SSH password/retry/key
-authentication, hidden/masked/visible prompts and Vim. Linux has been exercised;
-native macOS verification remains a release requirement.
+authentication, hidden/masked/visible prompts and Vim. These Linux checks do not
+establish native macOS shell-hook behavior; platform-specific hands-on verification
+remains necessary. See the [v0.6.0 validation limits](releases/v0.6.0-validation.md#coverage-limits).

@@ -1,4 +1,19 @@
-# Conn collaboration film
+# Conn collaboration films
+
+## Primary: a correction, then continue
+
+The current launch package is the **70-second directory-correction film**, plus a **15-second cut**, in English and Korean. An actual Codex session checks a location, the automated human role changes it directly in Conn, and Codex reads the new state before continuing there. Fixed framing keeps both tools visible; captions stay outside the product.
+
+Start with [HANDOFF.md](HANDOFF.md) for the edit, Studio compositions and render commands, and [RECORDING-HANDOFF.md](RECORDING-HANDOFF.md) for source evidence, capture setup and limitations. The public walkthrough is [docs/demo.md](../../docs/demo.md).
+
+- Main compositions: `ConnHandoffEN`, `ConnHandoffKO`.
+- Short compositions: `ConnHandoffShortEN`, `ConnHandoffShortKO`.
+- Outputs: `docs/assets/conn-handoff-*.mp4`, bilingual captions, posters and social covers.
+- Sources: `public/footage/handoff/`; editorial copy: `src/handoff/edit.ts`.
+
+## Earlier example: repair a test
+
+The following commands and source map belong to the separate test-repair film.
 
 Editable English and Korean versions of a **62-second, 1920×1080 / 30 fps** demonstration: an actual Codex CLI session and a person’s role share a Conn terminal, then the agent continues after that role adds a new requirement.
 
