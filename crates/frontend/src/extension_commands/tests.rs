@@ -138,3 +138,13 @@ fn take_without_agent_lease_still_cancels_in_session_transaction() {
 fn quiet_resize_cancels_in_session_transaction() {
     assert_owner_action_cancels_atomically("resize", json!({"rows":30,"cols":100}));
 }
+
+#[test]
+fn stop_sharing_cancels_ready_completion_in_session_transaction() {
+    assert_owner_action_cancels_atomically("set_sharing", json!({"shared":false}));
+}
+
+#[test]
+fn hidden_surface_cancels_ready_completion_in_session_transaction() {
+    assert_owner_action_cancels_atomically("invalidate_surface", json!({}));
+}
