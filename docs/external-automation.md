@@ -2,12 +2,12 @@
 
 [한국어](external-automation.ko.md)
 
-**Available in v0.6.0 and newer — private external automation.** This guide
-describes the replacement for v0.5.1's recorded, agent-based automation path;
-that older release does not provide these protections. The adapters target macOS
-Apple Silicon and Linux D-Bus; the Windows adapter is not implemented. The
-validation section below separates implementation and CI checks from native
-Apple Event and external-launcher acceptance testing.
+**Unreleased hardcut: optional sharing after private external execution.** The native
+macOS Apple Silicon and Linux D-Bus launch/input adapters were introduced in v0.6.0.
+That release keeps external sessions private for their whole lifetime. The working tree
+adds an owner-controlled sharing transition on the same PTY; the Windows external
+adapter is not implemented. New sharing behavior needs native acceptance on each OS,
+separately from earlier v0.6.0 launch/input checks.
 
 ## Enable once, choose profiles
 
@@ -98,7 +98,7 @@ finished. The external application determines when its next input is appropriate
 | `write text "text" to session id [newline true] [intent "reason"] [request id "unique-id"]` | Request ID; queues one line and optional Return. `intent` is accepted only for compatibility, ignored and discarded. |
 | `request state requestID` | Plain state string. |
 | `request status requestID` | Metadata-only JSON: `requestId`, opaque `session`, `state`, optional generic `error` code. |
-| `session status sessionID` | Metadata-only JSON: opaque `session`, `processAlive`, `externalPrivate: true`, `inputAvailable`. |
+| `session status sessionID` | Metadata-only JSON: opaque `session`, `processAlive`, `shared: false`, `externalOrigin: true`, `inputAvailable`. |
 | `cancel request requestID` | Cancellation result; revokes this session's external writer and cancels its remaining queued writes. |
 | `release session sessionID` | Revokes the external writer; leaves the terminal available to the human. |
 
@@ -119,46 +119,61 @@ app run and a 120-second write deadline including queue time. Completed polling
 entries contain metadata only. Payload buffers are released on delivery, failure,
 cancellation or timeout. Bytes already sent to the child cannot be recalled.
 
-## Private sessions and human takeover
+## Private sessions, sharing and human takeover
 
-External sessions are private from creation. They are absent from MCP/public IPC
-tab lists, and explicit public access cannot reveal their screen, input, events,
-status details, titles or cwd. Only the owning native window receives their output.
-**Sharing a private external session with an AI agent is not implemented.** A
-normal manually opened Conn session retains its existing collaboration behavior.
+External sessions start private. They are absent from MCP/public IPC tab lists, and
+explicit public access cannot reveal their screen, input, events, status details,
+titles or cwd. Only the owning native window receives their output.
 
-Human input, explicit takeover, cancellation, release, disabling automation,
-removing the permitted profile or closing the session revokes the external writer
-and cancels queued writes. Human input proceeds in the private terminal. Later
-requests cannot reacquire the writer or target an existing human tab; the caller
-must create a new session. Launcher exit does not kill a successfully started
-terminal, but an unverifiable caller cannot deliver pending writes.
-Released session handles become unavailable; status cannot be used to reacquire
-input access.
+From v0.7.0 the human can open the app's sharing control, choose live
+agent connections and share the **same terminal process and SSH connection**. Conn
+first revokes the external writer and queued input. It resets prior agent work and
+publishes the current human-visible viewport under a new sharing boundary. It does
+not clear the human's screen, create another shell, infer authentication success or
+restore private inputs as history. An unfinished tracked input line must be completed
+or cancelled before the transition. External startup origin remains attached to the
+session, so later agent commands still require review for that execution environment.
 
-xterm terminal-protocol replies (for example cursor/status responses) are not
-human input. They must not revoke the external writer or create activity records.
+The external application cannot turn sharing on, select an agent or reacquire its
+writer through AppleScript/D-Bus. Sharing starts from human control; selected agents
+must request control through the normal collaboration path. Stopping sharing blocks
+further agent access while the human and child process continue. Copies already sent
+to an agent cannot be recalled.
+
+Human input, explicit takeover, cancellation, release, disabling automation, removing
+profile permission or closing also revokes the external writer and queued input.
+Later requests cannot reacquire the writer or target an existing human tab; create a
+new session if another external task is needed. Launcher exit does not kill a
+successfully started terminal, but an unverifiable caller cannot deliver pending writes.
+Released handles become unavailable; status cannot be used to regain input authority.
+
+xterm cursor/status replies are terminal protocol responses, not human input. They
+must not revoke the external writer or create activity records.
 
 ## Recording and limits
 
 Conn does not record activity for private external sessions: no private-session
 or AppleScript audit events, timeline rows, recent-activity settings, raw input
-history, payload-derived titles or persisted request results. This applies to
-human typing in that external-origin session for its entire lifetime. Settings
-store permissions only, and restart restores no owner handles, queued payloads,
+history, payload-derived titles or persisted request results. This applies while the
+session remains private. After an explicit owner sharing
+transition, new agent/collaboration activity may be recorded; private startup arguments
+and prior input are never backfilled. Settings store permissions only, and restart
+restores no owner handles, queued payloads,
 processes or requests. Programmatic clipboard writes from private terminal output
 are disabled; explicit human copy remains possible.
 
 This is not a zero-retention or OS-isolation claim. The terminal view and scrollback
 exist in memory. The child, shell history/tracing, argv, environment, OS buffers,
 clipboard, crash dumps and external-application logs are separate surfaces. There
-is no password detector, authentication-success detector or credential vault.
+is no password or authentication-success detector. The separate optional model provider
+uses an OS keychain for its API key; it does not capture terminal credentials.
 Same-user tools may use their own shells and files outside Conn's API gates.
 
 Ordinary sessions also do not reconstruct commands from raw human input. Their
 supported local Bash/Zsh hooks can record human commands at shell execution;
-application input is not collected as command history. Private external sessions
-never install those hooks. Existing audit files, saved timeline records and
+application input is not collected as command history. External sessions
+never install those hooks, including during a later sharing transition. Existing audit
+files, saved timeline records and
 backups are not automatically erased. Review historical data separately before
 sharing it. See the [trust model](security.md#private-external-sessions).
 
@@ -166,7 +181,8 @@ sharing it. See the [trust model](security.md#private-external-sessions).
 
 ### Quick check on an Apple Silicon Mac
 
-Use **v0.6.0 or newer**, not the v0.5.1 download.
+The following launch/input checks apply to **v0.6.0 or newer**. Use a hardcut build
+for the additional sharing checks below; v0.6.0 cannot perform that transition.
 Use synthetic markers only and confirm which Conn app your script targets.
 
 1. Open **Settings → Automation**, keep a local default profile selected and
@@ -221,9 +237,27 @@ For each release, test the signed Apple Silicon build with a disposable launcher
 - Metadata-only status, ignored `intent`, no private activity recording, and upgrade re-enable.
 - The external application's actual permitted template, with synthetic input.
 
-Later AI sharing remains separate work. Ordinary local Bash/Zsh sessions now have
-[shell command integration](shell-integration.md). External private sessions never
-install it and remain unrecorded, including after human takeover.
+### Additional hardcut sharing acceptance
+
+1. In a disposable external session, finish synthetic hidden/masked authentication.
+2. Confirm the human sees the intended screen; choose actual connected agents and
+   start sharing from the native owner UI.
+3. Verify the same child PID and authenticated connection remain. The agent snapshot
+   must match the current viewport and exclude any concealed input. Move the human's
+   scroll position and verify the agent follows that view.
+4. Try a late external write from the old owner handle. It must fail, and no queued
+   external text may be inserted after sharing starts.
+5. Request agent control, perform a harmless command, then correct the directory as
+   the human. The agent must reread the screen before continuing.
+6. Stop sharing during a pending snapshot/suggestion. Further access must fail while
+   human input continues. A same-name reconnect must not inherit selected membership.
+7. Inspect new collaboration history: only post-sharing actions belong there. Private
+   startup command, synthetic credentials and prior private input must not be backfilled.
+
+These are release gates, not a claim that the new transition passed on a signed Mac
+or every external launcher. Ordinary local Bash/Zsh have [shell integration](shell-integration.md).
+External sessions never install it during sharing, so human command history is not
+reconstructed from their terminal input.
 
 <a id="linux-d-bus-adapter-unreleased"></a>
 

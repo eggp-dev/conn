@@ -1,10 +1,11 @@
 import type { ITheme } from "@xterm/xterm";
 
-export type ThemeId = "midnight" | "paper" | "solar" | "nord" | "mono";
+export type ThemeId = string;
 export type Theme = {
   id: ThemeId;
   name: string;
   kind: "dark" | "light";
+  cursor?: string;
   blurb: string;
   tokens: { bg: string; surface: string; surface2: string; fg: string; muted: string; line: string; warn: string; ok: string; danger: string; selection: string };
   xterm: Omit<ITheme, "cursor" | "cursorAccent" | "selectionBackground">;
@@ -58,5 +59,5 @@ export function applyTheme(t: Theme, agent = "#8b7cff"): ITheme {
   r.setProperty("--agent", agent);
   document.documentElement.dataset.theme = t.id;
   document.documentElement.dataset.kind = t.kind;
-  return { ...t.xterm, cursor: t.tokens.fg, cursorAccent: t.tokens.bg, selectionBackground: t.tokens.selection };
+  return { ...t.xterm, cursor: t.cursor ?? t.tokens.fg, cursorAccent: t.tokens.bg, selectionBackground: t.tokens.selection };
 }

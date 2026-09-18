@@ -246,3 +246,31 @@ test('saved records stay in their own session, with legacy records separate', ()
   recordTimeline(groups['shell-a'], exec('whoami'));
   assert.equal(groups['shell-b'].items.length, 1);
 });
+
+
+test('sharing boundaries retain earlier shell history and exclude the private interval', () => {
+  const s=newTimeline();
+  recordTimeline(s,{event:'shell_command_started',commandId:'c1',actor:'human',cmd:'pwd'},1);
+  recordTimeline(s,{event:'sharing_changed',shared:false,generation:2,cmd:'never retained'},2);
+  recordTimeline(s,{event:'human_exec',cmd:'PRIVATE_CANARY'},3);
+  recordTimeline(s,{event:'sharing_changed',shared:true,generation:3},4);
+  recordTimeline(s,{event:'human_exec',cmd:'whoami'},5);
+  assert.deepEqual(s.items.map(i=>[i.kind,i.text]),[['exec','pwd'],['sharing',''],['sharing',''],['exec','whoami']]);
+  assert.deepEqual(s.items.filter(i=>i.kind==='sharing').map(i=>i.shared),[false,true]);
+  assert.equal(s.items[0].status,'unknown');assert.equal(s.recording,true);
+  assert.equal(JSON.stringify(s).includes('PRIVATE_CANARY'),false);assert.equal(JSON.stringify(s).includes('never retained'),false);
+  assert.equal(visibleTimeline(s,'commands').length,2);assert.equal(visibleTimeline(s,'collaboration').length,2);
+  recordTimeline(s,{event:'sharing_changed',shared:true,generation:3},6);assert.equal(s.items.length,4);
+});
+test('saved sharing boundaries restore a private gap without restoring its payloads', () => {
+  const groups=savedTimelines([
+    {session:'same-shell',action:'exec',actor:'human',cmd:'pwd'},
+    {session:'same-shell',action:'sharing_stopped',actor:'human',generation:2},
+    {session:'same-shell',action:'exec',actor:'human',cmd:'PRIVATE_CANARY'},
+    {session:'same-shell',action:'sharing_started',actor:'human',generation:3},
+    {session:'same-shell',action:'exec',actor:'human',cmd:'whoami'},
+  ]);
+  const s=groups['same-shell'];assert.equal(Object.keys(groups).length,1);
+  assert.deepEqual(s.items.map(i=>i.text),['pwd','','','whoami']);
+  assert.ok(s.items.every(i=>i.saved));assert.equal(JSON.stringify(s).includes('PRIVATE_CANARY'),false);
+});

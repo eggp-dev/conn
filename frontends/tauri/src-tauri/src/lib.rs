@@ -57,6 +57,7 @@ pub fn run() {
             };
             match event {
                 tauri::WindowEvent::Focused(true) => harness.focus_window(window.label()),
+                tauri::WindowEvent::Focused(false) => harness.blur_window(window.label()),
                 tauri::WindowEvent::Destroyed => harness.close_window(window.label()),
                 _ => {}
             }

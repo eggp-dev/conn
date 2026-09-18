@@ -6,7 +6,7 @@
   let { onselect, onclose, onnew, onsettings, onpalette, ontimeline }: { onpalette: () => void; ontimeline: () => void; onsettings: () => void; onselect: (id: string) => void; onclose: (id: string) => void; onnew: (profileId?: string) => void } = $props();
 </script>
 
-<div class="tabs" class:private={cur().externalPrivate}>
+<div class="tabs" class:private={!cur().shared}>
   <AppMenu onnew={() => onnew()} {onsettings} {onpalette} {ontimeline} />
   <div class="tablist" role="tablist" aria-label={t("g.tabs")}>
   {#each st.order as id, i (id)}
@@ -19,12 +19,12 @@
       <span class="dot"></span>
       <span class="n">{i + 1}</span>
       <span class="title">{tb.title}</span>
-      {#if tb.externalPrivate}<span class="badge" title={t("private.description")}>{t(tb.externalStarting ? "private.preparing" : "private.label")}</span>{/if}
+      {#if !tb.shared}<span class="badge" title={t("private.description")}>{t(tb.externalStarting ? "private.preparing" : "private.label")}</span>{/if}
       {#if tb.openedBy}<span class="by" style:--a={agentColor(tb.openedBy)} title={t("tab.opened.title", { agent: tb.openedBy })}>{tb.openedBy}</span>{/if}
       {#if tb.approval}<span class="badge warn">{t("badge.approval")}</span>{/if}
       {#if waiting && id !== st.active}<span class="badge prop" style:--a={agentColor(waiting.agentId)} title={t("badge.proposal.title", { agent: waiting.agentId })}>{t("badge.proposal", { agent: waiting.agentId })}</span>{/if}
       {#if tb.attention}<span class="badge">{t("badge.knock", { agent: tb.attention.agentId })}</span>{/if}
-      {#if tb.entrustedTo}<span class="badge trust" title={t("badge.entrusted.to", { agent: tb.entrustedTo })}>{t("badge.entrusted")}</span>{:else if tb.paused}<span class="badge">{t("badge.paused")}</span>{/if}
+      {#if tb.paused}<span class="badge">{t("badge.paused")}</span>{/if}
       <span class="x" role="button" tabindex="-1" onclick={(e) => { e.stopPropagation(); onclose(id); }}>×</span>
     </button>
   {/each}
@@ -53,7 +53,6 @@
   .badge { font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--surface2); color: var(--fg); white-space: nowrap; }
   .badge.warn { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
   .badge.prop { background: color-mix(in srgb, var(--a) 22%, transparent); color: var(--a); }
-  .badge.trust { background: color-mix(in srgb, var(--agent) 22%, transparent); color: var(--agent); }
   .x { margin-left: 2px; color: transparent; padding: 0 2px; border-radius: 4px; }
   .tab:hover .x { color: var(--muted); }
   .x:hover { color: var(--fg); background: var(--line); }

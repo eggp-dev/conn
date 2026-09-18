@@ -159,7 +159,7 @@ fn hand_back_returns_control_to_last_agent() {
 
 #[test]
 fn session_allow_can_be_revoked() {
-    let mut h = Harness::new();
+    let mut h = Harness::headless();
     let fe = h.frontend("ui");
     h.agent(1, "claude");
     h.session.agent_request_control(1).unwrap();

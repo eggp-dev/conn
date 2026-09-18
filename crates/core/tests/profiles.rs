@@ -202,14 +202,17 @@ fn endpoint_bind_errors_surface_without_replacing_a_live_server() {
 
 #[test]
 fn native_profile_launches_with_environment_and_cleans_up_on_termination() {
-    use conn_core::{affordance::Actor, audit::Audit};
+    use conn_core::audit::Audit;
     use conn_core::{Engine, EngineConfig};
     let temp = tempfile::tempdir().unwrap();
     let mut p = local();
     p.args = vec![];
     p.cwd = Some(temp.path().display().to_string());
     p.env.insert("CONN_TEST_VALUE".into(), "42".into());
+    let shown=std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured=shown.clone();
     let engine = Engine::spawn(EngineConfig {
+        output_frame: Some(Box::new(move |frame| captured.lock().unwrap().extend_from_slice(&frame.data))),
         profile: Some(p),
         policy: Some(PolicyStore::from_policy(Policy::allow_all())),
         audit: Some(Audit::null()),
@@ -225,10 +228,7 @@ fn native_profile_launches_with_environment_and_cleans_up_on_termination() {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(8);
     let mut seen = false;
     while std::time::Instant::now() < deadline {
-        let snapshot = engine.session().lock().snapshot(Actor::Human).unwrap();
-        if serde_json::to_string(&snapshot)
-            .unwrap()
-            .contains("CONN_RESULT_42")
+        if String::from_utf8_lossy(&shown.lock().unwrap()).contains("CONN_RESULT_42")
         {
             seen = true;
             break;

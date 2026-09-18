@@ -1,11 +1,15 @@
 # 작업 기록을 남기지 않는 외부 자동화 설계
 
+**과거 설계 기록입니다.** 영구 비공유와 향후 공유 설계는 2026-09-17의
+[공유 화면 계약](PRD.ko.md), [아키텍처](architecture.ko.md), [자동화 사용법](external-automation.ko.md)으로
+대체되었습니다. 아래 날짜별 검증 기록은 그대로 보존합니다.
+
 [English](automation-design.md) · [미배포 구현 사용법](external-automation.ko.md)
 
 **로컬 구현 완료 · macOS 실기 검증 대기 · 2026-09-16.** 기준은 v0.5.1,
 커밋 `b3fba46fe14f456d7032d44c50ffe3e09d89d88f`입니다.
 직접 실행, 비공유 세션, 외부 입력 회수와 UI 변경을 이 체크아웃에 구현했습니다.
-Linux에서 실제 PTY·IPC·프런트엔드 테스트를 통과했습니다. 실w제 Apple Events,
+Linux에서 실제 PTY·IPC·프런트엔드 테스트를 통과했습니다. 실제 Apple Events,
 OS 동의와 서명된 macOS 앱은 별도 실기 검증이 필요합니다.
 **v0.5.1에는 아래 보호 기능이 없으며, 이번 변경은 아직 배포하지 않았습니다.**
 

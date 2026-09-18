@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.0 — Preview · 2026-09-18
+
+- Make the owner-rendered viewport the only agent observation source, with current output sequencing, scroll position, concealed-cell handling and optional PNG snapshots. Hidden or stale surfaces pause agent access.
+- Separate external origin from sharing. Start/stop sharing the same PTY with selected live agent connections; revoke external input and keep private input out of retrospective history.
+- Remove public owner impersonation, raw-output subscriptions, unattended Entrust, and terminal-proxy/headless startup. Keep MCP, agent commands and local profile/log utilities.
+- Add a versioned extension registry, declarative themes and opt-in native OpenAI completion proposals using the OS credential store. Acceptance inserts text; execution remains separate.
+- Keep shared UI, owner-window enforcement, bilingual settings and the reserved interaction dock. Extend rendering, authentication, authority and cancellation regression coverage.
+
+This preview introduces a breaking protocol change. Restart the app and its MCP clients together; live sessions are not migrated. Existing profile/settings files and saved activity remain. Reconnected agents do not inherit explicit selection by display name. See [the product contract](docs/PRD.md), [protocol v2](docs/protocol.md) and [extensions](docs/extensions.md).
+
+한국어: 실제 표시 화면을 관찰 기준으로 통합하고, 같은 셸에서 연결별 공유를 시작·중단할 수 있게 했습니다. 구형 headless·Entrust·공개 소켓의 소유자 경로를 제거하고, 선언형 테마와 OS 키 저장소 기반 자동완성을 추가합니다. 프로토콜이 바뀌므로 앱과 MCP를 함께 재시작해야 합니다. 기존 파일과 저장 기록은 유지하지만 실행 중인 셸을 이전하지는 않습니다.
+
+- Validate native macOS sharing, hidden/masked authentication, Keychain and live-lease focus/minimization guards; distinguish development-app evidence from distribution verification. [macOS results](docs/shared-surface-macos-validation-results.md).
+
 ## 0.6.0 — Preview · 2026-09-17
 
 - Add signed in-app updates with background checks/downloads, preview channels, progress and user-controlled installation/restart. Older versions require one manual install; Debian packages remain system-managed/manual.

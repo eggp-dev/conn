@@ -60,12 +60,6 @@ isolate_dangerous: true
 # An agent's ENTER must carry a one-line intent
 require_intent: true
 
-# The most an entrusted agent may do while the human is away from the tab
-#   observe   look only (effectively waits)
-#   copilot   propose only; the human runs it when they return
-#   autopilot keep running whatever policy allows (approvals wait for the human)
-unattended: copilot
-
 default: allow
 "#;
 
@@ -98,16 +92,10 @@ struct PolicyFile {
     isolate_dangerous: bool,
     #[serde(default = "default_true")]
     require_intent: bool,
-    /// What an entrusted agent may do while the human is away: observe | copilot | autopilot.
-    #[serde(default = "default_unattended")]
-    unattended: String,
     #[serde(default)]
     default: DefaultDecision,
 }
 
-fn default_unattended() -> String {
-    "copilot".into()
-}
 
 fn default_opaque() -> DefaultDecision {
     DefaultDecision::Confirm
@@ -160,8 +148,6 @@ pub struct Policy {
     pub opaque: DefaultDecision,
     pub isolate_dangerous: bool,
     pub require_intent: bool,
-    /// Cap on the agent mode while entrusted-and-unattended.
-    pub unattended: String,
     pub default: DefaultDecision,
 }
 
@@ -249,7 +235,6 @@ impl Policy {
             "opaque": self.opaque,
             "isolateDangerous": self.isolate_dangerous,
             "requireIntent": self.require_intent,
-            "unattended": self.unattended,
             "default": self.default,
         })
     }
@@ -264,7 +249,6 @@ impl Policy {
             opaque: file.opaque,
             isolate_dangerous: file.isolate_dangerous,
             require_intent: file.require_intent,
-            unattended: file.unattended,
             default: file.default,
         })
     }
@@ -275,7 +259,7 @@ impl Policy {
 
     /// Permissive policy used only when nothing else could be loaded.
     pub fn allow_all() -> Self {
-        Self { deny: vec![], confirm: vec![], protected: vec![], protected_set: None, opaque: DefaultDecision::Allow, isolate_dangerous: false, require_intent: false, unattended: "autopilot".into(), default: DefaultDecision::Allow }
+        Self { deny: vec![], confirm: vec![], protected: vec![], protected_set: None, opaque: DefaultDecision::Allow, isolate_dangerous: false, require_intent: false, default: DefaultDecision::Allow }
     }
 
     pub fn is_protected(&self, path: &std::path::Path) -> bool {
@@ -544,9 +528,6 @@ impl PolicyStore {
         LineAnalysis {cwd:None,segments:verdicts,decision:worst,isolation_violation}
     }
 
-    pub fn unattended_cap(&self) -> &str {
-        &self.policy.unattended
-    }
 }
 
 /// Small dialect-aware lexer for explicit command rules. It does not certify scripts.

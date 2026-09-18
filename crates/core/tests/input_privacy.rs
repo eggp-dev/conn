@@ -36,6 +36,7 @@ fn untracked_partial_input_cannot_be_appended_to_or_reconstructed_by_an_agent() 
 fn screen_permission_blocks_reads_but_reenabling_reveals_existing_output() {
     let mut h = Harness::new(); h.agent(1, "agent");
     h.session.pty_output(b"SYNTHETIC_ECHOED_SECRET");
+    common::present(&mut h.session, vec!["SYNTHETIC_ECHOED_SECRET".into()]);
     h.session.set_affordance_mask(Some(HashSet::new()));
     assert!(h.session.snapshot(Actor::Agent {conn:1}).is_err());
     assert!(h.session.snapshot(Actor::Human).unwrap().projection.screen.join("\n").contains("SYNTHETIC_ECHOED_SECRET"));

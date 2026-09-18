@@ -170,6 +170,7 @@ fn confirm_then_deny_from_prompt() {
     assert!(h.session.prompt_active());
     assert_eq!(h.session.check_approval(&id).unwrap().state, ApprovalState::Pending);
     assert!(h.session.affordances(Actor::Agent { conn: 1 }).contains(&Affordance::CheckApproval));
+    common::present(&mut h.session, vec!["Approval: recursive delete".into()]);
     assert!(matches!(h.session.agent_type(1, "x"), Err(SessionError::ApprovalPending(_))));
 
     // PTY output while the prompt is up is held back, then flushed
@@ -194,19 +195,23 @@ fn confirm_then_grant_via_cli_and_session_allow() {
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "kubectl delete pod a").unwrap();
     let KeyResult::Pending { approval_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
+    common::present(&mut h.session, vec!["Approval: delete resource".into()]);
     let info = h.session.resolve_approval(&approval_id, Decision::Grant, "cli").unwrap();
     assert_eq!(info.state, ApprovalState::Granted);
     assert_eq!(h.pty_str(), "kubectl delete pod a\r");
 
     // second time: [A] promotes the label for the session
     h.clear_pty();
+    common::present(&mut h.session, vec!["$ ".into()]);
     h.session.agent_type(1, "kubectl delete pod b").unwrap();
     assert!(matches!(h.session.agent_send_key(1, "ENTER").unwrap(), KeyResult::Pending { .. }));
+    common::present(&mut h.session, vec!["Approval: delete resource".into()]);
     h.session.human_input(b"A");
     assert_eq!(h.pty_str(), "kubectl delete pod b\r");
     assert_eq!(h.session.status().session_allows, vec!["delete resource".to_string()]);
 
     h.clear_pty();
+    common::present(&mut h.session, vec!["$ ".into()]);
     h.session.agent_type(1, "kubectl delete pod c").unwrap();
     assert!(matches!(h.session.agent_send_key(1, "ENTER").unwrap(), KeyResult::Executed { .. }));
     assert_eq!(h.pty_str(), "kubectl delete pod c\r");
@@ -235,6 +240,7 @@ fn interrupt_cancels_pending_approval() {
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "sudo ls").unwrap();
     let KeyResult::Pending { approval_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
+    common::present(&mut h.session, vec!["Approval: sudo ls".into()]);
     h.session.agent_interrupt(1).unwrap();
     assert_eq!(h.session.check_approval(&approval_id).unwrap().state, ApprovalState::Denied);
     assert_eq!(h.pty_str(), "sudo ls\x15\x03");
@@ -289,10 +295,13 @@ fn tab_completion_falls_back_to_vt_model() {
     h.agent(1, "copilot");
     h.session.agent_request_control(1).unwrap();
     h.session.pty_output(b"dev$ ");
+    common::present(&mut h.session, vec!["dev$ ".into()]);
     h.session.agent_type(1, "ls sr").unwrap();
     h.session.pty_output(b"ls sr");
+    common::present(&mut h.session, vec!["dev$ ls sr".into()]);
     h.session.agent_send_key(1, "TAB").unwrap();
     h.session.pty_output(b"c/"); // shell completed to "ls src/"
+    common::present(&mut h.session, vec!["dev$ ls src/".into()]);
     let r = h.session.agent_send_key(1, "ENTER").unwrap();
     assert!(matches!(r, KeyResult::Executed { ref cmd } if cmd == "ls src/"), "{r:?}");
 }
@@ -303,8 +312,10 @@ fn clean_tracker_wins_over_unrelated_or_stale_screen_output() {
     h.agent(1, "copilot");
     h.session.agent_request_control(1).unwrap();
     h.session.pty_output(b"$ ");
+    common::present(&mut h.session, vec!["$ ".into()]);
     h.session.agent_type(1, "ls").unwrap();
     h.session.pty_output(b"rm -rf ./tmp"); // output is not the submitted input
+    common::present(&mut h.session, vec!["$ rm -rf ./tmp".into()]);
     let r = h.session.agent_send_key(1, "ENTER").unwrap();
     assert!(matches!(r, KeyResult::Executed { ref cmd } if cmd == "ls"), "{r:?}");
 }
@@ -326,6 +337,7 @@ fn snapshot_matches_screen_and_audits_observe() {
     let mut h = Harness::new();
     h.agent(1, "copilot");
     h.session.pty_output(b"dev$ kubectl get pods\r\napi-1  Running\r\ndev$ ");
+    common::present(&mut h.session, vec!["dev$ kubectl get pods".into(), "api-1  Running".into(), "dev$".into()]);
     let s = h.session.snapshot(Actor::Agent { conn: 1 }).unwrap();
     assert_eq!(s.projection.screen, vec!["dev$ kubectl get pods", "api-1  Running", "dev$"]);
     assert!(s.process_alive);

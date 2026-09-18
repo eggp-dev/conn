@@ -22,7 +22,7 @@ async fn upgrade(State(s): State<Server>, Query(q): Query<HashMap<String,String>
         return (StatusCode::FORBIDDEN,"invalid test origin or token").into_response();
     }
     if s.connected.swap(true,Ordering::SeqCst) { return (StatusCode::CONFLICT,"one browser test client at a time").into_response(); }
-    ws.max_message_size(128*1024).on_upgrade(move |socket| serve(socket,s))
+    ws.max_message_size(6*1024*1024).on_upgrade(move |socket| serve(socket,s))
 }
 async fn serve(socket: WebSocket, server: Server) {
     let (tx,mut rx) = tokio::sync::mpsc::unbounded_channel::<Value>();

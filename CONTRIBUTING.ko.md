@@ -53,7 +53,7 @@ npm run test:browser
 | 경로 | 역할 |
 |---|---|
 | `crates/core` | PTY, 세션 제어, 정책, 감사, IPC, 셸·백엔드 프로필 |
-| `crates/cli` | 터미널 프런트엔드, headless serve, MCP 어댑터, 사람·에이전트 CLI |
+| `crates/cli` | MCP 어댑터, 에이전트 명령, 로컬 프로필·로그 도구 |
 | `crates/frontend` | 공유 네이티브 프런트엔드 하네스와 명령 처리 |
 | `crates/browser-harness` | 공유 하네스에 연결하는 로컬 브라우저 테스트 전송 계층 |
 | `frontends/tauri/src` | 공유 Svelte UI, 터미널 렌더러, 타임라인, 설정, i18n |

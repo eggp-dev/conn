@@ -77,7 +77,7 @@ fn terminal_protocol_responses_do_not_impersonate_human_takeover_or_restore_acce
     assert!(records.lock().unwrap().is_empty());
     drop(s);
     assert!(ipc::dispatch(&session, 0, "terminal_response", &json!({"data":"x"})).is_err());
-    assert!(fixture(false).0.lock().write_terminal_response(b"x").is_err());
+    assert!(fixture(false).0.lock().write_terminal_response(b"\x1b[0n").is_ok(), "native protocol replies use the same path for all origins");
 }
 
 #[test]
@@ -101,14 +101,15 @@ fn private_sessions_reject_agents_and_public_dispatch_even_with_frontend_identit
         assert!(s.snapshot(Actor::Agent { conn: 1 }).is_err());
         assert!(s.affordances(Actor::Agent { conn: 1 }).is_empty());
         assert!(s.status().connected_agents.is_empty());
-        assert!(s.status().external_private);
+        assert!(!s.status().shared);
+        assert!(s.status().external_origin);
     }
     for method in ["snapshot", "status", "input", "resize", "affordances", "analyse", "request_control", "set_mode", "unknown"] {
         let err = ipc::dispatch(&session, 2, method, &json!({})).unwrap_err();
         assert_eq!(err.code, "not_found");
         assert_eq!(err.message, "session unavailable");
     }
-    assert!(ipc::dispatch_trusted(&session, 0, "snapshot", &json!({})).is_ok());
+    assert!(ipc::dispatch_trusted(&session, 0, "snapshot", &json!({})).is_err(), "no owner-presented surface exists");
     assert!(denied.lock().unwrap().is_empty());
     assert!(records.lock().unwrap().is_empty());
 }
@@ -127,7 +128,9 @@ fn public_socket_hides_private_tabs_for_every_client_kind_and_blocks_explicit_id
     for kind in ["agent", "human", "frontend"] {
         let client = Client::connect(&path).unwrap();
         let events = client.take_events().unwrap();
-        let hello = client.call("hello", json!({ "kind": kind, "name":"fixture", "streamOutput":true })).unwrap();
+        let hello = client.call("hello", json!({ "kind": kind, "name":"fixture", "streamOutput":true }));
+        if kind != "agent" { assert!(hello.is_err()); continue; }
+        let hello=hello.unwrap();
         assert!(!hello.to_string().contains("hidden-native-session"));
         let tabs = client.call("list_tabs", json!({})).unwrap();
         assert_eq!(tabs["tabs"], 1);
@@ -136,7 +139,7 @@ fn public_socket_hides_private_tabs_for_every_client_kind_and_blocks_explicit_id
         assert!(!tabs.to_string().contains("hidden-native-session"));
         for method in ["snapshot", "status", "input", "resize", "set_attended", "request_control", "affordances"] {
             let error = client.call(method, json!({"session":"hidden-native-session"})).unwrap_err().to_string();
-            assert!(error.contains("session unavailable"), "{method}: {error}");
+            assert!(error.contains("session unavailable") || error.contains("owner_required"), "{method}: {error}");
             assert!(!error.contains("hidden-native-session"));
         }
         let error = client.call("switch_tab", json!({"tab":"hidden-native-session"})).unwrap_err().to_string();

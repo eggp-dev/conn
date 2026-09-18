@@ -23,8 +23,6 @@ fn cli_import_select_and_enable_disable_are_persistent_and_idempotent() {
             .arg(&file)
             .arg("--socket")
             .arg(dir.path().join("unused.sock"))
-            .arg("--policy")
-            .arg(dir.path().join("policy.yaml"))
             .arg("--audit")
             .arg(dir.path().join("audit.jsonl"))
             .args(args)

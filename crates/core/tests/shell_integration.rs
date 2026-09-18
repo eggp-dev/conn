@@ -219,6 +219,7 @@ fn agent_submission_links_to_shell_execution_without_human_attribution() {
         let session = h.engine.session();
         let mut s = session.lock();
         s.register_conn(7, ConnKind::Agent, "test-agent", Box::new(|_| {}));
+        common::present(&mut s, vec![]);
         s.agent_request_control(7).unwrap();
         s.agent_type(7, "pwd").unwrap();
         s.agent_send_key(7, "ENTER").unwrap();
@@ -277,4 +278,87 @@ fn prompt_array_tail_does_not_disarm_human_command_recording() {
     h.run("false", 2);
     assert_eq!(h.ends()[1].fields["exitCode"], 1);
     h.until(|| String::from_utf8_lossy(&h.output.lock().unwrap()).contains("ARRAY_HOOK_OK"));
+}
+
+#[test]
+fn completion_prompt_confirmation_clears_before_async_execution_hooks() {
+    let h=Shell::new("/bin/bash",false);
+    let session=h.engine.session();
+    assert!(session.lock().completion_prompt_ready());
+    {
+        let mut s=session.lock();
+        s.human_input(b"sleep 0.15\r");
+        // Holding Session prevents the reader from processing the queued start
+        // hook. Enter itself must close the automatic completion window.
+        assert!(!s.completion_prompt_ready());
+        assert!(!s.status().completion_prompt_ready);
+    }
+    h.until(||h.starts().len()==1);
+    assert!(!session.lock().completion_prompt_ready());
+    h.until(||h.ends().len()==1);
+    assert!(session.lock().completion_prompt_ready());
+    {
+        let mut s=session.lock();
+        s.register_conn(7,conn_core::session::ConnKind::Agent,"test-agent",Box::new(|_|{}));
+        common::present(&mut s,vec!["conn-test$ ".into()]);
+        s.agent_request_control(7).unwrap();
+        s.agent_type(7,"sleep 0.15").unwrap();
+        s.agent_send_key(7,"ENTER").unwrap();
+        s.agent_release_control(7).unwrap();
+        assert!(!s.completion_prompt_ready(),"agent execution invalidates prompt before releasing control");
+    }
+    h.until(||h.ends().len()==2);
+    assert!(session.lock().completion_prompt_ready());
+    h.engine.terminate().unwrap();
+}
+
+#[test]
+fn nested_foreground_commands_require_review_across_a_sharing_boundary() {
+    use conn_core::{policy::Decision,approval::Decision as Approval,session::{ConnKind,KeyResult}};
+    let h=Shell::new("/bin/bash",false);let session=h.engine.session();
+    assert!(!session.lock().review_required());
+    assert!(matches!(session.lock().analyse_line("printf local").decision,Decision::Allow));
+    // SSH, editors and nested shells are all foreground programs from the outer
+    // shell's perspective. Do not apply this machine's filesystem assumptions.
+    h.send("/bin/sh");h.until(||h.starts().len()==1);
+    {
+        let mut s=session.lock();
+        assert!(s.review_required());assert!(s.status().review_required);
+        s.set_shared(false).unwrap();s.set_shared_with_agents(true,vec![7]).unwrap();
+        assert!(s.review_required(),"sharing does not turn the foreground into a verified local prompt");
+        let analysis=s.analyse_line("printf remote");
+        assert!(matches!(analysis.decision,Decision::Confirm{..}));
+        assert!(analysis.cwd.is_none() && analysis.segments.iter().all(|segment|segment.targets.is_empty()));
+        s.register_conn(7,ConnKind::Agent,"review-test",Box::new(|_|{}));
+        common::present(&mut s,vec!["remote$ ".into()]);
+        s.agent_request_control(7).unwrap();s.agent_type(7,"printf remote").unwrap();
+        let KeyResult::Pending{approval_id,..}=s.agent_send_key(7,"ENTER").unwrap() else {panic!("foreground execution must be reviewed")};
+        assert!(s.resolve_approval(&approval_id,Approval::AllowSession,"test").is_err());
+        s.resolve_approval(&approval_id,Approval::Deny,"test").unwrap();
+    }
+    h.send("exit");h.until(||session.lock().completion_prompt_ready());
+    assert!(!session.lock().review_required(),"only the matching outer-shell end restores local trust");
+    h.engine.terminate().unwrap();
+}
+
+#[test]
+fn delayed_private_hook_payloads_are_discarded_after_sharing() {
+    let h=Shell::new("/bin/bash",false);let session=h.engine.session();
+    let proof=h._dir.path().join("private-hook-proof");
+    {
+        let mut s=session.lock();s.set_shared(false).unwrap();
+        s.human_input(b"printf PRIVATE_HOOK_PAYLOAD > private-hook-proof\r");
+        // The child completes while Session is locked, so its start/end mailbox
+        // records cannot be consumed until after the sharing flag has changed.
+        let until=Instant::now()+Duration::from_secs(3);
+        while !proof.exists() { assert!(Instant::now()<until);std::thread::sleep(Duration::from_millis(10)); }
+        s.set_shared(true).unwrap();
+    }
+    h.until(||session.lock().completion_prompt_ready());
+    assert!(h.starts().is_empty() && h.ends().is_empty());
+    assert!(!format!("{:?}",h.events.lock().unwrap()).contains("PRIVATE_HOOK_PAYLOAD"));
+    // A newly confirmed prompt followed by new shared input resumes recording.
+    h.run("true",1);
+    assert_eq!(h.starts()[0].fields["cmd"],"true");
+    h.engine.terminate().unwrap();
 }

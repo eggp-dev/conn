@@ -186,5 +186,17 @@ fn private_output_and_terminal_responses_are_confined_to_the_owning_native_windo
     assert!(captured.iter().filter(|(name,_)| name != "ss:output").all(|(_,v)| !v.to_string().contains("SYNTHETIC_WINDOW_OUTPUT")));
     drop(captured);
     assert!(!std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap_or_default().contains("SYNTHETIC_WINDOW_OUTPUT"));
+    // The owner can share the existing external process without replaying its origin.
+    h.invoke_in_window("private-window", "set_sharing", json!({"session":id,"shared":true,"connectionIds":[]})).unwrap();
+    let shared = h.invoke_in_window("private-window", "status", json!({"session":id})).unwrap();
+    assert_eq!(shared["shared"], true);
+    assert_eq!(shared["externalOrigin"], true);
+    assert_eq!(shared["processAlive"], true);
+    assert_eq!(shared["externalInputAvailable"], false);
+    assert_eq!(shared["reviewRequired"], true);
+    h.invoke_in_window("private-window", "set_sharing", json!({"session":id,"shared":false,"connectionIds":[]})).unwrap();
+    let audit = std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap();
+    assert!(audit.contains("sharing_started") && audit.contains("sharing_stopped"));
+    assert!(!audit.contains("SYNTHETIC_WINDOW_OUTPUT"));
     h.close_window("private-window");
 }

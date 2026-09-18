@@ -36,13 +36,12 @@ fn revision_bumps_only_on_visible_change() {
 }
 
 #[test]
-fn projection_trims_trailing_empty_rows_and_tracks_alt_screen() {
+fn policy_vt_tracks_cursor_and_alt_screen() {
     let mut s = ScreenModel::new(10, 40);
     s.process(b"dev$ ls\r\nfoo\r\ndev$ ");
-    let p = s.projection();
-    assert_eq!(p.screen, vec!["dev$ ls", "foo", "dev$"]);
-    assert_eq!((p.cursor.row, p.cursor.col), (2, 5));
-    assert!(!p.alternate_screen);
+    assert_eq!(&s.rows()[..3], ["dev$ ls", "foo", "dev$"]);
+    assert_eq!((s.cursor().row,s.cursor().col),(2,5));
+    assert!(!s.alternate_screen());
     s.process(b"\x1b[?1049h");
     assert!(s.alternate_screen());
     s.process(b"\x1b[?1049l");

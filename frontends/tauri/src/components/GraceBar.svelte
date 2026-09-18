@@ -26,7 +26,7 @@
 {/if}
 
 <style>
-  .grace { position: absolute; left: 50%; bottom: 36px; transform: translateX(-50%); z-index: 12; width: min(640px, calc(100% - 32px)); max-height: calc(100% - 100px); overflow-y: auto; background: var(--surface); border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--line)); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow); display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; font-size: 13px; }
+  .grace { position: relative; margin: 6px 16px; box-sizing:border-box; z-index: 12; width: calc(100% - 32px); max-height: calc(100% - 100px); overflow-y: auto; background: var(--surface); border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--line)); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow); display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; font-size: 13px; }
   .heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   .remaining { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--warn); }
   .intent { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }

@@ -4,6 +4,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -24,6 +25,7 @@ enum Sink {
 }
 
 pub struct Audit {
+    enabled: AtomicBool,
     sink: Sink,
     session: Option<String>,
 }
@@ -41,17 +43,17 @@ impl Audit {
             use std::os::unix::fs::PermissionsExt;
             file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
         }
-        Ok(Self { sink: Sink::File(Mutex::new(file)), session: None })
+        Ok(Self { enabled: AtomicBool::new(true), sink: Sink::File(Mutex::new(file)), session: None })
     }
 
     /// In-memory sink for tests. The returned handle can be inspected afterwards.
     pub fn memory() -> (Self, Arc<Mutex<Vec<Event>>>) {
         let store = Arc::new(Mutex::new(Vec::new()));
-        (Self { sink: Sink::Memory(store.clone()), session: None }, store)
+        (Self { enabled: AtomicBool::new(true), sink: Sink::Memory(store.clone()), session: None }, store)
     }
 
     pub fn null() -> Self {
-        Self { sink: Sink::Null, session: None }
+        Self { enabled: AtomicBool::new(true), sink: Sink::Null, session: None }
     }
 
     pub fn for_session(mut self, session: String) -> Self {
@@ -59,8 +61,10 @@ impl Audit {
         self
     }
 
+    pub fn set_enabled(&self, enabled: bool) { self.enabled.store(enabled, Ordering::Release); }
+
     pub fn record(&self, actor: &str, action: &str, fields: Value) {
-        if matches!(self.sink, Sink::Null) { return; }
+        if !self.enabled.load(Ordering::Acquire) || matches!(self.sink, Sink::Null) { return; }
         let mut fields = match fields {
             Value::Object(m) => m,
             Value::Null => Map::new(),

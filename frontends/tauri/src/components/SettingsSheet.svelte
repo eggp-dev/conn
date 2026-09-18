@@ -1,4 +1,6 @@
 <script lang="ts">
+  import ExtensionsPane from "./ExtensionsPane.svelte";
+  import { selectTheme } from "../lib/extensions.svelte";
   import AutomationPane from "./AutomationPane.svelte";
   import AgentConnections from "./AgentConnections.svelte";
   import DiagnosticConnections from "./DiagnosticConnections.svelte";
@@ -10,7 +12,7 @@
   import { THEMES, agentColor } from "../lib/themes";
   import { t, fmtMs, i18n, setLang, LANGS } from "../lib/i18n.svelte";
   let { onclose }: { onclose: () => void } = $props();
-  const NAV = ["profiles", "agents", "automation", "policy", "pacing", "appearance", "diagnostics"] as const;
+  const NAV = ["profiles", "agents", "automation", "policy", "pacing", "appearance", "extensions", "diagnostics"] as const;
 
   let profileDirty = $state(false);
   let pendingAction = $state<(() => void) | null>(null);
@@ -26,15 +28,15 @@
     siblings.forEach(el => el.setAttribute("inert", ""));
     return () => siblings.forEach((el, i) => { if (!previous[i]) el.removeAttribute("inert"); });
   });
-  const categories = $derived(NAV.filter(id => !cur().externalPrivate || !["agents", "policy", "pacing"].includes(id)));
+  const categories = $derived(NAV.filter(id => !!cur().shared || !["agents", "policy", "pacing"].includes(id)));
   $effect(() => { if (!categories.includes(st.settingsTab as typeof NAV[number])) st.settingsTab = categories[0]; });
   $effect(() => { queueMicrotask(() => navigation?.querySelector<HTMLButtonElement>('[aria-current="page"]')?.focus()); });
   // ---- scope: this tab or all tabs; plus stored defaults for new tabs ----
   let scope = $state<"tab" | "all">("tab");
-  const sharedTabs = $derived(st.order.filter(id => tab(id)?.statusReady && !tab(id)?.externalPrivate));
-  const privateSection = $derived(cur().externalPrivate && ["agents", "policy", "pacing"].includes(st.settingsTab));
+  const sharedTabs = $derived(st.order.filter(id => tab(id)?.statusReady && !!tab(id)?.shared));
+  const privateSection = $derived(!cur().shared && ["agents", "policy", "pacing"].includes(st.settingsTab));
   async function apply(name: string, args: Record<string, unknown>) {
-    if (cur().externalPrivate) return;
+    if (!cur().shared) return;
     if (name === "set_mode") {
       for (const id of scope === "all" ? sharedTabs : [st.active]) await changeMode(args.mode as Mode, id);
       return;
@@ -44,7 +46,7 @@
   }
   async function saveDefaults() {
     const c = cur();
-    if (c.externalPrivate) return;
+    if (!c.shared) return;
     await cmd("set_defaults", { defaults: { mode: c.mode, gate: c.gate, pacing: c.pacing, mask: c.mask } });
     toast(t("s.defaults.saved"), "ok");
   }
@@ -72,7 +74,7 @@
   }
   type Live = { conn: number; agentId: string; affordances: string[] };
   let live = $state<Live[]>([]);
-  async function poll() { if (st.settingsTab !== "agents" || cur().externalPrivate) { live = []; return; } try { live = await cmd<Live[]>("agents"); } catch { live = []; } }
+  async function poll() { if (st.settingsTab !== "agents" || !cur().shared) { live = []; return; } try { live = await cmd<Live[]>("agents"); } catch { live = []; } }
   $effect(() => { void st.active; void st.settingsTab; poll(); const i = setInterval(poll, 2000); return () => clearInterval(i); });
 
   // ---- policy ----
@@ -93,10 +95,10 @@
     try { await cmd("policy_write", { text: policyText }); policyDirty = false; toast(t("s.policy.saved"), "ok"); setTimeout(loadPolicy, 300); }
     catch (e) { toast(t("s.policy.save_failed", { err: String(e) }), "danger"); }
   }
-  $effect(() => { if (!cur().externalPrivate && st.settingsTab === "policy" && !rules) loadPolicy(); });
+  $effect(() => { if (!!cur().shared && st.settingsTab === "policy" && !rules) loadPolicy(); });
   $effect(() => {
     const c = testCmd;
-    if (cur().externalPrivate || !c.trim()) { verdict = null; return; }
+    if (!cur().shared || !c.trim()) { verdict = null; return; }
     const h = setTimeout(async () => { verdict = await cmd("policy_test", { cmd: c }); }, 120);
     return () => clearTimeout(h);
   });
@@ -120,7 +122,7 @@
   }
 
   // ---- appearance ----
-  function setTheme(id: string) { st.theme = id as any; localStorage.setItem("ss:theme", id); }
+  function setTheme(id: string) { void selectTheme(id).catch(() => toast(t("ext.saveFailed"), "warn")); }
 
   // ---- connect an external agent ----
   type CliStatus = { canConfigure: boolean; canInstall: boolean; bundled: string | null; onPath: string | null };
@@ -157,7 +159,7 @@
     } catch (e) { setupError = t("s.connect.failed", { error: String(e) }); }
     finally { setupBusy = false; }
   }
-  $effect(() => { if (!cur().externalPrivate && st.settingsTab === "agents") loadSetup(); });
+  $effect(() => { if (!!cur().shared && st.settingsTab === "agents") loadSetup(); });
 
   // ---- diagnostics ----
   let diag = $state<any>(null);
@@ -196,7 +198,8 @@
     <section class="settings-content" aria-label={t(`s.nav.${st.settingsTab}`)}>
       <h2>{t(`s.nav.${st.settingsTab}`)}</h2>
       {#if ["agents", "pacing", "appearance"].includes(st.settingsTab)}<p class="apply-note muted">{t("s.immediate")}</p>{/if}
-      {#if privateSection}
+      {#if st.settingsTab === "extensions"}<ExtensionsPane />
+      {:else if privateSection}
         <p class="muted">{t("private.settings")}</p>
       {:else if st.settingsTab === "profiles"}
         <ProfilesPane ondirty={dirty => profileDirty = dirty} />
@@ -299,7 +302,6 @@
             <span class="tag">{t("s.policy.opaque", { v: rules.opaque })}</span>
             {#if rules.isolateDangerous}<span class="tag">{t("s.policy.isolate")}</span>{/if}
             {#if rules.requireIntent}<span class="tag">{t("s.policy.intent")}</span>{/if}
-            <span class="tag">{t("s.policy.unattended", { v: rules.unattended })}</span>
             <span class="tag">{t("s.policy.default", { v: rules.default })}</span>
           </div>
           {#if rules.protected.length}

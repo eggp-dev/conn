@@ -23,6 +23,10 @@ class ScriptingError(ValueError):
     pass
 
 
+class ToolingUnavailable(ScriptingError):
+    """The host cannot run a required check; this is not a bundle failure."""
+
+
 def command_codes(xml: str) -> dict[str, str]:
     commands = ET.fromstring(xml).findall(".//command")
     result = {}
@@ -57,7 +61,16 @@ def target_example(source: str, app: Path) -> str:
 
 
 def run(*args: str) -> str:
-    return subprocess.run(args, check=True, text=True, capture_output=True, timeout=60).stdout.strip()
+    try:
+        return subprocess.run(args, check=True, text=True, capture_output=True, timeout=60).stdout.strip()
+    except FileNotFoundError as error:
+        raise ToolingUnavailable(f"Required macOS tool is unavailable: {args[0]}") from error
+    except subprocess.CalledProcessError as error:
+        if args[0] == "sdef" and "requires Xcode" in (error.stderr or ""):
+            raise ToolingUnavailable("sdef requires full Xcode; Command Line Tools alone cannot run this check") from error
+        if args[0] == "sdef" and "not agreed to the Xcode license" in (error.stderr or ""):
+            raise ToolingUnavailable("Xcode license acceptance is pending; the user must review it before this check can run") from error
+        raise ScriptingError(f"macOS bundle check failed: {args[0]} (exit {error.returncode})") from error
 
 
 def check_bundle(app: Path, examples: Path | list[Path], definition: Path = NATIVE / "Conn.sdef"):
@@ -89,10 +102,18 @@ def main():
     args = parser.parse_args()
     if sys.platform != "darwin":
         parser.error("The bundle smoke check requires macOS")
-    validate_adapter()
-    check_bundle(args.app, args.example or EXAMPLES)
+    try:
+        validate_adapter()
+        check_bundle(args.app, args.example or EXAMPLES)
+    except ToolingUnavailable as error:
+        print(f"BLOCKED: {error}", file=sys.stderr)
+        return 2
+    except ScriptingError as error:
+        print(f"FAIL: {error}", file=sys.stderr)
+        return 1
     print("macOS scripting metadata, bundle signature, and external automation examples compiled; no script executed.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

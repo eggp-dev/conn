@@ -24,7 +24,6 @@ pub(crate) struct RunningCommand {
     pub id: String,
     pub actor: String,
     pub started: Instant,
-    pub sequence: u64,
 }
 pub(crate) struct Submission {
     pub id: String,

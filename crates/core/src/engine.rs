@@ -54,6 +54,8 @@ pub struct EngineConfig {
     pub pacing: Pacing,
     /// Where PTY output goes for the human. `None` = only streamed to subscribers.
     pub output: Option<Box<dyn Write + Send>>,
+    /// Native renderer delivery with sequencing; installed before reader startup.
+    pub output_frame: Option<crate::session::OutputFrameSink>,
     /// Draw the approval prompt into `output`. Frontends set false.
     pub render_prompt: bool,
     /// How often the session tick runs (lease/approval expiry, grace timers, screen events).
@@ -76,6 +78,7 @@ impl Default for EngineConfig {
             audit: None,
             pacing: Pacing::default(),
             output: None,
+            output_frame: None,
             render_prompt: false,
             tick: Duration::from_millis(50),
         }
@@ -218,6 +221,7 @@ impl Engine {
             Session::new(session_cfg)
         }));
 
+        session.lock().set_output_frame_sink(cfg.output_frame);
         session.lock().set_execution_profile(profile);
         #[cfg(unix)]
         let integration = Arc::new(parking_lot::Mutex::new(integration));

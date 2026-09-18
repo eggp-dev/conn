@@ -73,17 +73,15 @@ conn profiles set-default local-bash
 conn profiles disable remote-dev
 conn profiles enable remote-dev
 conn profiles test remote-dev
-conn --profile remote-dev
-conn --profile remote-dev serve
 ```
 
 IDs come from `profiles list`; they need not match the examples. Use
 `--profiles-file PATH` for an isolated config. The app and CLI normally share
 `~/.conn/profiles.json` (`%USERPROFILE%\.conn\profiles.json` on Windows).
 
-`conn -- COMMAND...` retains local-shell startup-command behavior. Combining that
-form with a remote profile produces an explicit error; configure the remote
-profile or issue commands after entering its session instead.
+Open the profile from the desktop app after configuring it. The unreleased shared-surface
+version removes CLI terminal/headless startup: agents require the owner-rendered
+app viewport. External launch commands use the [native automation adapter](external-automation.md).
 
 ### File format
 

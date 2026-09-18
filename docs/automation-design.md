@@ -1,5 +1,9 @@
 # External automation without activity recording
 
+**Historical design record.** The 2026-09-17 [shared-surface contract](PRD.md),
+[architecture](architecture.md) and [automation guide](external-automation.md) supersede
+its lifetime-private and future-sharing sections. The dated evidence below is retained.
+
 [한국어](automation-design.ko.md) · [Unreleased automation guide](external-automation.md)
 
 **Implemented locally; native acceptance pending · 2026-09-16.** Baseline: v0.5.1,

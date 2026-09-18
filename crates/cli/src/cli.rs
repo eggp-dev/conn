@@ -1,275 +1,22 @@
-//! Human-facing subcommands: status / take / approve / log.
-
+//! Agent-side operations and explicit local-file inspection. Owner controls live in the app.
 use std::path::Path;
-use std::collections::{BTreeMap, BTreeSet};
-
 use serde_json::{json, Value};
-
 use conn_core::ipc::{Client, ClientError};
-
 fn connect(socket: &Path) -> Result<Client, ClientError> {
     let c = Client::connect(socket)?;
-    c.hello("human", "cli")?;
+    c.hello("agent", "cli")?;
     Ok(c)
-}
-
-pub fn status(socket: &Path) -> Result<(), ClientError> {
-    let c = connect(socket)?;
-    let s = c.call("status", json!({}))?;
-    let controller = &s["controller"];
-    match controller["type"].as_str() {
-        Some("agent") => println!(
-            "conn         {} has the conn ({}, expires in {}s)",
-            controller["agentId"].as_str().unwrap_or("?"),
-            controller["leaseId"].as_str().unwrap_or("?"),
-            controller["expiresInSecs"].as_u64().unwrap_or(0)
-        ),
-        _ => println!("conn         you have the conn"),
-    }
-    println!("process      {}", if s["processAlive"].as_bool().unwrap_or(false) { "alive" } else { "exited" });
-    println!("screen       {}x{} rev {}", s["size"]["cols"], s["size"]["rows"], s["revision"]);
-    let agents = agent_connection_lines(&s);
-    println!("agents       {}", agents.first().map(String::as_str).unwrap_or("-"));
-    for agent in agents.iter().skip(1) { println!("             {agent}"); }
-    if let Some(p) = s["policyPath"].as_str() {
-        println!("policy       {p}");
-    }
-    let allows: Vec<&str> = s["sessionAllows"].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect()).unwrap_or_default();
-    if !allows.is_empty() {
-        println!("session allow {}", allows.join(", "));
-    }
-    let fronts: Vec<&str> = s["connectedFrontends"].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect()).unwrap_or_default();
-    if !fronts.is_empty() {
-        println!("frontends    {}", fronts.join(", "));
-    }
-    let p = &s["pacing"];
-    println!(
-        "pacing       write≥{}ms  grace {}ms  lease {}s  approval {}s",
-        p["minWriteIntervalMs"], p["enterGraceMs"], p["leaseTtlSecs"], p["approvalTtlSecs"]
-    );
-    if let Some(m) = s["affordanceMask"].as_array() {
-        println!("agent mask   {}", m.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(" "));
-    }
-    if let Some(sc) = s["scheduled"].as_object() {
-        println!("scheduled    {}  {}  ({})", sc["execId"].as_str().unwrap_or("?"), sc["cmd"].as_str().unwrap_or("?"), sc["agentId"].as_str().unwrap_or("?"));
-    }
-    println!("mode         {}{}{}", s["mode"].as_str().unwrap_or("?"), if s["controlGate"].as_bool().unwrap_or(false) { "  (control gate: ask)" } else { "" }, if s["attended"].as_bool().unwrap_or(true) { "" } else { "  (unattended)" });
-    if let Some(a) = s["entrustedTo"].as_str() { println!("entrusted    {a} (cap: {})", s["effectiveMode"].as_str().unwrap_or("?")); }
-    if let Some(a) = s["attentionRequest"]["agentId"].as_str() { println!("attention    {a} asks: {}", s["attentionRequest"]["reason"].as_str().unwrap_or("-")); }
-    if let Some(p) = s["proposal"].as_object() {
-        println!("proposal     {}  {}  [{}]", p["proposalId"].as_str().unwrap_or("?"), p["text"].as_str().unwrap_or(""), p["state"].as_str().unwrap_or("?"));
-    }
-    for r in s["controlRequests"].as_array().cloned().unwrap_or_default() {
-        println!("control req  {}  {}  {}", r["requestId"].as_str().unwrap_or("?"), r["agentId"].as_str().unwrap_or("?"), r["reason"].as_str().unwrap_or("-"));
-    }
-    let pending = s["pending"].as_array().cloned().unwrap_or_default();
-    if pending.is_empty() {
-        println!("pending      none");
-    } else {
-        println!("pending");
-        for p in pending {
-            println!(
-                "  {}  [{}]  {}  ({} · {})",
-                p["id"].as_str().unwrap_or("?"),
-                p["label"].as_str().unwrap_or("?"),
-                p["cmd"].as_str().unwrap_or("?"),
-                p["agentId"].as_str().unwrap_or("?"),
-                p["requestedAt"].as_str().unwrap_or("?")
-            );
-            if let Some(i) = p["intent"].as_str() { println!("      intent  {i}"); }
-            for s in p["analysis"]["segments"].as_array().into_iter().flatten() {
-                for t in s["targets"].as_array().into_iter().flatten() {
-                    println!("      target  {}{}{}{}", t["path"].as_str().unwrap_or("?"), if t["gitRepo"].as_bool().unwrap_or(false) { " · git" } else { "" }, t["entries"].as_u64().map(|n| format!(" · {n} entries")).unwrap_or_default(), if t["protected"].as_bool().unwrap_or(false) { " · protected path" } else { "" });
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-fn agent_connection_lines(status: &Value) -> Vec<String> {
-    let Some(connections) = status["agentConnections"].as_array() else {
-        // Older servers expose identities only; don't fabricate socket or idle data.
-        return status["connectedAgents"].as_array().into_iter().flatten()
-            .filter_map(Value::as_str).collect::<BTreeSet<_>>().into_iter().map(str::to_owned).collect();
-    };
-    let mut groups: BTreeMap<&str, BTreeMap<u64, Option<u64>>> = BTreeMap::new();
-    for connection in connections {
-        if let (Some(agent), Some(id)) = (connection["agentId"].as_str(), connection["connId"].as_u64()) {
-            groups.entry(agent).or_default().insert(id, connection["idleSecs"].as_u64());
-        }
-    }
-    groups.into_iter().map(|(agent, sockets)| {
-        let details = sockets.iter().map(|(id, idle)| match idle {
-            Some(secs) => format!("#{id} last request {secs}s ago"),
-            None => format!("#{id}"),
-        }).collect::<Vec<_>>().join("; ");
-        format!("{agent} ({} connection{}; {details})", sockets.len(), if sockets.len() == 1 { "" } else { "s" })
-    }).collect()
-}
-
-#[cfg(test)]
-mod status_tests {
-    use super::*;
-
-    #[test]
-    fn duplicate_names_show_distinct_sockets_and_activity_without_discarding_idle_connections() {
-        let status = json!({"agentConnections":[
-            {"agentId":"copilot","connId":3,"idleSecs":720},
-            {"agentId":"claude","connId":1,"idleSecs":2},
-            {"agentId":"copilot","connId":2,"idleSecs":0},
-        ]});
-        assert_eq!(agent_connection_lines(&status), vec![
-            "claude (1 connection; #1 last request 2s ago)",
-            "copilot (2 connections; #2 last request 0s ago; #3 last request 720s ago)",
-        ]);
-    }
-
-    #[test]
-    fn older_servers_keep_identity_only_output_without_duplicate_labels() {
-        assert_eq!(agent_connection_lines(&json!({"connectedAgents":["copilot","claude","copilot"]})), vec!["claude", "copilot"]);
-        assert!(agent_connection_lines(&json!({"agentConnections":[]})).is_empty());
-    }
-}
-
-pub fn take(socket: &Path) -> Result<(), ClientError> {
-    let c = connect(socket)?;
-    let r = c.call("take", json!({}))?;
-    match r["revoked"].as_str() {
-        Some(l) => println!("you have the conn (revoked {l})"),
-        None => println!("you already have the conn"),
-    }
-    Ok(())
-}
-
-pub fn approve(socket: &Path, id: Option<String>, deny: bool, allow_session: bool) -> Result<(), ClientError> {
-    let c = connect(socket)?;
-    let Some(id) = id else {
-        // Never approve "whatever is pending": show what is waiting and require an id.
-        let st = c.call("status", json!({}))?;
-        let pending = st["pending"].as_array().cloned().unwrap_or_default();
-        if pending.is_empty() {
-            println!("no pending approval");
-        } else {
-            println!("pending approvals — pass an id: conn approve <id> [-d|-A]");
-            for p in pending {
-                println!("  {}  [{}]  {}  ({} · {})", p["id"].as_str().unwrap_or("?"), p["label"].as_str().unwrap_or("?"), p["cmd"].as_str().unwrap_or("?"), p["agentId"].as_str().unwrap_or("?"), p["requestedAt"].as_str().unwrap_or("?"));
-                if let Some(i) = p["intent"].as_str() { println!("      intent  {i}"); }
-                for s in p["analysis"]["segments"].as_array().into_iter().flatten() {
-                    for t in s["targets"].as_array().into_iter().flatten() {
-                        println!("      target  {}{}{}", t["path"].as_str().unwrap_or("?"), if t["gitRepo"].as_bool().unwrap_or(false) { " · git" } else { "" }, t["entries"].as_u64().map(|n| format!(" · {n} entries")).unwrap_or_default());
-                    }
-                }
-            }
-        }
-        return Err(ClientError::Rpc { code: "invalid_input".into(), message: "approval id required".into() });
-    };
-    let decision = if deny { "deny" } else if allow_session { "allow_session" } else { "grant" };
-    let r = c.call("approve", json!({ "approvalId": id, "decision": decision }))?;
-    println!(
-        "{}  {}  [{}]  {}",
-        r["approvalId"].as_str().unwrap_or("?"),
-        r["state"].as_str().unwrap_or("?"),
-        r["label"].as_str().unwrap_or("?"),
-        r["cmd"].as_str().unwrap_or("?")
-    );
-    Ok(())
-}
-
-pub fn pacing(socket: &Path, min: Option<u64>, grace: Option<u64>, lease: Option<u64>, approval: Option<u64>) -> Result<(), ClientError> {
-    let c = connect(socket)?;
-    let mut params = serde_json::Map::new();
-    if let Some(v) = min { params.insert("minWriteIntervalMs".into(), json!(v)); }
-    if let Some(v) = grace { params.insert("enterGraceMs".into(), json!(v)); }
-    if let Some(v) = lease { params.insert("leaseTtlSecs".into(), json!(v)); }
-    if let Some(v) = approval { params.insert("approvalTtlSecs".into(), json!(v)); }
-    let r = if params.is_empty() { c.call("get_pacing", json!({}))? } else { c.call("set_pacing", Value::Object(params))? };
-    println!("{}", serde_json::to_string_pretty(&r).unwrap());
-    Ok(())
-}
-
-pub fn affordances(socket: &Path, allow: Vec<String>, clear: bool) -> Result<(), ClientError> {
-    let c = connect(socket)?;
-    let r = if clear {
-        c.call("set_affordances", json!({ "allow": null }))?
-    } else if allow.is_empty() {
-        let s = c.call("status", json!({}))?;
-        json!({ "allow": s["affordanceMask"] })
-    } else {
-        c.call("set_affordances", json!({ "allow": allow }))?
-    };
-    match r["allow"].as_array() {
-        Some(a) => println!("agent affordances restricted to: {}", a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(" ")),
-        None => println!("no restriction (state-derived affordances only)"),
-    }
-    Ok(())
-}
-
-pub fn mode(socket: &Path, mode: Option<String>) -> Result<(), ClientError> {
-    let c = connect(socket)?;
-    let r = match mode {
-        Some(m) => c.call("set_mode", json!({ "mode": m }))?,
-        None => json!({ "mode": c.call("status", json!({}))?["mode"] }),
-    };
-    println!("mode {}", r["mode"].as_str().unwrap_or("?"));
-    Ok(())
-}
-
-pub fn gate(socket: &Path, ask: Option<bool>) -> Result<(), ClientError> {
-    let c = connect(socket)?;
-    let r = match ask {
-        Some(a) => c.call("set_control_gate", json!({ "ask": a }))?,
-        None => json!({ "ask": c.call("status", json!({}))?["controlGate"] }),
-    };
-    println!("control gate: {}", if r["ask"].as_bool().unwrap_or(false) { "ask (human decides each request_control)" } else { "auto" });
-    Ok(())
 }
 
 pub fn sessions(socket: &Path) -> Result<(), ClientError> {
     let c = connect(socket)?;
-    let r = c.call("sessions", json!({}))?;
+    let r = c.call("list_tabs", json!({}))?;
     for s in r["sessions"].as_array().cloned().unwrap_or_default() {
         let ctl = if s["controller"]["type"] == "agent" { format!("{} has the conn", s["controller"]["agentId"].as_str().unwrap_or("?")) } else { "you have the conn".into() };
-        println!("{} {:<10} {}{}{}{}", if s["attended"].as_bool().unwrap_or(false) { "▶" } else { " " }, s["id"].as_str().unwrap_or("?"), ctl,
+        println!("{} {:<10} {}{}{}", if s["attended"].as_bool().unwrap_or(false) { "▶" } else { " " }, s["id"].as_str().unwrap_or("?"), ctl,
             if s["pending"].as_u64().unwrap_or(0) > 0 { format!("  · pending {}", s["pending"]) } else { String::new() },
-            s["entrustedTo"].as_str().map(|a| format!("  · entrusted to {a}")).unwrap_or_default(),
             s["attentionRequest"]["agentId"].as_str().map(|a| format!("  · {a} asks for attention")).unwrap_or_default());
     }
-    Ok(())
-}
-
-pub fn attend(socket: &Path, id: &str) -> Result<(), ClientError> {
-    let c = connect(socket)?;
-    let r = c.call("set_attended", json!({ "session": id }))?;
-    println!("attending {}", r["attended"].as_str().unwrap_or("?"));
-    Ok(())
-}
-
-pub fn entrust(socket: &Path, session: Option<String>) -> Result<(), ClientError> {
-    let c = connect(socket)?;
-    let r = c.call("entrust", json!({ "session": session }))?;
-    println!("entrusted to {} while you are away", r["entrustedTo"].as_str().unwrap_or("?"));
-    Ok(())
-}
-
-pub fn handback(socket: &Path) -> Result<(), ClientError> {
-    let c = connect(socket)?;
-    let r = c.call("hand_back", json!({}))?;
-    println!("{} has the conn ({})", r["agentId"].as_str().unwrap_or("?"), r["leaseId"].as_str().unwrap_or("?"));
-    Ok(())
-}
-
-pub fn decide(socket: &Path, id: Option<String>, deny: bool) -> Result<(), ClientError> {
-    let c = connect(socket)?;
-    let id = match id {
-        Some(id) => id,
-        None => {
-            let st = c.call("status", json!({}))?;
-            st["controlRequests"][0]["requestId"].as_str().map(|s| s.to_string()).ok_or_else(|| ClientError::Rpc { code: "not_found".into(), message: "no pending control request".into() })?
-        }
-    };
-    let r = c.call("decide_control", json!({ "requestId": id, "grant": !deny }))?;
-    println!("{}  {}  ({})", r["requestId"].as_str().unwrap_or("?"), r["state"].as_str().unwrap_or("?"), r["agentId"].as_str().unwrap_or("?"));
     Ok(())
 }
 
@@ -281,7 +28,7 @@ pub fn guide() {
     println!("{body}");
     println!("\n## Without MCP tools (conn agent)\n");
     println!("The same procedure from a shell: `conn agent snapshot | request [--reason ..] | type <text> | enter [--intent ..] | key <KEY> | interrupt | check <approvalId> | release | tabs | open-tab [--reason ..] | switch-tab <n>`");
-    println!("Name yourself with `--agent-id`. Every call goes through the same socket and lands in the audit log.");
+    println!("Name yourself with `--agent-id`. Every call uses the same agent socket and participation checks.");
 }
 
 /// Thin wrapper over the socket for agents that only have a shell tool.

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { appShortcut, shortcutKey, shortcutLabel } from "./lib/shortcuts";
+  import { refreshExtensions, selectTheme } from "./lib/extensions.svelte";
   import { refreshProfiles } from "./lib/profiles.svelte";
   import { onMount, tick } from "svelte";
   import Term from "./components/Term.svelte";
@@ -7,6 +8,8 @@
   import Island from "./components/Island.svelte";
   import Palette from "./components/Palette.svelte";
   import type { Action, Parser } from "./components/Palette.svelte";
+  import CompletionBar from "./components/CompletionBar.svelte";
+  import SharingDialog from "./components/SharingDialog.svelte";
   import Center from "./components/Center.svelte";
   import SettingsSheet from "./components/SettingsSheet.svelte";
   import Ghost from "./components/Ghost.svelte";
@@ -14,7 +17,6 @@
   import GraceBar from "./components/GraceBar.svelte";
   import ControlRequest from "./components/ControlRequest.svelte";
   import HandbackChip from "./components/HandbackChip.svelte";
-  import LeaveChip from "./components/LeaveChip.svelte";
   import Timeline from "./components/Timeline.svelte";
   import Toasts from "./components/Toasts.svelte";
   import HandoffWash from "./components/HandoffWash.svelte";
@@ -27,7 +29,6 @@
 
   let terms = $state<Record<string, Term>>({});
   let chip = $state<HandbackChip>();
-  let leave = $state<LeaveChip>();
   let washSeq = 0;
   const handbackTimers: Record<string, number> = {};
 
@@ -57,24 +58,30 @@
     const t = tab(id); if (!t) return;
     const s = await invoke<any>("status", { session: id });
     t.shellIntegration = s.shellIntegration ?? { state: "unavailable" };
-    t.externalPrivate = s.externalPrivate === true;
+    t.shared = s.shared === true;
+    t.externalOrigin = s.externalOrigin === true;
+    t.surfaceGeneration = s.surfaceGeneration ?? 1;
+    t.outputSeq = s.outputSeq ?? 0;
+    t.surfaceAvailable = s.surfaceAvailable === true;
+    t.inputPending = s.inputPending === true;
     t.externalStarting = s.externalStarting === true;
     t.externalInputAvailable = s.externalInputAvailable === true;
-    if (t.externalPrivate) {
+    if (!t.shared) {
       t.profileId = s.profileId ?? null; t.profileName = s.profileName ?? null;
-      t.title = s.profileName || tr("private.title");
+      t.title = s.profileName || (t.externalOrigin ? tr("private.title") : t.title);
       t.processAlive = !!s.processAlive; t.attended = !!s.attended;
-      t.timeline = newTimeline(true); t.controller = { type: "human" };
-      t.agents = []; t.lastAgent = null; t.openedBy = null; t.entrustedTo = null;
+      t.timeline.recording = false; t.controller = { type: "human" };
+      t.agents = []; t.lastAgent = null; t.openedBy = null;
       t.approval = null; t.ctlReq = null; t.proposal = null; t.grace = null; t.attention = null;
       t.handback = false; t.typing = false; t.paused = false;
       t.statusReady = true;
       return;
     }
+    t.timeline.recording = true;
     if (!t.profileId && s.profileName) t.title = s.profileName;
     t.profileId = s.profileId ?? null; t.profileName = s.profileName ?? null; t.reviewRequired = !!s.reviewRequired;
     t.mode = s.mode; t.effectiveMode = s.effectiveMode ?? s.mode; t.gate = !!s.controlGate; t.allows = s.sessionAllows ?? []; t.mask = s.affordanceMask ?? null; t.agents = s.connectedAgents ?? [];
-    t.pacing = s.pacing; t.attended = !!s.attended; t.entrustedTo = s.entrustedTo ?? null; t.processAlive = !!s.processAlive;
+    t.pacing = s.pacing; t.attended = !!s.attended; t.processAlive = !!s.processAlive;
     t.attention = s.attentionRequest ? { agentId: s.attentionRequest.agentId, reason: s.attentionRequest.reason } : null;
     t.openedBy = s.openedBy ?? null;
     if (s.lastAgent) t.lastAgent = { agentId: s.lastAgent.agentId, connected: s.lastAgent.connected, lastCmd: s.lastAgent.lastCmd ?? undefined };
@@ -93,13 +100,12 @@
     if (id === st.active || !tab(id)) return;
     const from = tab(st.active);
     st.active = id;
-    st.centerOpen = false; st.timelineOpen = false; st.leaveChip = null;
+    st.centerOpen = false; st.timelineOpen = false;
     await invoke("attend", { session: id });
-    // Leaving a tab where an agent holds the conn pauses it; offer to entrust.
-    if (from && !from.externalPrivate && from.controller.type === "agent" && !from.entrustedTo) {
+    // Leaving the displayed surface pauses agent participation; no actor retains a hidden view.
+    if (from && from.shared && from.controller.type === "agent") {
       from.paused = true;
-      st.leaveChip = { session: from.id, agentId: from.controller.agentId ?? "agent", until: Date.now() + 8000 };
-      setTimeout(() => { if (st.leaveChip?.session === from.id) st.leaveChip = null; }, 8000);
+
     }
     const to = tab(id)!; to.paused = false; to.attention = null;
     terms[id]?.refit(); focusTerm();
@@ -121,7 +127,7 @@
     await invoke("close_tab", { session: id });
     st.order = st.order.filter((x) => x !== id);
     const closed = tab(id);
-    if (closed && !closed.externalPrivate && closed.timeline.items.length) st.pastTimelines[id] = closed.timeline;
+    if (closed && !!closed.shared && closed.timeline.items.length) st.pastTimelines[id] = closed.timeline;
     delete st.tabs[id];
     delete terms[id];
     if (st.active === id) { const next = st.order[Math.max(0, idx - 1)]; st.active = next; await invoke("attend", { session: next }); terms[next]?.refit(); focusTerm(); }
@@ -136,7 +142,7 @@
   ];
   const maskIs = (p: string[] | null) => p === null ? cur().mask === null : !!cur().mask && p.length === cur().mask!.length && p.every((a) => cur().mask!.includes(a));
   const openSettings = (tab: typeof st.settingsTab) => { st.settingsTab = tab; st.settingsOpen = true; st.centerOpen = false; };
-  const setTheme = (id: string) => { st.theme = id as any; localStorage.setItem("ss:theme", id); };
+  const setTheme = (id: string) => { void selectTheme(id).catch(() => toast(tr("ext.saveFailed"), "warn")); };
 
   // State-aware: labels carry the agent's name and current values; `now` items are
   // the things to answer right now and sort first.
@@ -145,9 +151,10 @@
     const holder = c.controller.type === "agent" ? c.controller.agentId ?? "agent" : c.lastAgent?.agentId ?? "agent";
     const lang = i18n.lang; void lang;
     const all: Action[] = [
+      { id: "completion", group: "agents", label: tr("ext.requestCompletion"), aliases: ["complete", "suggest", "자동완성", "제안"], when: () => cur().shared && cur().controller.type === "human", run: () => { st.completionRequest++; } },
+      { id: "sharing", group: "view", label: tr(c.shared ? "sharing.manage" : "sharing.start"), aliases: ["share", "private", "공유", "비공유"], run: () => { st.sharingOpen = true; } },
       { id: "take", group: "conn", now: c.controller.type === "agent", label: tr("a.take"), hint: tr("a.take.hint"), aliases: ["take", "revoke", "회수", "뺏기", "제어권"], run: () => cmd("take"), when: () => cur().controller.type === "agent" },
       { id: "handback", group: "conn", now: c.handback, label: tr("a.handback", { agent: holder }), keys: shortcutLabel("⌘⏎"), aliases: ["hand back", "give back", "되돌려주기", "다시"], run: () => chip?.handBack(), when: () => !!cur().lastAgent && cur().controller.type === "human" },
-      { id: "entrust", group: "conn", now: c.controller.type === "agent", label: tr("a.entrust", { agent: holder }), hint: tr("a.entrust.hint"), aliases: ["entrust", "맡기기", "맡김", "leave"], run: () => cmd("entrust").then(() => toast(tr("entrust.set"), "ok")).catch((e) => toast(String(e), "warn")), when: () => !!cur().lastAgent && !cur().entrustedTo },
       { id: "approve", group: "approval", now: true, label: tr("a.approve", { label: c.approval?.label ?? "" }), hint: c.approval?.cmd, keys: "a", aliases: ["approve", "grant", "승인"], run: () => cur().approval && cmd("approve", { approvalId: cur().approval!.id, decision: "grant" }), when: () => !!cur().approval },
       { id: "deny", group: "approval", now: true, danger: true, label: tr("a.deny", { label: c.approval?.label ?? "" }), keys: "d", aliases: ["deny", "거부"], run: () => cur().approval && cmd("approve", { approvalId: cur().approval!.id, decision: "deny" }), when: () => !!cur().approval },
       { id: "allow-session", group: "approval", now: true, label: tr("a.allow_session", { label: c.approval?.label ?? "" }), keys: "A", aliases: ["allow", "session", "세션 허용"], run: () => cur().approval && cmd("approve", { approvalId: cur().approval!.id, decision: "allow_session" }), when: () => !!cur().approval && !cur().reviewRequired },
@@ -155,7 +162,7 @@
       { id: "ctl-deny", group: "conn", now: true, danger: true, label: tr("a.ctl.deny", { agent: c.ctlReq?.agentId ?? "" }), aliases: ["deny", "거부"], run: () => cur().ctlReq && cmd("decide_control", { requestId: cur().ctlReq!.id, grant: false }), when: () => !!cur().ctlReq },
       ...st.order.map((id, i) => {
         const tb = tab(id)!;
-        const flags = [tb.approval ? tr("badge.approval") : "", tb.proposal?.ready ? tr("badge.proposal", { agent: tb.proposal.agentId }) : "", tb.attention ? tr("badge.knock", { agent: tb.attention.agentId }) : "", tb.entrustedTo ? tr("badge.entrusted") : tb.paused ? tr("badge.paused") : "", tb.controller.type === "agent" ? tr("conn.agent", { agent: tb.controller.agentId ?? "" }) : ""].filter(Boolean).join(" · ");
+        const flags = [tb.approval ? tr("badge.approval") : "", tb.proposal?.ready ? tr("badge.proposal", { agent: tb.proposal.agentId }) : "", tb.attention ? tr("badge.knock", { agent: tb.attention.agentId }) : "", tb.paused ? tr("badge.paused") : "", tb.controller.type === "agent" ? tr("conn.agent", { agent: tb.controller.agentId ?? "" }) : ""].filter(Boolean).join(" · ");
         return { id: `tab-${id}`, group: "tabs", now: needsYou(tb) && id !== st.active, label: tr("a.tab.go", { name: `${i + 1} · ${tb.title}` }), hint: flags || undefined, keys: i < 9 ? shortcutLabel(`⌘${i + 1}`) : undefined, aliases: ["tab", "탭", tb.title, tb.openedBy ?? ""], active: () => st.active === id, run: () => select(id) } as Action;
       }),
       { id: "tab-new", group: "tabs", label: tr("a.tab.new"), keys: shortcutLabel("⌘T"), aliases: ["new tab", "새 탭"], run: openTab },
@@ -173,33 +180,33 @@
       { id: "timeline", group: "view", label: tr("a.timeline"), keys: shortcutLabel("⌘J"), aliases: ["timeline", "타임라인", "history"], run: () => (st.timelineOpen = !st.timelineOpen) },
       { id: "center", group: "view", label: tr("a.center"), aliases: ["center", "센터", "island", "quick"], run: () => (st.centerOpen = true) },
       ...LANGS.map((l) => ({ id: `lang-${l.id}`, group: "language", label: tr("a.lang", { name: l.name }), aliases: ["language", "언어", l.id, l.name], active: () => i18n.lang === l.id, run: () => setLang(l.id) })),
-      ...(["profiles", "agents", "automation", "policy", "pacing", "appearance", "diagnostics"] as const).map((tb) => ({ id: `settings-${tb}`, group: "settings", label: tr("a.settings", { tab: tr(`s.nav.${tb}`) }), keys: shortcutLabel("⌘,"), aliases: ["settings", "설정", tb], run: () => openSettings(tb) })),
+      ...(["profiles", "agents", "automation", "policy", "pacing", "appearance", "extensions", "diagnostics"] as const).map((tb) => ({ id: `settings-${tb}`, group: "settings", label: tr("a.settings", { tab: tr(`s.nav.${tb}`) }), keys: shortcutLabel("⌘,"), aliases: ["settings", "설정", tb], run: () => openSettings(tb) })),
       { id: "connect-agent", group: "setup", label: tr("s.connect.copy"), aliases: ["connect", "mcp", "codex", "cli", "agent", "에이전트", "연결", "설정 복사"], run: () => openSettings("agents") },
     ];
-    return c.externalPrivate ? all.filter(action => !["conn", "approval", "mode", "agents", "pacing", "setup"].includes(action.group)
+    return !c.shared ? all.filter(action => !["conn", "approval", "mode", "agents", "pacing", "setup"].includes(action.group)
       && !["center", "timeline", "settings-agents", "settings-policy", "settings-pacing"].includes(action.id)) : all;
   });
 
   // Typed arguments: "grace 3s", "유예 3초", "tab 2", "font 14", "theme paper".
   const num = (q: string, re: RegExp) => { const m = q.match(re); return m ? { n: parseFloat(m[1]), unit: (m[2] ?? "").toLowerCase() } : null; };
   const parsers: Parser[] = [
-    (q) => { if (cur().externalPrivate) return []; const m = num(q, /^(?:grace|유예|delay)\s*(\d+(?:\.\d+)?)\s*(ms|s|초)?$/i); if (!m) return []; const ms = m.unit === "ms" ? m.n : m.n * 1000; return [{ id: "set-grace", group: "pacing", label: tr("a.grace.set", { v: fmtMs(ms) }), run: () => cmd("set_pacing", { patch: { enterGraceMs: Math.round(ms) } }) }]; },
-    (q) => { if (cur().externalPrivate) return []; const m = num(q, /^(?:interval|typing|간격)\s*(\d+)\s*(ms)?$/i); if (!m) return []; return [{ id: "set-interval", group: "pacing", label: tr("a.interval.set", { v: `${m.n}ms` }), run: () => cmd("set_pacing", { patch: { minWriteIntervalMs: Math.round(m.n) } }) }]; },
-    (q) => { if (cur().externalPrivate) return []; const m = num(q, /^(?:lease|ttl)\s*(\d+)\s*(s|초)?$/i); if (!m) return []; return [{ id: "set-lease", group: "pacing", label: tr("a.lease.set", { v: `${m.n}s` }), run: () => cmd("set_pacing", { patch: { leaseTtlSecs: Math.round(m.n) } }) }]; },
+    (q) => { if (!cur().shared) return []; const m = num(q, /^(?:grace|유예|delay)\s*(\d+(?:\.\d+)?)\s*(ms|s|초)?$/i); if (!m) return []; const ms = m.unit === "ms" ? m.n : m.n * 1000; return [{ id: "set-grace", group: "pacing", label: tr("a.grace.set", { v: fmtMs(ms) }), run: () => cmd("set_pacing", { patch: { enterGraceMs: Math.round(ms) } }) }]; },
+    (q) => { if (!cur().shared) return []; const m = num(q, /^(?:interval|typing|간격)\s*(\d+)\s*(ms)?$/i); if (!m) return []; return [{ id: "set-interval", group: "pacing", label: tr("a.interval.set", { v: `${m.n}ms` }), run: () => cmd("set_pacing", { patch: { minWriteIntervalMs: Math.round(m.n) } }) }]; },
+    (q) => { if (!cur().shared) return []; const m = num(q, /^(?:lease|ttl)\s*(\d+)\s*(s|초)?$/i); if (!m) return []; return [{ id: "set-lease", group: "pacing", label: tr("a.lease.set", { v: `${m.n}s` }), run: () => cmd("set_pacing", { patch: { leaseTtlSecs: Math.round(m.n) } }) }]; },
     (q) => { const m = num(q, /^(?:font|글꼴|size)\s*(\d+)\s*(px)?$/i); if (!m) return []; return [{ id: "set-font", group: "theme", label: tr("a.font.set", { v: m.n }), run: () => { st.fontSize = m.n; localStorage.setItem("ss:fontSize", String(m.n)); } }]; },
     (q) => { const m = num(q, /^(?:tab|탭)\s*(\d+)$/i); if (!m) return []; const id = st.order[m.n - 1]; if (!id) return []; return [{ id: "go-tab", group: "tabs", label: tr("a.tab.go", { name: `${m.n} · ${tab(id)!.title}` }), run: () => select(id) }]; },
     (q) => { const m = q.match(/^(?:theme|테마)\s+(\w+)$/i); if (!m) return []; const th = Object.values(THEMES).find((x) => x.id.startsWith(m[1].toLowerCase()) || x.name.toLowerCase().startsWith(m[1].toLowerCase())); if (!th) return []; return [{ id: "set-theme", group: "theme", label: tr("a.theme", { name: th.name }), run: () => setTheme(th.id) }]; },
   ];
 
-  let handbackHeight = $state(0);
+  let dockHeight = $state(0);
   let timelineHeight = $state(0);
-  const handbackSpace = $derived(cur().externalPrivate || !cur().handback ? 0 : handbackHeight);
-  const timelineSpace = $derived(cur().externalPrivate || !st.timelineOpen || !timelineHeight ? 0 : timelineHeight + 10);
+  const dockSpace = $derived(cur().shared ? dockHeight : 0);
+  const timelineSpace = $derived(!cur().shared || !st.timelineOpen || !timelineHeight ? 0 : timelineHeight + 10);
   function onKey(e: KeyboardEvent) {
     if (!appShortcut(e)) {
-      if (e.key === "Escape" && (st.paletteOpen || st.settingsOpen || st.timelineOpen || st.centerOpen || cur().handback)) {
+      if (e.key === "Escape" && (st.paletteOpen || st.settingsOpen || st.timelineOpen || st.centerOpen || st.sharingOpen || st.completionOpen || cur().handback)) {
         e.preventDefault();
-        st.paletteOpen = false; st.settingsOpen = false; st.timelineOpen = false; st.centerOpen = false;
+        st.paletteOpen = false; st.settingsOpen = false; st.timelineOpen = false; st.centerOpen = false; st.sharingOpen = false; st.completionOpen = false;
         cur().handback = false;
         focusTerm();
       }
@@ -208,10 +215,10 @@
     const key = shortcutKey(e);
     if (key === "k") { e.preventDefault(); st.centerOpen = false; st.paletteOpen = !st.paletteOpen; if (!st.paletteOpen) focusTerm(); }
     else if (key === ",") { e.preventDefault(); st.settingsOpen = !st.settingsOpen; if (!st.settingsOpen) focusTerm(); }
-    else if (key === "j") { e.preventDefault(); if (cur().externalPrivate) return; st.timelineOpen = !st.timelineOpen; if (!st.timelineOpen) focusTerm(); }
+    else if (key === "j") { e.preventDefault(); if (!cur().shared) return; st.timelineOpen = !st.timelineOpen; if (!st.timelineOpen) focusTerm(); }
     else if (key === "t") { e.preventDefault(); openTab(); }
     else if (key === "w") { e.preventDefault(); closeTab(st.active); }
-    else if (key === "Enter") { e.preventDefault(); if (cur().externalPrivate) return; if (st.leaveChip) leave?.entrust(); else if (cur().handback) chip?.handBack(); }
+    else if (key === "Enter") { e.preventDefault(); if (!cur().shared) return; if (cur().handback) chip?.handBack(); }
     else if (/^[1-9]$/.test(key)) { e.preventDefault(); const id = st.order[Number(key) - 1]; if (id) select(id); }
     else if (e.shiftKey && (key === "[" || key === "]" || key === "{" || key === "}")) { e.preventDefault(); const i = st.order.indexOf(st.active); const d = key === "[" || key === "{" ? -1 : 1; select(st.order[(i + d + st.order.length) % st.order.length]); }
     else if (e.altKey && key === "ArrowRight") { e.preventDefault(); const n = nextNeedingAttention(); if (n) select(n); }
@@ -255,7 +262,19 @@
     const eventListener = onEvent((ev) => {
       const t = ev.session ? tab(ev.session) : cur();
       if (!t || !t.statusReady) return;
-      if (t.externalPrivate || ev.externalPrivate) {
+      if (ev.event === "sharing_changed") {
+        recordTimeline(t.timeline, ev);
+        t.shared = ev.shared === true;
+        t.surfaceGeneration = ev.generation ?? t.surfaceGeneration;
+        t.surfaceAvailable = false;
+        t.approval = null; t.ctlReq = null; t.proposal = null; t.grace = null; t.handback = false;
+        setController(t, "human");
+        if (!t.shared) { st.timelineOpen = false; st.completionOpen = false; }
+        void syncStatus(t.id);
+        return;
+      }
+      if (ev.event === "surface_invalidated") { t.surfaceGeneration = ev.generation ?? t.surfaceGeneration; t.surfaceAvailable = false; return; }
+      if (!t.shared) {
         if (ev.event === "process_exited") t.processAlive = false;
         if (ev.event === "attention_changed") t.attended = !!ev.attended;
         return;
@@ -289,7 +308,7 @@
         case "attention_requested": t.attention = { agentId: ev.agentId, reason: ev.reason }; announce(tr("attention.asks", { agent: ev.agentId, where: tabName(tabIndex(t.id)) }), agentColor(ev.agentId), "attention", 3200, ev.reason); break;
         case "tab_opened":
           // An agent opened this tab. It starts unattended: the agent cannot see or
-          // write until you go there (⌘⌥→) or entrust it. The tab knocks meanwhile.
+          // write until you display that surface. The tab knocks meanwhile.
           t.openedBy = ev.agentId; t.attention = { agentId: ev.agentId, reason: ev.reason };
 
           announce(tr("tab.opened.by", { agent: ev.agentId, where: tabName(tabIndex(t.id)) }), agentColor(ev.agentId), "attention", 3200, ev.reason ?? tr("tab.opened.hint"));
@@ -303,7 +322,6 @@
           }
           break;
         case "attention_changed": t.attended = !!ev.attended; if (ev.attended) t.attention = null; break;
-        case "entrusted": t.entrustedTo = ev.agentId ?? null; if (ev.agentId) { t.paused = false; } break;
         case "control_suspended": t.paused = true; break;
         case "control_resumed": t.paused = false; break;
         case "agent_input":
@@ -354,18 +372,19 @@
     try {
       await Promise.all([connectionListener, tabListener, abortListener, eventListener]);
       await refreshProfiles();
+      await refreshExtensions().catch(() => {});
       const info = await invoke<{ socket: string; shell: string; session: string | null; sessions: string[]; externalPending?: boolean }>("start", { rows: 24, cols: 80 });
       st.socket = info.socket ?? ""; st.shell = info.shell ?? "";
       for (const id of info.sessions) if (!tab(id)) addTab(id);
       st.active = info.session ?? "";
       st.externalPending = !!info.externalPending;
       for (const id of info.sessions) await syncStatus(id);
-      if (st.active && !cur().externalPrivate) {
+      if (st.active && !!cur().shared) {
         const tail = await invoke<any[]>("audit_tail", { n: 60 });
         const saved = savedTimelines(tail);
         for (const [id, history] of Object.entries(saved)) {
           const live = tab(id);
-          if (live?.externalPrivate) continue;
+          if (!live?.shared) continue;
           // Live events win if they arrived while startup was reading the audit.
           if (live && !live.timeline.items.length) live.timeline = history;
           else if (!live) st.pastTimelines[id] = history;
@@ -375,7 +394,7 @@
       await tick();
       await invoke("ui_ready");
       setTimeout(() => { terms[st.active]?.refit(); focusTerm(); }, 50);
-      setInterval(async () => { for (const id of st.order) { try { const s = await invoke<any>("status", { session: id }); const t = tab(id); if (t) { t.processAlive = !!s.processAlive; t.externalStarting = s.externalStarting === true; t.externalInputAvailable = s.externalInputAvailable === true; if (!t.externalPrivate) t.agents = s.connectedAgents ?? []; } } catch {} } }, 5000);
+      setInterval(async () => { for (const id of st.order) { try { const s = await invoke<any>("status", { session: id }); const t = tab(id); if (t) { t.processAlive = !!s.processAlive; t.externalStarting = s.externalStarting === true; t.externalInputAvailable = s.externalInputAvailable === true; t.shared = s.shared === true; t.surfaceGeneration = s.surfaceGeneration ?? t.surfaceGeneration; t.surfaceAvailable = s.surfaceAvailable === true; t.inputPending = s.inputPending === true; if (t.shared) t.agents = s.connectedAgents ?? []; } } catch {} } }, 5000);
     } catch (e) {
       st.settingsTab = "profiles"; st.settingsOpen = true;
       log(`start failed: ${e}`); toast(tr("engine.failed", { err: String(e) }), "danger");
@@ -385,33 +404,30 @@
 
 <svelte:window onkeydown={onKey} />
 
-<main style:--handback-space={`${handbackSpace}px`} style:--term-bottom={`${26 + handbackSpace + timelineSpace}px`} class="app" class:agent={cur().controller.type === "agent"} class:asking={!!cur().ctlReq || !!cur().attention} style:--term-right={st.settingsOpen ? "616px" : "16px"} style:--agent={cur().controller.type === "agent" ? agentColor(cur().controller.agentId) : cur().ctlReq ? agentColor(cur().ctlReq?.agentId) : cur().attention ? agentColor(cur().attention?.agentId) : "#8b7cff"}>
+<main style:--handback-space={`${dockSpace}px`} style:--term-bottom={`${26 + dockSpace + timelineSpace}px`} class="app" class:agent={cur().controller.type === "agent"} class:asking={!!cur().ctlReq || !!cur().attention} style:--term-right={st.settingsOpen ? "616px" : "16px"} style:--agent={cur().controller.type === "agent" ? agentColor(cur().controller.agentId) : cur().ctlReq ? agentColor(cur().ctlReq?.agentId) : cur().attention ? agentColor(cur().attention?.agentId) : "#8b7cff"}>
   {#each st.order as id (id)}
     {#if tab(id)?.statusReady}<Term bind:this={terms[id]} session={id} />{/if}
   {/each}
   <div class="frame" aria-hidden="true"></div>
-  {#if !cur().externalPrivate}
+  {#if !!cur().shared}
     <HandoffWash />
-    <Ghost />
-    <Hold />
   {/if}
   <TabStrip onselect={select} onclose={closeTab} onnew={openTab} onsettings={() => openSettings(st.settingsTab)} onpalette={() => { st.settingsOpen = false; st.centerOpen = false; st.paletteOpen = true; }} ontimeline={() => { st.timelineOpen = !st.timelineOpen; }} />
   {#if st.active}<Island onopen={() => { st.paletteOpen = false; st.centerOpen = !st.centerOpen; }} />{/if}
-  {#if !cur().externalPrivate}
-  <ControlRequest />
-  <GraceBar />
-  <div class="handback-dock" bind:clientHeight={handbackHeight}><HandbackChip bind:this={chip} /></div>
-  <LeaveChip bind:this={leave} />
+  {#if !!cur().shared}
+  <div class="interaction-dock" bind:clientHeight={dockHeight}><ControlRequest /><Hold /><Ghost /><GraceBar /><HandbackChip bind:this={chip} /><CompletionBar /></div>
   <Timeline bind:height={timelineHeight} />
   {/if}
   <Toasts />
-  {#if st.centerOpen && !cur().externalPrivate}<Center onclose={() => { st.centerOpen = false; focusTerm(); }} />{/if}
+  {#if st.centerOpen}<Center onclose={() => { st.centerOpen = false; focusTerm(); }} />{/if}
   {#if st.paletteOpen}<Palette {actions} {parsers} onclose={() => { st.paletteOpen = false; focusTerm(); }} />{/if}
+  {#if st.sharingOpen}<SharingDialog onclose={() => { st.sharingOpen = false; focusTerm(); }} />{/if}
   {#if st.settingsOpen}<SettingsSheet onclose={() => { st.settingsOpen = false; queueMicrotask(focusTerm); }} />{/if}
 </main>
 
 <style>
-  .handback-dock { position: absolute; left: 0; right: 0; bottom: 26px; z-index: 12; pointer-events: none; }
+  .interaction-dock { position:absolute; left:0; right:0; bottom:26px; z-index:19; max-height:45vh; overflow:auto; }
+
   .app { position: relative; width: 100vw; height: 100vh; overflow: hidden; background: var(--bg); }
   .frame { position: absolute; inset: 6px; border-radius: 12px; pointer-events: none; z-index: 5;
     border: 1.5px solid var(--agent);

@@ -12,13 +12,13 @@ Work in the same shell as your AI agent. Step in, make a correction, and ask it 
 
 **Install the desktop app.** No Rust or Node.js required; the agent connector is included.
 
-| Platform | v0.6.0 preview |
+| Platform | v0.7.0 preview |
 |---|---|
-| macOS · Apple Silicon | [Download for Mac](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-aarch64-apple-darwin-desktop.dmg) |
-| Windows · x64 | [Download installer](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-x86_64-pc-windows-msvc-setup.exe) |
-| Ubuntu · x64 | [Download .deb](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-x86_64-unknown-linux-gnu-desktop.AppImage) |
+| macOS · Apple Silicon | [Download for Mac](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-aarch64-apple-darwin-desktop.dmg) |
+| Windows · x64 | [Download installer](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-x86_64-pc-windows-msvc-setup.exe) |
+| Ubuntu · x64 | [Download .deb](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.AppImage) |
 
-Mac downloads are signed and notarized. Windows previews are unsigned. Linux builds use Ubuntu 24.04; Intel Mac distribution is paused. [Installation and updates](docs/getting-started.md) · [All assets and checksums](https://github.com/eggplantiny/conn/releases/tag/v0.6.0)
+Mac downloads are signed and notarized. Windows previews are unsigned. Linux builds use Ubuntu 24.04; Intel Mac distribution is paused. [Installation and updates](docs/getting-started.md) · [All assets and checksums](https://github.com/eggplantiny/conn/releases/tag/v0.7.0)
 
 ## A small correction, without starting over
 
@@ -59,3 +59,9 @@ The timeline brings commands and collaboration decisions together, including den
 **Preview · MIT licensed.** Commands use your account's permissions; Conn is not an OS sandbox. [Trust model](docs/security.md) · [Report a security issue](SECURITY.md)
 
 Useful for your workflow? **Star Conn** to help others discover it. We'd especially like to hear when you wanted to take the keyboard back.
+
+## Sharing and extensions
+
+v0.7.0 adds sharing within the same running shell, themes and opt-in native command
+suggestions. Upgrade the app and restart its MCP clients together.
+See the [product contract](docs/PRD.md) and [extensions](docs/extensions.md).

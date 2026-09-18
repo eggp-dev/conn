@@ -8,10 +8,10 @@
 //!
 //! * `session`   — all state and invariants. No I/O assumptions beyond two byte sinks.
 //! * `engine`    — spawns the PTY, runs reader/tick threads, exposes handles.
-//! * `ipc`       — JSON-over-UDS server (for agents, human CLI, remote frontends) and client.
+//! * `ipc`       — JSON-over-local-transport agent server and client; native owner calls stay in-process.
 //! * everything else — building blocks used by `session`.
 //!
-//! Frontends (Tauri, a web UI, Terminal.app via the `conn` proxy) own rendering.
+//! Native frontends and the matching browser test adapter own rendering.
 //! The core never draws, except for the optional in-terminal approval prompt.
 
 pub mod backend;

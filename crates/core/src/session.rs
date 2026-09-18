@@ -24,11 +24,12 @@ use crate::authority::{Authority, AuthorityError, ConnId, Controller, Lease, Rev
 use crate::config::Pacing;
 use crate::input::{self, InputTracker};
 use crate::policy::{Decision as PolicyDecision, PolicyStore, Reload};
-use crate::screen::{Projection, ScreenModel, Size};
+use crate::screen::{Projection, ScreenModel, Size, SurfaceFrame};
 
 /// Something that can deliver server-push events to a connected client.
 pub trait EventSink: Send {
     fn send(&self, event: ServerEvent);
+    fn send_scoped(&self, event: ServerEvent, _generation: u64) { self.send(event); }
 }
 
 impl<F: Fn(ServerEvent) + Send> EventSink for F {
@@ -60,8 +61,10 @@ pub enum ServerEvent {
     ShellCommandFinished { #[serde(rename = "commandId")] command_id: String, #[serde(rename = "exitCode")] exit_code: Option<i32>, #[serde(rename = "durationMs")] duration_ms: u64 },
     /// The visible screen changed (coalesced by the tick).
     ScreenChanged { revision: u64 },
-    /// Raw PTY output, base64. Only sent to connections that asked for streaming.
-    Output { data: String },
+    /// Owner-only raw PTY output, base64. Never sent on public agent sockets.
+    Output { data: String, #[serde(rename = "outputSeq")] output_seq: u64 },
+    SharingChanged { shared: bool, generation: u64 },
+    SurfaceInvalidated { generation: u64 },
     ProcessExited { #[serde(rename = "exitCode")] exit_code: Option<u32> },
     PacingChanged { pacing: Pacing },
     AffordanceMaskChanged { allow: Option<Vec<Affordance>> },
@@ -78,8 +81,6 @@ pub enum ServerEvent {
     HumanExec { cmd: String },
     /// The human started or stopped looking at this session.
     AttentionChanged { attended: bool },
-    /// The human left this session to an agent (or withdrew that).
-    Entrusted { #[serde(rename = "agentId")] agent_id: Option<String>, cap: Option<String> },
     /// An agent asks the human to come back to this session.
     AttentionRequested { #[serde(rename = "agentId")] agent_id: String, reason: Option<String> },
     /// An agent opened this session as a new tab. It starts unattended.
@@ -220,10 +221,12 @@ pub enum SessionError {
     IntentRequired,
     #[error("the human is not looking at this session; call terminal_request_attention and wait")]
     Unattended,
-    #[error("suspended: the human left this session; wait for them to return or to entrust it to you")]
+    #[error("suspended: the human left this session; wait for them to return")]
     Suspended,
     #[error("'{0}' is not available right now")]
     NotAvailable(String),
+    #[error("no current owner-presented surface is available")]
+    SurfaceUnavailable,
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -330,8 +333,19 @@ pub struct AgentConnection {
 pub struct Status {
     #[serde(rename = "shellIntegration")]
     pub shell_integration: crate::shell_integration::IntegrationStatus,
-    #[serde(rename = "externalPrivate")]
-    pub external_private: bool,
+    pub shared: bool,
+    #[serde(rename = "externalOrigin")]
+    pub external_origin: bool,
+    #[serde(rename = "surfaceGeneration")]
+    pub surface_generation: u64,
+    #[serde(rename = "outputSeq")]
+    pub output_seq: u64,
+    #[serde(rename = "surfaceAvailable")]
+    pub surface_available: bool,
+    #[serde(rename = "completionPromptReady")]
+    pub completion_prompt_ready: bool,
+    #[serde(rename = "inputPending")]
+    pub input_pending: bool,
     #[serde(rename = "externalInputAvailable")]
     pub external_input_available: bool,
     #[serde(rename = "profileId")]
@@ -363,12 +377,10 @@ pub struct Status {
     #[serde(rename = "promptActive")]
     pub prompt_active: bool,
     pub mode: AgentMode,
-    /// Effective mode right now (capped by the unattended policy when entrusted).
+    /// Effective mode; unobserved sessions have no input authority.
     #[serde(rename = "effectiveMode")]
     pub effective_mode: AgentMode,
     pub attended: bool,
-    #[serde(rename = "entrustedTo")]
-    pub entrusted_to: Option<String>,
     #[serde(rename = "attentionRequest")]
     pub attention_request: Option<AttentionRequest>,
     /// The agent that opened this session as a tab, if any.
@@ -400,6 +412,15 @@ pub struct LastAgent {
     pub last_cmd: Option<String>,
 }
 
+/// Owner-only rendered output delivery, installed before the PTY reader starts.
+#[derive(Debug, Clone)]
+pub struct OutputFrame {
+    pub data: Vec<u8>,
+    pub output_seq: u64,
+    pub generation: u64,
+}
+pub type OutputFrameSink = Box<dyn Fn(&OutputFrame) + Send + Sync>;
+
 pub struct SessionConfig {
     pub rows: u16,
     pub cols: u16,
@@ -417,9 +438,19 @@ pub struct SessionConfig {
     pub shell_pid: Option<u32>,
 }
 
+/// None means every connected agent was affected (the previous audience was unrestricted).
+type ParticipationListener = Box<dyn Fn(Option<&HashSet<ConnId>>) + Send + Sync>;
+
 pub struct Session {
-    // Immutable origin. No public setter or sharing transition in this increment.
-    external_private: bool,
+    // Origin survives participation transitions. Only native owners change sharing.
+    external_origin: bool,
+    shared: bool,
+    participants: Option<HashSet<ConnId>>,
+    participation_listener: Option<ParticipationListener>,
+    surface_generation: u64,
+    participation_generation: u64,
+    output_seq: u64,
+    surface: Option<(SurfaceFrame, Instant)>,
     external_writer_active: bool,
     execution_profile: Option<crate::backend::Profile>,
     authority: Authority,
@@ -430,12 +461,19 @@ pub struct Session {
     human_input_pending: bool,
     shell_integration: crate::shell_integration::IntegrationStatus,
     shell_command: Option<crate::shell_integration::RunningCommand>,
+    // Content-free state closes the input-to-async-shell-hook interval.
+    shell_prompt_confirmed: bool,
+    shell_submission_inflight: bool,
+    shell_foreground_sequence: Option<u64>,
+    shell_recording_ready: bool,
+    shell_recording_armed: bool,
     shell_submissions: Vec<crate::shell_integration::Submission>,
     shell_human_input: bool,
     shell_agent_input: bool,
     audit: Audit,
     pty: Box<dyn Write + Send>,
     output: Option<Box<dyn Write + Send>>,
+    output_frame_sink: Option<OutputFrameSink>,
     master: Option<Box<dyn MasterPty + Send>>,
     pacing: Pacing,
     render_prompt: bool,
@@ -463,7 +501,6 @@ pub struct Session {
     shell_pid: Option<u32>,
     cwd_override: Option<std::path::PathBuf>,
     attended: bool,
-    entrusted: Option<ConnId>,
     attention_request: Option<AttentionRequest>,
     opened_by: Option<String>,
     tabs_supported: bool,
@@ -501,16 +538,23 @@ impl Session {
         Self::with_origin(cfg, false)
     }
 
-    /// Construct a private native session without retaining the supplied audit sink.
+    /// Construct a private native session with activity recording disabled.
     pub fn new_external_private(mut cfg: SessionConfig) -> Self {
-        cfg.audit = Audit::null();
+        cfg.audit.set_enabled(false);
         cfg.render_prompt = false;
         Self::with_origin(cfg, true)
     }
 
     fn with_origin(cfg: SessionConfig, external_private: bool) -> Self {
         Self {
-            external_private,
+            external_origin: external_private,
+            shared: !external_private,
+            participants: if external_private { Some(HashSet::new()) } else { None },
+            participation_listener: None,
+            surface_generation: 1,
+            participation_generation: 1,
+            output_seq: 0,
+            surface: None,
             external_writer_active: external_private,
             authority: Authority::new(Duration::from_secs(cfg.pacing.lease_ttl_secs)),
             policy: cfg.policy,
@@ -520,12 +564,18 @@ impl Session {
             human_input_pending: false,
             shell_integration: crate::shell_integration::IntegrationStatus::unavailable(if external_private { "private_session" } else { "unsupported_shell" }),
             shell_command: None,
+            shell_prompt_confirmed: false,
+            shell_submission_inflight: false,
+            shell_foreground_sequence: None,
+            shell_recording_ready: false,
+            shell_recording_armed: false,
             shell_submissions: Vec::new(),
             shell_human_input: false,
             shell_agent_input: false,
             audit: cfg.audit,
             pty: cfg.pty_writer,
             output: cfg.output,
+            output_frame_sink: None,
             master: cfg.master,
             pacing: cfg.pacing,
             render_prompt: cfg.render_prompt,
@@ -551,7 +601,6 @@ impl Session {
             shell_pid: cfg.shell_pid,
             cwd_override: None,
             attended: true,
-            entrusted: None,
             attention_request: None,
             opened_by: None,
             tabs_supported: false,
@@ -559,17 +608,174 @@ impl Session {
         }
     }
 
-    pub fn is_private(&self) -> bool { self.external_private }
+    pub fn is_private(&self) -> bool { !self.shared }
+    pub fn external_origin(&self) -> bool { self.external_origin }
+    pub fn surface_generation(&self) -> u64 { self.surface_generation }
+    pub fn surface_revision(&self) -> u64 { self.surface.as_ref().map_or(0, |(frame, _)| frame.revision) }
+    pub fn participation_generation(&self) -> u64 { self.participation_generation }
+    pub fn output_seq(&self) -> u64 { self.output_seq }
+    /// Native owner installs a log at the moment sharing is enabled, never at external startup.
+    pub fn activate_shared_audit(&mut self, audit: Audit) { audit.set_enabled(self.shared); self.audit = audit; }
+
+    pub fn set_output_frame_sink(&mut self, sink: Option<OutputFrameSink>) { self.output_frame_sink = sink; }
+    pub fn participant_allowed(&self, conn: ConnId) -> bool {
+        self.shared && self.participants.as_ref().is_none_or(|ids| ids.contains(&conn))
+    }
+
+    pub fn review_required(&self) -> bool {
+        self.external_origin || self.execution_profile.as_ref().is_some_and(|profile| profile.needs_review())
+            || (self.shell_integration.state == "active" && (!self.shell_prompt_confirmed || self.shell_submission_inflight))
+    }
+
+    pub fn completion_prompt_ready(&self) -> bool {
+        self.shared && self.process_alive && self.shell_integration.state == "active" && self.shell_command.is_none()
+            && self.shell_prompt_confirmed && !self.shell_submission_inflight
+            && !self.external_origin && self.authority.controller().is_human()
+    }
+
+    pub fn authoritative_surface(&self) -> Result<SurfaceFrame, SessionError> {
+        self.require_shared()?;
+        let frame = self.presented_surface()?;
+        if frame.output_seq != self.output_seq { return Err(SessionError::SurfaceUnavailable); }
+        Ok(frame.clone())
+    }
+
+    /// Completion insertion is a human acceptance, not a second unchecked writer.
+    pub fn accept_completion(&mut self, surface_id: &str, generation: u64, revision: u64, text: &str) -> Result<(), SessionError> {
+        let frame = self.authoritative_surface()?;
+        if frame.surface_id != surface_id || frame.generation != generation || frame.revision != revision {
+            return Err(SessionError::SurfaceUnavailable);
+        }
+        if text.len() > 8192 || text.chars().any(char::is_control) {
+            return Err(SessionError::InvalidInput("completion must be bounded text without execution controls".into()));
+        }
+        self.human_input(text.as_bytes());
+        Ok(())
+    }
+
+    /// Owner observation was obscured or replaced. Pending decisions survive
+    /// layout changes; all execution waits for a fresh presented surface.
+    pub fn invalidate_surface(&mut self) -> u64 {
+        self.surface = None;
+        self.surface_generation = self.surface_generation.saturating_add(1);
+        self.broadcast(ServerEvent::SurfaceInvalidated { generation: self.surface_generation });
+        self.notify_tools_changed();
+        self.surface_generation
+    }
+
+    pub fn publish_surface(&mut self, frame: SurfaceFrame) -> Result<(), SessionError> {
+        if !frame.validate() || frame.generation != self.surface_generation || frame.output_seq != self.output_seq {
+            return Err(SessionError::InvalidInput("invalid or obsolete surface frame".into()));
+        }
+        if let Some((old, _)) = &self.surface {
+            if old.surface_id != frame.surface_id || frame.revision < old.revision || frame.output_seq < old.output_seq {
+                return Err(SessionError::InvalidInput("surface owner or revision changed without invalidation".into()));
+            }
+            if old.revision == frame.revision && old != &frame {
+                return Err(SessionError::InvalidInput("surface contents changed without advancing revision".into()));
+            }
+        }
+        if !frame.visible {
+            self.invalidate_surface();
+            return Ok(());
+        }
+        let revision = frame.revision;
+        let changed = self.surface.as_ref().is_none_or(|(old, _)| old.revision != frame.revision || old.output_seq != frame.output_seq);
+        self.surface = Some((frame, Instant::now()));
+        if changed { self.broadcast(ServerEvent::ScreenChanged { revision }); }
+        Ok(())
+    }
+
+    fn presented_surface(&self) -> Result<&SurfaceFrame, SessionError> {
+        let (frame, received) = self.surface.as_ref().ok_or(SessionError::SurfaceUnavailable)?;
+        if !self.attended || !frame.visible || frame.generation != self.surface_generation || frame.output_seq != self.output_seq
+            || received.elapsed() > Duration::from_secs(3) {
+            return Err(SessionError::SurfaceUnavailable);
+        }
+        Ok(frame)
+    }
+
+    /// Only the local owner may add/remove agent participation. The PTY is untouched.
+    pub fn set_shared(&mut self, shared: bool) -> Result<(), SessionError> {
+        self.set_shared_with_agents(shared, Vec::new())
+    }
+
+    /// Host-only catalog invalidation. The listener must not lock any session.
+    pub(crate) fn set_participation_listener(&mut self, listener: ParticipationListener) {
+        self.participation_listener = Some(listener);
+    }
+
+    pub fn set_shared_with_agents(&mut self, shared: bool, agents: Vec<ConnId>) -> Result<(), SessionError> {
+        if agents.len() > 64 { return Err(SessionError::InvalidInput("at most 64 participants".into())); }
+        let selected: HashSet<_> = agents.into_iter().collect();
+        if !self.process_alive { return Err(SessionError::ProcessExited); }
+        if self.shared == shared && self.participants.as_ref() == Some(&selected) { return Ok(()); }
+        if shared && (self.input.has_pending() || self.human_input_pending) { return Err(SessionError::InputPending); }
+        let affected = if self.shared && self.participants.is_none() {
+            None
+        } else {
+            let mut ids = if self.shared { self.participants.clone().unwrap_or_default() } else { HashSet::new() };
+            if shared { ids.extend(selected.iter().copied()); }
+            Some(ids)
+        };
+        // Revocation cannot be held hostage by a partial agent write. Preserve the
+        // physical input for the owner instead of guessing a clear key in a TUI.
+        let unfinished_agent_input = self.input.has_pending();
+        self.revoke_external();
+        self.cancel_agent_work("sharing_changed");
+        self.human_input_pending |= unfinished_agent_input && self.input.has_pending();
+        if !shared { self.audit.record("human", "sharing_stopped", json!({ "generation": self.surface_generation })); }
+        self.audit.set_enabled(shared);
+        self.shared = shared;
+        self.participation_generation = self.participation_generation.saturating_add(1);
+        self.participants = Some(selected);
+        self.surface = None;
+        self.surface_generation = self.surface_generation.saturating_add(1);
+        self.input.reset();
+        self.shell_submissions.clear();
+        self.shell_command = None;
+        self.shell_prompt_confirmed = false;
+        self.shell_recording_ready = false;
+        self.shell_recording_armed = false;
+        self.shell_human_input = false;
+        self.shell_agent_input = false;
+        self.last_agent = None;
+        self.last_agent_cmd = None;
+        self.attention_request = None;
+        if shared { self.audit.record("human", "sharing_started", json!({ "generation": self.surface_generation })); }
+        self.broadcast(ServerEvent::SharingChanged { shared, generation: self.surface_generation });
+        self.notify_tools_changed();
+        // New participants have no session subscription yet; removed participants'
+        // session events are deliberately discarded by the transport's ACL guard.
+        if let Some(listener) = &self.participation_listener { listener(affected.as_ref()); }
+        Ok(())
+    }
+
+    fn cancel_agent_work(&mut self, reason: &str) {
+        self.cancel_scheduled_if(|_| true, reason);
+        self.reject_proposal_if(|_| true, reason);
+        let ids: Vec<_> = self.approvals.pending().into_iter().map(|a| a.id.clone()).collect();
+        for id in ids { self.finish_approval(&id, ApprovalState::Denied, reason); }
+        let ids: Vec<_> = self.control_requests.iter().filter(|r| r.state == ControlRequestState::Pending).map(|r| r.request_id.clone()).collect();
+        for id in ids { self.finish_control_request(&id, ControlRequestState::Denied); }
+        if let Some(lease) = self.authority.revoke() {
+            let ev = ServerEvent::ControlRevoked { lease: lease.label(), agent_id: lease.agent_id, reason: RevokeReason::Taken };
+            self.notify(lease.conn, ev.clone());
+            self.broadcast(ev);
+        }
+    }
 
     pub(crate) fn shell_integration_starting(&mut self) {
-        if self.external_private { return; }
+        if self.is_private() { return; }
+        self.shell_prompt_confirmed = false;
         self.shell_integration.state = "starting".into();
         self.shell_integration.reason = None;
     }
 
     pub(crate) fn shell_integration_lost(&mut self, reason: &str) {
-        if self.external_private { return; }
+        if self.is_private() { return; }
         self.finish_shell_command(None);
+        self.shell_prompt_confirmed = false;
         self.shell_integration.state = "unavailable".into();
         self.shell_integration.reason = Some(reason.into());
         self.shell_submissions.clear();
@@ -578,7 +784,8 @@ impl Session {
 
     fn shell_submission(&mut self, actor: &str, command: &str) -> Option<String> {
         self.shell_agent_input = true;
-        if self.external_private || self.shell_integration.state != "active" || self.shell_command.is_some() { return None; }
+        self.shell_recording_armed |= self.shared && self.shell_recording_ready && self.shell_prompt_confirmed;
+        if self.is_private() || self.shell_integration.state != "active" || self.shell_command.is_some() { return None; }
         let id = uuid::Uuid::new_v4().to_string();
         if self.shell_submissions.len() >= 16 { self.shell_submissions.remove(0); }
         self.shell_submissions.push(crate::shell_integration::Submission { id: id.clone(), actor: actor.into(), command: command.into(), at: Instant::now() });
@@ -586,29 +793,62 @@ impl Session {
     }
 
     pub(crate) fn shell_event(&mut self, sequence: u64, kind: &str, text: &str, cwd: &str, result: &str) {
-        if self.external_private || !self.process_alive { return; }
+        if !self.process_alive { return; }
+        // Lifecycle sequence alone is retained privately. It identifies the outer
+        // shell's foreground program without retaining its command or arguments.
+        let matching_end = kind == "end" && self.shell_foreground_sequence.is_some()
+            && self.shell_foreground_sequence == text.parse::<u64>().ok();
+        let record_start = self.shared && self.shell_recording_ready && self.shell_recording_armed;
         match kind {
             "ready" => {
+                self.shell_prompt_confirmed = !self.shell_submission_inflight;
                 self.shell_integration.state = "active".into();
                 self.shell_integration.shell = Some(text.into());
                 self.shell_integration.reason = None;
-                self.broadcast(ServerEvent::ShellIntegrationChanged { status: self.shell_integration.clone() });
+                self.shell_recording_ready = self.shared && self.shell_prompt_confirmed;
             }
+            "start" => {
+                self.shell_foreground_sequence = Some(sequence);
+                self.shell_prompt_confirmed = false;
+                self.shell_recording_ready = false;
+                self.shell_recording_armed = false;
+            }
+            "end" if matching_end => {
+                self.shell_foreground_sequence = None;
+                self.shell_submission_inflight = false;
+                self.shell_prompt_confirmed = true;
+                self.shell_recording_ready = self.shared && self.shell_integration.state == "active";
+                self.shell_recording_armed = false;
+            }
+            "gap" | "unavailable" => {
+                self.shell_prompt_confirmed = false;
+                self.shell_recording_ready = false;
+                self.shell_recording_armed = false;
+                self.shell_foreground_sequence = None;
+            }
+            _ => {}
+        }
+        if self.is_private() { return; }
+        match kind {
+            "ready" => self.broadcast(ServerEvent::ShellIntegrationChanged { status: self.shell_integration.clone() }),
             "gap" | "unavailable" => self.shell_integration_lost(if kind == "gap" { "event_gap" } else { "hook_conflict" }),
             "start" if self.shell_integration.state == "active" && !text.is_empty() => {
                 self.finish_shell_command(None);
                 let pending = std::mem::take(&mut self.shell_submissions);
+                // A shared prompt followed by new local input is required after a
+                // sharing boundary. Delayed private mailbox payloads are discarded.
+                if !record_start { return; }
                 let matched = if pending.len() == 1 && pending[0].command.trim() == text.trim() && pending[0].at.elapsed() < Duration::from_secs(5) { pending.into_iter().next() } else { None };
                 let actor = matched.as_ref().map(|p| p.actor.clone()).unwrap_or_else(|| if self.shell_human_input && !self.shell_agent_input { "human".into() } else { "shell".into() });
                 let submission_id = matched.map(|p| p.id);
                 let id = uuid::Uuid::new_v4().to_string();
-                self.shell_command = Some(crate::shell_integration::RunningCommand { id: id.clone(), actor: actor.clone(), started: Instant::now(), sequence });
+                self.shell_command = Some(crate::shell_integration::RunningCommand { id: id.clone(), actor: actor.clone(), started: Instant::now() });
                 self.shell_human_input = false;
                 self.shell_agent_input = false;
                 self.audit.record(&actor, "shell_command_started", json!({ "commandId": id, "submissionId": submission_id, "cmd": text, "cwd": cwd }));
                 self.broadcast(ServerEvent::ShellCommandStarted { command_id: id, submission_id, actor, cmd: text.into(), cwd: cwd.into() });
             }
-            "end" if self.shell_command.as_ref().is_some_and(|c| Some(c.sequence) == text.parse().ok()) => {
+            "end" if matching_end => {
                 self.finish_shell_command(result.parse::<i32>().ok().filter(|c| (0..=255).contains(c)));
                 self.shell_submissions.clear();
                 self.shell_human_input = false;
@@ -625,7 +865,7 @@ impl Session {
         self.broadcast(ServerEvent::ShellCommandFinished { command_id: command.id, exit_code, duration_ms });
     }
 
-    pub fn external_writer_active(&self) -> bool { self.external_private && self.external_writer_active && self.process_alive }
+    pub fn external_writer_active(&self) -> bool { self.is_private() && self.external_writer_active && self.process_alive }
 
     /// Revocation is permanent for this session. Native ownership is checked by the caller.
     pub fn revoke_external(&mut self) { self.external_writer_active = false; }
@@ -633,14 +873,16 @@ impl Session {
     /// A bounded native delivery lets human input preempt between chunks.
     pub fn write_external(&mut self, bytes: &[u8]) -> Result<(), SessionError> {
         if !self.external_writer_active() { return Err(SessionError::NotAvailable("session unavailable".into())); }
-        self.write_terminal_response(bytes)
+        self.write_terminal_response(bytes)?;
+        if !bytes.is_empty() { self.human_input_pending = !matches!(bytes.last(), Some(b'\r' | b'\n' | 3 | 21)); }
+        Ok(())
     }
 
     /// In-process terminal protocol replies are not human keystrokes or external
     /// automation requests. Native UI ownership must be checked before calling.
     /// They keep working after human takeover without restoring external access.
     pub fn write_terminal_response(&mut self, bytes: &[u8]) -> Result<(), SessionError> {
-        if !self.external_private || !self.process_alive { return Err(SessionError::NotAvailable("session unavailable".into())); }
+        if !self.process_alive { return Err(SessionError::NotAvailable("session unavailable".into())); }
         if bytes.len() > 1024 { return Err(SessionError::InvalidInput("external input chunk is too large".into())); }
         if !self.write_external_chunk(bytes) {
             self.revoke_external();
@@ -668,13 +910,17 @@ impl Session {
         self.pty.write_all(bytes).and_then(|_| self.pty.flush()).is_ok()
     }
 
+    fn require_participant(&self, conn: ConnId) -> Result<(), SessionError> {
+        if self.participant_allowed(conn) && self.conn_kind(conn) == Some(ConnKind::Agent) { Ok(()) } else { Err(SessionError::NotAvailable("participation not granted".into())) }
+    }
+
     fn require_shared(&self) -> Result<(), SessionError> {
-        if self.external_private { Err(SessionError::NotAvailable("session unavailable".into())) } else { Ok(()) }
+        if self.is_private() { Err(SessionError::NotAvailable("session unavailable".into())) } else { Ok(()) }
     }
 
     /// Test hook: record the order of internal effects.
     pub fn set_trace(&mut self, trace: Arc<Mutex<Vec<String>>>) {
-        if !self.external_private { self.trace = Some(trace); }
+        if !self.is_private() { self.trace = Some(trace); }
     }
 
     /// Test hook / embedder override: the shell's cwd for target resolution.
@@ -703,8 +949,9 @@ impl Session {
     }
 
     fn analyse(&self, cmd: &str) -> crate::policy::LineAnalysis {
-        if let Some(p) = &self.execution_profile {
-            if p.needs_review() { return self.policy.analyse_external(cmd, p.shell); }
+        if self.review_required() {
+            let shell = self.execution_profile.as_ref().filter(|p| p.needs_review()).map_or(crate::backend::ShellKind::Custom, |p| p.shell);
+            return self.policy.analyse_external(cmd, shell);
         }
         let cwd = self.shell_cwd();
         let home = dirs::home_dir();
@@ -722,12 +969,21 @@ impl Session {
     // ----- plumbing -------------------------------------------------------
 
     fn write_pty(&mut self, bytes: &[u8]) {
-        if !self.external_private { self.trace("pty_write"); }
+        if bytes.iter().any(|byte| matches!(byte, b'\r' | b'\n' | 3 | 4)) {
+            self.shell_prompt_confirmed = false;
+            self.shell_submission_inflight = true;
+        }
+        if !self.is_private() { self.trace("pty_write"); }
         let _ = self.pty.write_all(bytes);
         let _ = self.pty.flush();
     }
 
     fn write_output(&mut self, bytes: &[u8]) {
+        if bytes.is_empty() { return; }
+        self.output_seq = self.output_seq.saturating_add(1);
+        if let Some(sink) = &self.output_frame_sink {
+            sink(&OutputFrame { data: bytes.to_vec(), output_seq: self.output_seq, generation: self.surface_generation });
+        }
         if let Some(out) = &mut self.output {
             let _ = out.write_all(bytes);
             let _ = out.flush();
@@ -736,14 +992,15 @@ impl Session {
 
     fn notify(&self, conn: ConnId, ev: ServerEvent) {
         if let Some(c) = self.conns.get(&conn) {
-            c.sink.send(ev);
+            if c.kind == ConnKind::Agent && !self.participant_allowed(conn) { return; }
+            c.sink.send_scoped(ev, self.participation_generation);
         }
     }
 
     fn notify_tools_changed(&self) {
         for c in self.conns.values() {
             if c.kind == ConnKind::Agent {
-                c.sink.send(ServerEvent::ToolsChanged);
+                c.sink.send_scoped(ServerEvent::ToolsChanged, self.participation_generation);
             }
         }
     }
@@ -752,7 +1009,7 @@ impl Session {
     fn broadcast(&self, ev: ServerEvent) {
         for c in self.conns.values() {
             if c.kind == ConnKind::Frontend {
-                c.sink.send(ev.clone());
+                c.sink.send_scoped(ev.clone(), self.participation_generation);
             }
         }
     }
@@ -778,7 +1035,7 @@ impl Session {
     // ----- connections ----------------------------------------------------
 
     pub fn register_conn(&mut self, conn: ConnId, kind: ConnKind, name: &str, sink: Box<dyn EventSink>) {
-        if self.external_private { return; }
+        if self.is_private() { return; }
         self.conns.insert(conn, ConnInfo { kind, name: name.to_string(), sink, stream_output: false, last_activity: Instant::now() });
         if kind == ConnKind::Agent {
             self.audit.record(name, "connect", json!({ "conn": conn }));
@@ -787,7 +1044,7 @@ impl Session {
 
     /// Register a frontend. `stream_output` = also send raw PTY output as `Output` events.
     pub fn register_frontend(&mut self, conn: ConnId, name: &str, sink: Box<dyn EventSink>, stream_output: bool) {
-        if self.external_private && conn < LOCAL_CONN_BASE { return; }
+        if conn < LOCAL_CONN_BASE { return; }
         self.conns.insert(conn, ConnInfo { kind: ConnKind::Frontend, name: name.to_string(), sink, stream_output, last_activity: Instant::now() });
     }
 
@@ -824,10 +1081,6 @@ impl Session {
 
     pub fn connection_closed(&mut self, conn: ConnId) {
         let name = self.agent_name(conn);
-        if self.entrusted == Some(conn) {
-            self.entrusted = None;
-            self.broadcast(ServerEvent::Entrusted { agent_id: None, cap: None });
-        }
         if let Some(lease) = self.authority.revoke_if_held_by(conn) {
             self.audit.record(&name, "disconnect", json!({ "revoked": lease.label() }));
             self.broadcast(ServerEvent::ControlRevoked { lease: lease.label(), agent_id: lease.agent_id, reason: RevokeReason::Disconnected });
@@ -853,8 +1106,11 @@ impl Session {
     /// Bytes from the human. This is the preemptive takeover path.
     pub fn human_input(&mut self, bytes: &[u8]) {
         if !bytes.is_empty() { self.shell_human_input = true; }
-        if self.external_private {
-            if !bytes.is_empty() { self.revoke_external(); }
+        if self.is_private() {
+            if !bytes.is_empty() {
+                self.revoke_external();
+                self.human_input_pending = !matches!(bytes.last(), Some(b'\r' | b'\n' | 3 | 21));
+            }
             if self.process_alive { self.write_pty(bytes); }
             return;
         }
@@ -862,6 +1118,7 @@ impl Session {
             self.ui_input(bytes);
             return;
         }
+        self.shell_recording_armed |= !bytes.is_empty() && self.shell_recording_ready && self.shell_prompt_confirmed;
         // 1. revoke lease  2. controller = Human   (both inside `revoke`)
         let revoked = self.authority.revoke();
         if revoked.is_some() {
@@ -907,6 +1164,8 @@ impl Session {
 
     /// Output from the PTY. Passed through untouched unless the approval prompt is up.
     pub fn pty_output(&mut self, bytes: &[u8]) {
+        if bytes.is_empty() { return; }
+        self.output_seq = self.output_seq.saturating_add(1);
         if self.screen.process(bytes) {
             self.screen_dirty = true;
         }
@@ -920,7 +1179,7 @@ impl Session {
             let data = base64::engine::general_purpose::STANDARD.encode(bytes);
             for c in self.conns.values() {
                 if c.stream_output {
-                    c.sink.send(ServerEvent::Output { data: data.clone() });
+                    c.sink.send_scoped(ServerEvent::Output { data: data.clone(), output_seq: self.output_seq }, self.participation_generation);
                 }
             }
         }
@@ -962,98 +1221,25 @@ impl Session {
         self.attended
     }
 
-    /// Is this actor allowed to see / act right now? True when the human is here,
-    /// or has entrusted the session to exactly this connection.
-    fn attended_for(&self, conn: ConnId) -> bool {
-        self.attended || self.entrusted == Some(conn)
-    }
+    fn attended_for(&self, _conn: ConnId) -> bool { self.attended }
 
-    /// The mode an agent effectively operates in: capped by the unattended policy
-    /// while the human is away.
-    pub fn effective_mode(&self) -> AgentMode {
-        if self.attended {
-            return self.mode;
-        }
-        let cap = match self.policy.unattended_cap() {
-            "observe" => AgentMode::Observe,
-            "autopilot" => AgentMode::Autopilot,
-            _ => AgentMode::Copilot,
-        };
-        let rank = |m: AgentMode| match m { AgentMode::Observe => 0, AgentMode::Copilot => 1, AgentMode::Autopilot => 2 };
-        if rank(cap) < rank(self.mode) { cap } else { self.mode }
-    }
+    pub fn effective_mode(&self) -> AgentMode { self.mode }
 
-    /// The human looks at (or away from) this session. Leaving suspends an agent's
-    /// writes unless the session was entrusted to it; returning resumes them.
     pub fn set_attended(&mut self, attended: bool) {
-        let previous_effective = self.effective_mode();
-        // Re-attending also withdraws an entrustment armed while already here.
-        // Its lease must end as well, or request_control would renew it past the gate.
-        if attended {
-            if let Some(conn) = self.entrusted.take() {
-                self.cancel_scheduled_if(|s| s.conn == conn, "human_returned");
-                self.reject_proposal_if(|p| p.conn == conn, "human_returned");
-                if let Some(lease) = self.authority.revoke_if_held_by(conn) {
-                    let ev = ServerEvent::ControlRevoked { lease: lease.label(), agent_id: lease.agent_id, reason: RevokeReason::Taken };
-                    self.notify(conn, ev.clone());
-                    self.broadcast(ev);
-                }
-                self.audit.record("human", "entrust_revoked", json!({ "reason": "human_returned" }));
-                self.broadcast(ServerEvent::Entrusted { agent_id: None, cap: None });
-                self.notify_tools_changed();
-            }
-        }
         if self.attended == attended { return; }
         self.attended = attended;
+        self.participation_generation = self.participation_generation.saturating_add(1);
+        if !attended { self.cancel_agent_work("human_left"); }
+        self.invalidate_surface();
         self.audit.record("human", if attended { "attend" } else { "leave" }, json!({}));
         self.broadcast(ServerEvent::AttentionChanged { attended });
-        if attended {
-            self.attention_request = None;
-            if let Some(l) = self.authority.controller().lease() {
-                self.notify(l.conn, ServerEvent::ControlResumed);
-            }
-        } else if let Some(conn) = self.entrusted {
-            if !self.authority.holds(conn) {
-                // Entrustment is activated only once the human leaves.
-                let _ = self.grant(conn, Some("entrusted".into()), "entrust");
-            }
-        } else if let Some(holder) = self.authority.controller().lease().map(|l| l.conn) {
-            self.cancel_scheduled_if(|_| true, "human_left");
-            self.notify(holder, ServerEvent::ControlSuspended { reason: "human_left".into() });
-        }
-        if previous_effective != self.effective_mode() { self.notify_mode_changed(); }
+        if attended { self.attention_request = None; }
         self.notify_tools_changed();
-    }
-
-    /// Leave this session to the agent that holds (or last held) the conn while the
-    /// human is away. Cleared when the human returns.
-    pub fn entrust(&mut self) -> Result<String, SessionError> {
-        let (conn, agent_id) = match self.authority.controller().lease() {
-            Some(l) => (l.conn, l.agent_id.clone()),
-            None => self.last_agent.clone().ok_or_else(|| SessionError::NotFound("no agent to entrust".into()))?,
-        };
-        if !self.conns.contains_key(&conn) {
-            return Err(SessionError::NotFound(format!("{agent_id} is no longer connected")));
-        }
-        self.entrusted = Some(conn);
-        if !self.attended && !self.authority.holds(conn) {
-            self.grant(conn, Some("entrusted".into()), "entrust")?;
-        }
-        let cap = self.policy.unattended_cap().to_string();
-        self.audit.record("human", "entrust", json!({ "agent": agent_id, "cap": cap }));
-        self.broadcast(ServerEvent::Entrusted { agent_id: Some(agent_id.clone()), cap: Some(cap) });
-        self.notify(conn, ServerEvent::ControlResumed);
-        self.notify_tools_changed();
-        Ok(agent_id)
-    }
-
-    pub fn entrusted_agent(&self) -> Option<String> {
-        self.entrusted.and_then(|c| self.conns.get(&c)).map(|c| c.name.clone())
     }
 
     /// Agent: ask the human to look at this session.
     pub fn agent_request_attention(&mut self, conn: ConnId, reason: Option<String>) -> Result<(), SessionError> {
-        self.require_shared()?;
+        self.require_participant(conn)?;
         let agent_id = self.agent_name(conn);
         let req = AttentionRequest { agent_id: agent_id.clone(), reason: reason.clone(), at: chrono::Local::now().format("%H:%M:%S").to_string() };
         self.attention_request = Some(req);
@@ -1074,7 +1260,7 @@ impl Session {
 
     /// May this agent do `a` right now? Mask first, then the state table.
     pub fn agent_can(&self, conn: ConnId, a: Affordance) -> Result<(), SessionError> {
-        self.require_shared()?;
+        self.require_participant(conn)?;
         self.check_mask(a)?;
         if self.affordances(Actor::Agent { conn }).contains(&a) {
             return Ok(());
@@ -1086,9 +1272,9 @@ impl Session {
     }
 
     /// This session was just opened as a tab by `conn`. It starts unattended and
-    /// knocks with the agent's reason so the human can decide to look or entrust.
+    /// knocks with the agent's reason so the human can decide to look.
     pub fn agent_opened_tab(&mut self, conn: ConnId, reason: Option<String>) {
-        if self.external_private { return; }
+        if self.is_private() { return; }
         let agent_id = self.agent_name(conn);
         self.opened_by = Some(agent_id.clone());
         self.attention_request = Some(AttentionRequest { agent_id: agent_id.clone(), reason: reason.clone(), at: chrono::Local::now().format("%H:%M:%S").to_string() });
@@ -1098,7 +1284,7 @@ impl Session {
 
     /// Tell this session's listeners that `conn` moved between tabs.
     pub fn agent_switched_tab(&mut self, conn: ConnId, from: &str, to: &str) {
-        if self.external_private { return; }
+        if self.is_private() { return; }
         let agent_id = self.agent_name(conn);
         self.audit.record(&agent_id, "tab_switched", json!({ "from": from, "to": to }));
         self.broadcast(ServerEvent::AgentSwitchedTab { agent_id, from: from.into(), to: to.into() });
@@ -1171,7 +1357,9 @@ impl Session {
     }
 
     pub fn affordances(&self, actor: Actor) -> Vec<Affordance> {
-        if self.external_private && matches!(actor, Actor::Agent { .. }) { return vec![]; }
+        if let Actor::Agent { conn } = actor {
+            if !self.participant_allowed(conn) { return vec![]; }
+        }
         let has_pending = match actor {
             Actor::Agent { conn } => self.approvals.has_pending_for(conn),
             Actor::Human => false,
@@ -1207,14 +1395,16 @@ impl Session {
 
     pub fn snapshot(&self, actor: Actor) -> Result<Snapshot, SessionError> {
         if let Actor::Agent { conn } = actor {
-            self.require_shared()?;
+            self.require_participant(conn)?;
             self.check_mask(Affordance::Snapshot)?;
             // The agent sees exactly what the human sees. Nobody looking → nothing to see.
             if !self.attended_for(conn) {
                 return Err(SessionError::Unattended);
             }
         }
-        let projection = self.screen.projection();
+        let frame = self.presented_surface()?;
+        if frame.output_seq != self.output_seq { return Err(SessionError::SurfaceUnavailable); }
+        let projection = frame.projection();
         if let Actor::Agent { conn } = actor {
             self.audit.record(&self.agent_name(conn), "observe", json!({ "rev": projection.revision }));
         }
@@ -1236,7 +1426,7 @@ impl Session {
 
     /// Preserve the submitted parameters before any human decision. Metadata does not authorize execution.
     pub fn agent_request_control_original(&mut self, conn: ConnId, params: serde_json::Value) -> Result<ControlOutcome, SessionError> {
-        self.require_shared()?;
+        self.require_participant(conn)?;
         if !params.is_object() || params.to_string().len() > 65536 {
             return Err(SessionError::InvalidInput("request parameters must be an object of at most 64 KiB".into()));
         }
@@ -1254,6 +1444,7 @@ impl Session {
         if !self.attended_for(conn) {
             return Err(SessionError::Unattended);
         }
+        self.presented_surface()?;
         if self.mode == AgentMode::Observe {
             return Err(SessionError::WrongMode(self.mode));
         }
@@ -1293,6 +1484,8 @@ impl Session {
     }
 
     fn grant_original(&mut self, conn: ConnId, reason: Option<String>, via: &str, original_request: Option<serde_json::Value>) -> Result<LeaseInfo, SessionError> {
+        self.require_participant(conn)?;
+        self.presented_surface()?;
         let agent_id = self.agent_name(conn);
         let lease = self.authority.request(&agent_id, conn, Instant::now())?;
         self.last_agent = Some((conn, agent_id.clone()));
@@ -1382,7 +1575,7 @@ impl Session {
     fn notify_mode_changed(&self) {
         let ev = ServerEvent::ModeChanged { mode: self.mode, effective_mode: self.effective_mode() };
         self.broadcast(ev.clone());
-        for c in self.conns.values().filter(|c| c.kind == ConnKind::Agent) { c.sink.send(ev.clone()); }
+        for c in self.conns.values().filter(|c| c.kind == ConnKind::Agent) { c.sink.send_scoped(ev.clone(), self.participation_generation); }
     }
 
     pub fn mode(&self) -> AgentMode {
@@ -1460,6 +1653,8 @@ impl Session {
     /// the policy. `confirm` is treated as granted — the human just read and committed
     /// it — and recorded as such; `deny` still blocks.
     pub fn accept_proposal(&mut self, proposal_id: &str) -> Result<KeyResult, SessionError> {
+        self.require_shared()?;
+        self.presented_surface()?;
         let Some(p) = self.proposal.clone() else { return Err(SessionError::NotFound(proposal_id.into())) };
         if p.proposal_id != proposal_id {
             return Err(SessionError::NotFound(proposal_id.into()));
@@ -1525,7 +1720,7 @@ impl Session {
     }
 
     pub fn agent_release_control(&mut self, conn: ConnId) -> Result<(), SessionError> {
-        self.require_shared()?;
+        self.require_participant(conn)?;
         let lease = self.authority.revoke_if_held_by(conn).ok_or(AuthorityError::NotController)?;
         self.cancel_scheduled_if(|s| s.conn == conn, "released");
         self.audit.record(&lease.agent_id, "lease_released", json!({ "lease": lease.label() }));
@@ -1535,7 +1730,7 @@ impl Session {
     }
 
     fn check_writer(&mut self, conn: ConnId, a: Affordance) -> Result<(), SessionError> {
-        self.require_shared()?;
+        self.require_participant(conn)?;
         if !self.process_alive {
             return Err(SessionError::ProcessExited);
         }
@@ -1553,6 +1748,7 @@ impl Session {
             }
             Err(e) => return Err(e.into()),
         }
+        self.presented_surface()?;
         if let Some(id) = self.approvals.pending_for_conn(conn).first() {
             return Err(SessionError::ApprovalPending(id.clone()));
         }
@@ -1602,6 +1798,7 @@ impl Session {
             self.broadcast_proposal();
             return Ok(());
         }
+        self.shell_recording_armed |= self.shell_recording_ready && self.shell_prompt_confirmed;
         let col = self.screen.cursor().col;
         self.input.feed(text.as_bytes(), col);
         self.write_pty(text.as_bytes());
@@ -1753,6 +1950,8 @@ impl Session {
 
     /// Frontend/human: run a scheduled execution right now (co-sign during the grace window).
     pub fn execute_now_scheduled(&mut self, exec_id: &str) -> Result<(), SessionError> {
+        self.require_shared()?;
+        self.presented_surface()?;
         match &mut self.scheduled {
             Some(s) if s.exec_id == exec_id && s.state == ExecState::Scheduled => {
                 s.state = ExecState::Executed;
@@ -1790,12 +1989,13 @@ impl Session {
 
     /// Ctrl-C. Cancels any pending approval / scheduled execution from this agent.
     pub fn agent_interrupt(&mut self, conn: ConnId) -> Result<(), SessionError> {
-        self.require_shared()?;
+        self.require_participant(conn)?;
         if !self.process_alive {
             return Err(SessionError::ProcessExited);
         }
         self.check_mask(Affordance::Interrupt)?;
         if !self.attended_for(conn) { return Err(SessionError::Suspended); }
+        self.presented_surface()?;
         self.authority.check_and_touch(conn, Instant::now())?;
         self.cancel_scheduled_if(|s| s.conn == conn, "interrupted");
         for id in self.approvals.pending_for_conn(conn) {
@@ -1809,6 +2009,17 @@ impl Session {
         self.audit.record(&name, "interrupt", json!({}));
         self.note_agent_write(conn, 1);
         Ok(())
+    }
+
+    pub fn owns_request(&self, conn: ConnId, method: &str, id: &str) -> bool {
+        if !self.participant_allowed(conn) { return false; }
+        match method {
+            "check_approval" => self.approvals.get(id).is_some_and(|a| a.conn == conn),
+            "control_request_state" => self.control_requests.iter().any(|r| r.request_id == id && r.conn == conn),
+            "proposal_state" => self.proposal.as_ref().is_some_and(|p| p.proposal_id == id && p.conn == conn),
+            "exec_state" => self.scheduled.as_ref().is_some_and(|e| e.exec_id == id && e.conn == conn),
+            _ => false,
+        }
     }
 
     pub fn check_approval(&mut self, id: &str) -> Result<ApprovalInfo, SessionError> {
@@ -1828,8 +2039,12 @@ impl Session {
         if self.approvals.get(id).is_none() {
             return Err(SessionError::NotFound(id.to_string()));
         }
-        if decision == ApprovalDecision::AllowSession && self.execution_profile.as_ref().is_some_and(|p| p.needs_review()) {
+        if decision == ApprovalDecision::AllowSession && self.review_required() {
             return Err(SessionError::InvalidInput("this shell or remote environment requires review for every command; allow_session is unavailable".into()));
+        }
+        if decision != ApprovalDecision::Deny {
+            self.require_shared()?;
+            self.presented_surface()?;
         }
         let state = match decision {
             ApprovalDecision::Grant | ApprovalDecision::AllowSession => ApprovalState::Granted,
@@ -1932,10 +2147,10 @@ impl Session {
     /// Periodic maintenance. Call often (the engine uses 50 ms): lease expiry, approval
     /// expiry, scheduled executions, screen-change coalescing, policy reload.
     pub fn tick(&mut self, now: Instant) {
-        if self.external_private {
+        if self.is_private() {
             if self.screen_dirty {
                 self.screen_dirty = false;
-                self.broadcast(ServerEvent::ScreenChanged { revision: self.screen.revision() });
+                // Internal VT changes are not presented frame notifications.
             }
             return;
         }
@@ -1960,8 +2175,12 @@ impl Session {
         for id in self.control_requests.iter().filter(|r| r.state == ControlRequestState::Pending && now.duration_since(r.created) >= ttl).map(|r| r.request_id.clone()).collect::<Vec<_>>() {
             self.finish_control_request(&id, ControlRequestState::Expired);
         }
+        let surface_ready = self.presented_surface().is_ok();
+        if !surface_ready && self.scheduled.as_ref().is_some_and(|s| s.state == ExecState::Scheduled && now.saturating_duration_since(s.due) > Duration::from_secs(3)) {
+            self.cancel_scheduled_if(|_| true, "surface_unavailable");
+        }
         if let Some(s) = &mut self.scheduled {
-            if s.state == ExecState::Scheduled && s.due <= now {
+            if surface_ready && s.state == ExecState::Scheduled && s.due <= now {
                 s.state = ExecState::Executed;
                 let (agent, cmd, intent) = (s.agent_id.clone(), s.cmd.clone(), s.intent.clone());
                 self.execute_now_with(&agent, &cmd, intent);
@@ -1969,7 +2188,7 @@ impl Session {
         }
         if self.screen_dirty {
             self.screen_dirty = false;
-            self.broadcast(ServerEvent::ScreenChanged { revision: self.screen.revision() });
+            // Internal VT changes are not presented frame notifications.
         }
         match self.policy.maybe_reload() {
             Reload::Unchanged => {}
@@ -1990,11 +2209,17 @@ impl Session {
         connected_agents.dedup();
         Status {
             shell_integration: self.shell_integration.clone(),
-            external_private: self.external_private,
+            shared: self.shared,
+            external_origin: self.external_origin,
+            surface_generation: self.surface_generation,
+            output_seq: self.output_seq,
+            surface_available: self.presented_surface().is_ok_and(|f| f.output_seq == self.output_seq),
+            completion_prompt_ready: self.completion_prompt_ready(),
+            input_pending: self.human_input_pending || self.input.has_pending(),
             external_input_available: self.external_writer_active(),
             profile_id: self.execution_profile.as_ref().map(|p|p.id.clone()),
             profile_name: self.execution_profile.as_ref().map(|p|p.name.clone()),
-            review_required: self.execution_profile.as_ref().is_some_and(|p|p.needs_review()),
+            review_required: self.review_required(),
             controller: self.controller_info(),
             process_alive: self.process_alive,
             revision: self.screen.revision(),
@@ -2012,7 +2237,6 @@ impl Session {
             mode: self.mode,
             effective_mode: self.effective_mode(),
             attended: self.attended,
-            entrusted_to: self.entrusted_agent(),
             attention_request: self.attention_request.clone(),
             opened_by: self.opened_by.clone(),
             control_gate: self.control_gate,

@@ -74,6 +74,7 @@ fn evasions_normalise_to_the_real_command() {
     h.agent(1, "claude");
     h.session.agent_request_control(1).unwrap();
     for line in ["\\rm -rf x", "/bin/rm -rf x", "command rm -rf x", "r''m -rf x", "sudo rm -rf x", "env A=1 rm -rf x"] {
+        common::present(&mut h.session, vec!["$ ".into()]);
         h.session.agent_type(1, line).unwrap();
         let r = h.session.agent_send_key_with(1, "ENTER", Some("t".into())).unwrap();
         match r {
@@ -92,6 +93,7 @@ fn opaque_constructs_ask_by_default() {
     h.agent(1, "claude");
     h.session.agent_request_control(1).unwrap();
     for line in ["sh -c 'ls'", "eval \"$CMD\"", "find . -name '*.log' -delete", "python3 -c 'print(1)'", "echo $(whoami)"] {
+        common::present(&mut h.session, vec!["$ ".into()]);
         h.session.agent_type(1, line).unwrap();
         let r = h.session.agent_send_key_with(1, "ENTER", Some("t".into())).unwrap();
         match r {
@@ -102,6 +104,7 @@ fn opaque_constructs_ask_by_default() {
             other => panic!("{line}: {other:?}"),
         }
     }
+    common::present(&mut h.session, vec!["$ ".into()]);
     h.session.agent_type(1, "find . -name '*.log'").unwrap();
     assert!(matches!(h.session.agent_send_key_with(1, "ENTER", Some("t".into())).unwrap(), KeyResult::Executed { .. }));
 }

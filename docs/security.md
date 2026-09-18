@@ -2,214 +2,242 @@
 
 [Reporting a vulnerability](../SECURITY.md) · [한국어 요약](#한국어-요약)
 
-## A cooperative guard
+**Unreleased hardcut.** This page describes the working tree's new shared-surface
+contract. The released v0.6.0 app keeps externally created sessions private for their
+whole lifetime and does not provide the sharing transition or native model extensions.
 
-Conn mediates a terminal shared by a human and a trusted agent harness. Its policy engine combines pattern matching and structural analysis of POSIX shell lines. It normalizes some wrappers, resolves visible target paths and asks for review of opaque execution. Dangerous commands mixed with other segments can be denied so that the agent must submit them separately for review.
+## One terminal, one presented surface
 
-**This is not isolation.** A process running as your OS user, a malicious agent, shell aliases/functions, variable expansion, nested shells and scripts can bypass assumptions in that analysis. A declared intent and planned command are agent-supplied descriptions, not proof of what a shell will do. Conn does not inspect arbitrary script contents or stop an agent from using another tool outside Conn.
+Conn mediates a terminal shared by a human and participating agents. A snapshot comes
+from the owner-rendered terminal viewport, including its current scroll position and
+alternate screen. The internal Rust terminal parser remains a command-policy tracker;
+it is not an agent observation source or fallback. Agents receive neither raw PTY output
+nor an independent scrollback search interface.
 
-Remote and non-POSIX profiles require per-command review. They do not resolve target paths against the host filesystem, and session-wide allowances do not remove this review requirement. Explicit deny rules remain in force. See [backend boundaries](backends.md#execution-and-policy-boundaries).
+The native owner supplies a surface ID, generation, rendered-frame revision and output
+sequence. A frame must match the current output and sharing boundary. A missing,
+invalidated or stale frame is unavailable; a native parser snapshot is not substituted.
+The frame expires without an owner heartbeat. Concealed terminal cells are excluded
+from the rendered text projection. A PNG of the rendered surface is included when the
+renderer can produce it; `imageUnavailable` explicitly marks text-only results.
 
-For ordinary collaboration sessions, invalid or unreadable policy files prevent new shells from starting and produce a `policy_load_failed` audit event. Correct the file and retry. A failed reload keeps the existing session's last successfully loaded rules; new collaboration tabs remain blocked until the file is fixed. A missing policy file creates the example policy. Private external automation has its own input and recording contract below, available in v0.6.0 and newer.
+The human-visible terminal is the intended boundary, not the entire desktop. The UI
+suppresses publication for inactive tabs, lost focus, hidden documents and its own
+obscuring panels. This is not a universal OS compositor/occlusion detector. Native
+window coverage, accessibility scaling and renderer differences need platform checks.
+Pixels and text extraction must be tested together; text cannot express every graphical
+terminal state. A compromised owner webview is inside this trust boundary.
+
+Visible credentials can be shared. A hidden password stays absent; masked input appears
+as masks. If a child later prints a secret, it becomes visible to both actors. Clearing
+Conn's viewport does not erase a child application's history, tmux buffers, OS memory,
+previous snapshots or copies already delivered to a model.
+
+## Participation, control and the local owner
+
+Sharing and input control are separate. Explicit sharing selections use live connection
+IDs, not display names: reconnecting or choosing another agent's name does not inherit
+that selection. Removing a participant or stopping sharing invalidates queued disclosure
+and pending agent work. Ordinary newly opened shared tabs retain their initial
+collaboration policy until the owner makes an explicit participant selection.
+
+Only the native owner window may publish a frame, change sharing, decide approvals,
+change settings or supply human input. Public IPC accepts agent connections only.
+Declaring `kind: human` or `kind: frontend` does not confer owner authority. There is no
+public raw-output subscription, frontend fallback, Entrust continuation on an unobserved
+tab, or headless observation mode. See [protocol v2](protocol.md).
+
+Control requests and command approvals remain distinct. Human input revokes an agent's
+lease before reaching the PTY. Grace can delay an allowed Enter, and the owner may
+cancel or co-sign it. Taking control does not terminate an already running child process.
+Stopping sharing blocks further agent access; it cannot recall information already sent.
+Owner approval operations now live in the app, not public CLI/socket commands.
+
+## A cooperative guard, not OS isolation
+
+Conn's policy combines pattern matching and structural analysis of submitted shell lines.
+Remote, non-POSIX and shared external-origin sessions require command review rather than
+resolving their targets against the host filesystem. In an integrated local shell,
+an unconfirmed foreground program (including SSH or an editor) also requires review
+until the trusted outer shell reports completion. Session allowances do not remove
+that review requirement. Explicit deny rules remain in force. See [backend boundaries](backends.md#execution-and-policy-boundaries).
+
+Shell aliases/functions, variables, scripts, nested shells and interactive line editors
+can change what a submitted line does. Planned commands and intent are agent-supplied
+information, not proof of execution. Conn does not inspect arbitrary scripts or stop an
+agent's separate shell/file tool. A logged command is not proof of exactly what a shell
+parsed; the macOS 15 / Bash 3.2 Unicode PTY report illustrates that distinction.
+
+Same-user OS processes, administrators and a compromised harness are not isolated by
+Conn. An agent controlling an authenticated remote shell can use that account's existing
+permissions. Hiding a password does not remove those permissions or prevent the child
+from reading files available to the authenticated account.
+
+Invalid/unreadable collaboration policy files block new ordinary shells. Failed reloads
+retain the last valid policy. External launch permission remains a separate direct-input
+grant; it is not a model approval. Neither grant should be treated as an OS sandbox.
 
 <a id="ordinary-session-command-reconstruction-limits"></a>
 
-## Ordinary-session command recording limits
+## Command recording
 
-Since v0.6.0, Conn does not reconstruct human commands from raw typing, paste,
-Enter presses or screen text. Supported local Bash/Zsh shells report command start
-and completion through [shell integration](shell-integration.md). These reports
-produce human command history; password prompts, editors and other application
-input do not. Secrets deliberately included in a shell command's arguments can
-still be recorded.
+Conn does not reconstruct human commands from raw typing, paste, Enter presses or screen
+text. Supported local Bash/Zsh integration reports command start/completion separately.
+Authentication prompts and editor input do not become human command history. After
+a sharing boundary, recording waits for a trusted shared prompt and new shared input;
+delayed private execution events cannot become shared history. A
+content-free unfinished-input flag prevents an agent from appending to a human's line.
 
-Agent-submitted clean input is tracked in full, including Unicode and lines that wrap visually. Policy checks and the command audit use that complete tracked text. When completion, history navigation or cursor editing marks agent input dirty, Conn falls back to the VT cursor row with the prompt prefix removed. **Wrapped or complex edited agent input can therefore be incomplete in policy evaluation and command history.** Use explicit full commands through the agent API and inspect the terminal before approving sensitive work. Original request details preserve what was submitted to Conn, but they are not a full terminal recording.
-
-A complete submitted command is not proof of the bytes a shell eventually parses. Shell line editors, key bindings and locale settings can transform terminal input before parsing; the macOS 15 / Bash 3.2 Unicode PTY report is an example of this distinction. Agent submission and input delivery are distinct from a shell execution report. Shell hooks add start/completion observations where supported, not tamper-proof parser evidence. For sensitive operations, inspect the resulting screen and filesystem state as well as the approval record.
-
-Human input inside an editor or another interactive application is not reconstructed as shell command history. Explicit agent requests and submitted commands can still be retained for review. Shell syntax, prompts and interactive applications differ; command records should not be treated as forensic proof.
-
-## Approval and takeover
-
-Control requests and command approvals are separate. Granting control does not waive policy. Observe, Co-pilot and Autopilot change how an approved agent participates; they do not create OS isolation. Human input revokes the agent lease before reaching the terminal. Grace lets the user cancel or run an allowed command sooner.
-
-`conn approve` requires a specific approval ID. Automation that approves arbitrary pending requests defeats human review and must not be configured for real user sessions. Isolated tests may explicitly approve their own known requests to verify engine transitions; they should use temporary state and disposable shells.
-
-## Local endpoints and network
-
-| Surface | Boundary |
-|---|---|
-| Unix agent IPC | Local Unix domain socket, mode 0600 |
-| Windows agent IPC | Local named pipe, owner-only DACL, remote clients rejected |
-| Tauri desktop | Native command/event bridge to the shared harness |
-| Browser development harness | HTTP frontend on 127.0.0.1:1421 and WebSocket backend on 127.0.0.1:1423; token and exact Origin validation; one browser client |
-| MCP | The local `conn mcp` process returns responses to the agent client |
-
-Same-user processes are within the trust boundary. The browser adapter is a development tool that starts real native shells; do not expose it through a public reverse proxy. SSH and Docker profiles launch the configured clients, which may contact remote systems. Conn contains no model provider integration or telemetry client. An agent client can send terminal snapshots and tool responses to its own model provider under its own data policy.
+Explicit agent requests, intents and submitted commands can be kept in review UI, audit
+and timeline. Clean submitted text is tracked independently of visual wrapping. Dirty
+agent input may still need the internal policy tracker's current line; wrapped editing
+can make this incomplete. These records are not forensic proof or continuous output.
+Do not embed credentials in commands or original request parameters.
 
 <a id="private-external-sessions-unreleased"></a>
 
 ## Private external sessions
 
-**Available in v0.6.0 and newer; not a protection provided by v0.5.1.** The
-[external automation guide](external-automation.md) describes private sessions
-created by an authorized native launcher. Their private policy is established
-before the child starts. A supplied startup program replaces the local profile
-program on its PTY; later external writes use a separate input source and do not
-pass through agent registration, proposals, policy approvals or Grace.
+An authorized external launcher creates a private session before starting the child.
+Its startup program replaces the profile program on that PTY. Later external writes use
+the owner-bound automation service without pretending to be an AI agent. Status is
+metadata-only; input, output, intent, cwd and raw errors are excluded. The optional legacy
+`intent` field is ignored. Payload buffers and request metadata are bounded and volatile.
 
-Conn creates no activity audit, saved timeline, payload-derived title, recent
-automation list or raw human-input history for an external-origin private session.
-Request status contains metadata and generic error codes only, never input,
-intent, output, cwd or raw errors. `intent` remains syntactically accepted but is
-ignored and discarded. Payload buffers are released on delivery, cancellation,
-timeout and failure; owner/request metadata is bounded and volatile. Only
-permissions survive an app restart. Existing recorded-adapter settings require an
-explicit re-enable because the new grant permits direct execution.
+While private, the session is absent from public discovery and inaccessible by explicit
+ID. Only its owner window receives output. Conn creates no private activity audit,
+saved timeline, payload-derived title, recent automation activity or raw human-input
+history. Programmatic clipboard writes from private output are disabled; explicit
+human copying remains possible.
 
-Private sessions are excluded from MCP/public local IPC discovery and access,
-including explicit IDs, output subscriptions and status/title/cwd routes. Only
-their owning native window receives terminal output. Programmatic clipboard
-writes from that output are disabled; explicit human copying is still available.
-AI sharing of these sessions is not implemented. Ordinary sessions keep the
-existing agent policy and history behavior.
+The new owner action can share **the same PTY and authenticated connection**. It first
+revokes the external writer and queued input, cancels pending agent work, resets the
+observation boundary, and starts from human control. The next frame is the existing
+human-visible viewport: there is no automatic sanitization or alternate agent screen.
+It does not infer authentication success. An unfinished tracked input line refuses the
+transition; complete or cancel that input first.
 
-Human input, takeover, cancellation, release, configuration revocation or close
-revokes the external writer and pending queue. It cannot silently reacquire the
-same session. Already delivered bytes cannot be withdrawn; a live terminal remains
-available to the human after writer release or launcher exit.
+Collaboration activity can be recorded from sharing onward. Private inputs, startup
+arguments and old output are never reconstructed into that history. External sessions
+never install new shell hooks during sharing, so later human commands in such a session
+are not fabricated from typing. Stopping sharing disables further activity recording
+apart from the stop transition itself. Existing saved shared records remain.
 
-The no-activity-history scope covers Conn's private-session recording paths. It
-does **not** promise zero retention: native strings, memory scrollback, PTY/OS
-buffers, child output/logs, shell history/tracing, argv, environment, clipboard and
-crash dumps remain separate surfaces. Same-user processes may still use other
-tools to access the OS; these API gates are not an OS sandbox. There is no password
-detector or automatic proof that login has finished.
+Human takeover, cancel, release, permission/profile removal and closing also revoke the
+external writer. Its old handles cannot regain authority or silently follow the user
+into another tab. Already delivered input cannot be undone. See [external automation](external-automation.md).
 
-Ordinary sessions also do not reconstruct commands from raw human keystrokes.
-Only a content-free unfinished-input flag is retained; agent writes cannot append
-to that input until it is completed or explicitly interrupted. Raw typing does not
-create command audit events, timeline rows or command-derived tab titles. Separately,
-supported local Bash/Zsh execution hooks record commands when the shell starts
-them, including human commands. Private external sessions never install these
-hooks and remain unrecorded after human takeover. Existing audit files, saved
-timeline records and backups remain; no automatic historical cleanup or credential
-classification is performed.
+## Native extensions and model data
 
-## Stored data
+The [extension host](extensions.md) accepts declarative terminal themes and reviewed
+built-in native execution. It is not a general third-party code sandbox or marketplace.
+Extensions cannot access a PTY, grant control, publish their own terminal frame or bypass
+sharing. Conn renders their settings and proposals with its common UI.
 
-Default native state is under `~/.conn` (or the selected test/config directory). It includes policy, audit records, shell profiles and frontend defaults. The webview/browser also stores UI preferences and recent timeline data locally. Profile environment values are plaintext; avoid putting long-lived credentials there.
+The optional OpenAI suggestion feature is off by default. The user saves their own key,
+selects a model and enables suggestions. An automatic request after an 800 ms typing
+pause requires a confirmed idle local shell prompt under human control; a content-free
+signal triggers it. Manual invocation can also be used in an unconfirmed environment.
+Only the current authorized visible text is sent; no files, history, hidden input or
+previous model conversation is added.
+The suggestion is a single-line suffix; accepting it inserts text through the common
+human-input path and never sends Enter. A changed frame invalidates the suggestion.
 
-Ordinary-session audit and saved timeline records, and records from earlier automation releases, can include agent identities, intents, full commands, paths, approval outcomes and **original request parameters**. Supported shell integration also records human commands at execution, working directories and completion information. Commands that write a file can include that file's content. Treat these records as potentially sensitive. There is no automatic secret redaction. Do not upload your `.conn` directory or paste raw request JSON into public issues without reviewing it.
+Keys live in macOS Keychain, Windows Credential Manager or Linux Secret Service. A
+locked/unavailable store fails without plaintext fallback. Keys are not written to profile
+environment, extension JSON, activity logs or proposal payloads. The reviewed native
+provider sends requests to a fixed HTTPS OpenAI endpoint with redirect/proxy overrides
+disabled, bounded input/output, cancellation, timeouts and request limits. Provider error
+bodies are not shown. `store: false` does not promise zero provider retention or free
+processing after a local cancellation. External agent clients have their own model and
+data policies. Conn still has no telemetry client.
 
-The audit is not continuous terminal output or scrollback recording. A terminal snapshot can still expose secrets currently visible on screen. Only actions passing through Conn are covered; an agent's separate shell tool is outside this history. This preview does not offer tamper-proof logs or complete execution provenance.
+## Stored data and local endpoints
 
-## Lifetime
+Default native state is under `~/.conn` or the selected config directory. Policy, shell
+profiles, extension settings and audit records live there; the webview saves UI preferences
+and recent timeline records locally. Profile environment values are plaintext, so do not
+use profiles as a credential store. Stored command arguments and original requests may
+contain sensitive file contents. There is no automatic historical secret redaction.
 
-There is no detach/reattach. Closing the desktop session or disconnecting/reloading the browser harness ends its native shell sessions and control leases. Saved timeline records do not restore running processes. Back up work through normal files/version control, not the timeline.
+| Surface | Boundary |
+| --- | --- |
+| Unix IPC | Local socket with owner-only permissions |
+| Windows IPC | Local owner-only named pipe; remote clients rejected |
+| Native owner | Window-bound Tauri command/event bridge |
+| Browser test adapter | Loopback HTTP/WebSocket, exact Origin and token checks; runs real shells |
+| MCP | Local `conn mcp` agent transport; owner operations unavailable |
+| Native OpenAI provider | Opt-in HTTPS model request, current visible context only |
 
-## 한국어 요약
-
-Conn은 신뢰하는 사람과 에이전트가 터미널을 공유하도록 돕습니다. 정책 검사는 실수 방지 장치이며, 악의적인 에이전트나 같은 OS 사용자 권한의 프로세스를 격리하는 보안 경계가 아닙니다.
-
-- 사람의 원시 키 입력·붙여넣기·앱 내부 입력으로 명령을 추정하지 않습니다. v0.6.0부터 지원하는 로컬 Bash·Zsh 실행 훅이 보고한 명령은 사람 명령도 타임라인에 기록합니다. 명령 인자에 직접 넣은 비밀값은 기록될 수 있습니다.
-- 에이전트가 직접 보낸 전체 명령은 화면 줄바꿈과 무관하게 검사·기록합니다. 자동 완성, 히스토리, 커서 편집 후에는 화면의 현재 행을 복원에 사용하므로 긴 편집 명령이 불완전하게 검사·기록될 수 있습니다.
-- 전체 명령을 기록했더라도 셸이 같은 바이트를 해석했다는 증거는 아닙니다. 셸의 줄 편집기·키 바인딩·로케일이 입력을 변환할 수 있습니다. macOS 15 / Bash 3.2의 Unicode PTY 제보도 이 차이를 보여 줍니다. 민감한 작업은 승인 기록과 함께 실제 화면·파일 결과를 확인하세요.
-- 잘못되었거나 읽을 수 없는 정책 파일이 있으면 새 셸을 시작하지 않습니다. 파일을 고치고 다시 시도하세요. 실행 중인 세션의 정책 재로딩이 실패하면 마지막으로 정상 로드한 규칙을 유지합니다.
-- 원격 및 비 POSIX 프로필은 명령별 검토를 요구합니다. 제어권 승인과 명령 실행 승인은 별개입니다.
-- 원문 요청, 명령, 경로, 의도와 승인 결과가 감사 로그·타임라인에 저장될 수 있습니다. 파일을 쓰는 명령에는 파일 내용도 포함될 수 있습니다. 자동 비밀정보 삭제 기능은 없습니다.
-- 프로필 환경 변수는 평문으로 저장합니다. 브라우저 테스트 어댑터는 실제 셸을 실행하므로 외부에 공개하지 마세요.
-- Conn 자체에는 모델 제공자 연결이나 텔레메트리가 없습니다. 연결한 에이전트 클라이언트는 화면과 도구 응답을 자신의 모델 제공자에 전송할 수 있습니다.
-- 새로고침·연결 종료 시 테스트 셸이 종료됩니다. 저장된 타임라인은 프로세스를 복구하지 않습니다.
-
-<a id="비공유-외부-세션-변경--미배포"></a>
-
-### 비공유 외부 세션
-
-아래 계약은 **v0.6.0부터 제공**하며 v0.5.1의 보호 기능이 아닙니다. 외부 런처가
-허용된 프로필로 만드는 세션은 자식 실행 전부터 비공유로 설정하고, 시작 프로그램은
-프로필 프로그램을 직접 대체합니다. 외부 입력은 에이전트 등록·정책 승인·제안·Grace를
-거치지 않습니다. 기존 자동화 허용은 한 번 직접 다시 켜야 합니다.
-
-- 비공유 외부 세션의 감사 이벤트·저장 타임라인·원문 제목·최근 자동화 활동·원시 사람
-  입력 기록을 만들지 않습니다. 상태는 메타데이터와 일반 오류 코드만 포함하며 `intent`는
-  받더라도 사용하지 않고 버립니다. 원문 버퍼는 전달·취소·실패·시간 초과 때 해제합니다.
-- MCP·공개 로컬 IPC의 목록과 직접 접근, 화면·이벤트·제목·작업 폴더 공개를 차단합니다.
-  소유한 네이티브 창에만 출력합니다. 출력에 의한 프로그램적 클립보드 쓰기는 막으며,
-  사람이 직접 복사할 수는 있습니다. AI와 공유하는 기능은 아직 없습니다.
-- 사람 입력·제어 회수·취소·반환·설정 해제·종료 시 외부 입력 권한과 큐를 해제합니다.
-  같은 세션의 권한을 자동 재획득할 수 없고, 이미 전달한 바이트를 되돌릴 수는 없습니다.
-- 메모리 스크롤백·네이티브 문자열·PTY/OS 버퍼·자식/셸 기록·argv·환경·클립보드·충돌
-  덤프는 별도 경로입니다. 메모리 잔존이 없다는 약속이나 같은 사용자 프로세스의 OS
-  격리가 아니며 비밀번호·인증 완료 탐지 기능도 아닙니다.
-- 일반 세션에서도 사람의 원시 입력으로 명령을 추정·기록하지 않습니다. 내용 없는 입력 중
-  상태만 유지하고, 완료·중단 전에는 에이전트가 명령을 덧붙일 수 없습니다. 별도로 로컬
-  Bash·Zsh 실행 훅이 확인한 명령은 사람 명령도 기록합니다. 비공유 세션은 사람 인수 후에도
-  훅을 설치하거나 기록하지 않습니다. 이전 감사 로그·타임라인·백업도 자동 삭제하지 않습니다.
-
-[외부 자동화 사용법](external-automation.ko.md)에 전체 계약과 검증 조건을 정리했습니다.
-
-보안 제보 방법은 [보안 정책](../SECURITY.md)을 참고하세요.
-
+Do not expose the browser adapter through a public reverse proxy or upload `.conn` as a
+diagnostic bundle. Local `conn log` reads a file with the caller's OS permissions; it is
+not an extra MCP history permission. Existing logs/backups are not erased by sharing changes.
 
 <a id="secret-exposure-scenarios-unreleased-hardening"></a>
 
 ## Secret exposure scenarios
 
-The protections below are included in v0.6.0. Their boundaries still apply.
-
-| Surface | Protection and remaining boundary |
+| Scenario | Expected result and boundary |
 | --- | --- |
-| Human password, pasted key or editor input | No raw-input command reconstruction or payload-bearing debug trace, including ordinary tabs. Local Bash/Zsh hooks can record shell-started commands; application input does not become a command. |
-| Partially typed human input | Only an unfinished flag is retained. Agent typing/Enter and proposal commits are blocked; human Return, Ctrl-C or Ctrl-U, or an authorized agent interrupt clears it. This is not shell-prompt detection. |
-| Echoed values and child errors | Still visible to the human. Ordinary agent snapshots can expose them if permitted; Observe allows reading. Disabling snapshots does not erase existing output or copies already sent. |
-| Explicit agent commands, intents and request parameters | Remain in review UI and audit history to support reviewing decisions. No secret detector or redaction guarantee. Never embed credentials in these fields. |
-| Audit files | On Unix, newly opened logs use owner-only permissions, existing log permissions are tightened and symlink log destinations are rejected. This does not protect against same-user tools. Windows ACL behavior needs native verification. |
-| Startup argv, environment, shell tracing/history | Outside Conn's input-history protection. Profile environment values remain plaintext. Prefer the target tool's credential mechanism over secrets embedded in arguments. |
-| Clipboard, screenshots, crash dumps, old backups | Separate exposure surfaces. Explicit copying and historical data are not automatically cleared. |
-| Private external session | Public IPC/MCP isolation remains enforced before startup; no transition to AI sharing exists. |
+| Hidden or masked authentication | No hidden input is reconstructed; only rendered masks may be observed when shared. |
+| Visible child output | Shared snapshots and enabled native suggestions may transmit it. |
+| Sharing stops during a response | Session/participation/surface checks discard obsolete queued disclosure; delivered copies remain. |
+| Old external input handle | No input after takeover/sharing/revocation; no silent reacquisition. |
+| Agent command or original request | Review/history may contain it; no automatic redaction. |
+| Startup argv, environment, child logs, tmux | Outside Conn's input-recording protection; can retain or reprint values. |
+| Keychain missing or locked | Key save/read fails; no config/environment fallback. |
+| Clipboard, screenshot, crash dump, old backup | Separate human/OS exposure routes; not automatically cleared. |
 
-The synthetic tests in `crates/core/tests/input_privacy.rs` cover hidden PTY input,
-pasted/Unicode input, human/agent mixing, snapshot permission transitions and Unix
-log permissions. They do not establish safety of every child program or external
-model provider. A snapshot permission restored later exposes the current screen;
-use a fresh private external session for work that must not be sent to agents.
-
-### 민감정보 경로 점검
-
-일반 탭의 원시 사람 입력은 명령 기록·타임라인·입력 기반 제목으로 만들지 않습니다.
-로컬 Bash·Zsh의 실행 경계 훅으로 확인한 명령만 타임라인에 기록하며, 앱 내부 입력은 제외합니다. 에이전트가 명시적으로 보낸
-명령·사유·요청 원문은 검토를 위해 유지하므로 민감정보를 넣지 않아야 합니다.
-Observe도 화면을 읽을 수 있으며 화면 조회를 다시 켜면 이전 출력이 보일 수 있습니다.
-Unix 로그 권한을 소유자 전용으로 제한했지만 같은 사용자 프로세스, Windows ACL,
-자식 프로그램 기록·실행 인자·환경·클립보드·과거 백업까지 보호하는 것은 아닙니다.
-
-### Linux external automation
-
-The native D-Bus adapter is disabled by default and requires an explicit executable
-allowlist in addition to profile permission. Bus-provided UID/PID, the executable
-and process start time identify the caller; the unique D-Bus connection owns the
-handles. Other connections cannot adopt them. Interpreter authorization applies to
-all scripts that interpreter runs. This is not binary signing, a same-user sandbox
-or protection against privileged bus monitoring. Native Linux acceptance runs use
-a separate session bus and X11 display; Wayland-specific input is not yet verified.
+The hardcut needs synthetic hidden/masked/visible input tests, frame/scroll/conceal
+checks, revocation races, owner-spoofing tests and same-SSH-session handoff tests. Unit
+checks and browser adapters do not prove native macOS/Windows rendering, system unlock
+prompts or every external launcher. Live OpenAI calls require a user-configured smoke test.
 
 <a id="shell-command-integration-unreleased"></a>
 
 ### Shell command integration
 
-Available since v0.6.0, local Bash/Zsh emit command start and completion through a bounded per-session
-mailbox (0700 directory, 0600 event files). Only complete records with the initial
-shell PID and expected sequence are accepted. Files are removed after processing
-and the directory on normal shutdown; a crash can leave temporary command data.
-This is observation within the same-user trust boundary, not authentication of an
-untrusted child process or tamper-proof auditing. Terminal escape sequences and
-screen contents cannot create these events. Private sessions never install hooks.
+Local Bash/Zsh use a bounded per-session mailbox with owner-only Unix permissions.
+The initial shell PID and sequence are checked, but same-user processes are still trusted.
+Terminal escape sequences cannot create these events. Missing/conflicting hooks, history
+suppression or mailbox overflow never enable raw-input reconstruction. A crash can leave
+temporary command data. See [English](shell-integration.md) and [Korean](shell-integration.ko.md).
 
-History suppression, conflicting startup hooks, an unsupported shell, a missing
-completion, or mailbox overflow never enables raw-input reconstruction. Missing
-completion is explicitly unknown. Bash history is a shell-provided representation
-and may normalize multiline commands; commands omitted from history are skipped.
-Command arguments, including secrets deliberately placed in a command, remain
-recordable. Redaction policy is separate work. See the [English](shell-integration.md)
-and [Korean](shell-integration.ko.md) guides.
+### Linux external automation
+
+The D-Bus adapter is off by default and needs executable and profile permission. Bus
+UID/PID, executable and process-start checks identify the caller; one unique connection
+owns its handles. Interpreter permission covers scripts that interpreter runs. This is
+not code signing or protection against privileged bus monitoring. Previous acceptance
+used an isolated session bus/X11 display; Wayland-specific behavior remains separate.
+
+## Lifetime
+
+Sharing changes preserve the process. Closing the desktop session or reloading/disconnecting
+the browser test client ends its shells. There is no detach/reattach or process restoration
+from saved timeline data. Back up work as files/version control.
+
+## 한국어 요약
+
+**v0.7.0부터 적용되는 공유 화면 계약입니다.**
+
+- 사람과 에이전트가 같은 표시 화면을 사용합니다. 에이전트에게 원시 PTY 출력이나
+  별도 스크롤백을 제공하지 않고, 화면이 없거나 오래됐으면 조회를 중단합니다.
+- 숨김 입력은 복원하지 않고 별표는 별표로 보냅니다. 이미 보이는 민감정보나 나중에
+  자식이 다시 출력한 정보는 공유될 수 있습니다. 모든 OS 창 가림을 탐지한다는 보장은 아닙니다.
+- 공유 대상은 표시 이름이 아니라 실제 연결 ID입니다. 공개 소켓에서 인간·프런트엔드
+  역할을 자칭해도 승인·공유·화면 게시·직접 입력 권한을 얻지 못합니다.
+- 비공유 인증 후 같은 PTY·SSH 연결에서 공유할 수 있습니다. 외부 입력 권한과 큐를
+  먼저 해제하고 현재 화면부터 공유하며, 과거 비공유 입력은 기록으로 복구하지 않습니다.
+- 사람의 원시 키 입력은 기록하지 않습니다. 지원하는 로컬 셸의 실행 훅만 사람 명령을
+  기록합니다. 외부 세션에는 공유 전환 시 훅을 새로 설치하지 않습니다.
+- 내장 명령 제안은 기본 꺼짐입니다. 사용자 키는 OS 보안 저장소에만 저장합니다. 켜면
+  확인된 로컬 프롬프트의 입력 멈춤 또는 수동 요청 때 현재 공유 화면 텍스트를 OpenAI에
+  보냅니다. 인증·편집기 입력은 자동 호출하지 않으며 수락은 입력만 하고 실행하지 않습니다.
+- 정책·공유 제한은 OS 격리가 아닙니다. 같은 계정의 다른 도구, 로그인된 원격 계정의
+  권한, 자식 기록·argv·환경·과거 스냅샷까지 제거하지 않습니다.
+- 네이티브 화면·키체인·실제 모델 호출과 외부 런처는 각 플랫폼에서 별도 검증해야 합니다.
+
+<a id="비공유-외부-세션-변경--미배포"></a>
+
+[외부 자동화 사용법](external-automation.ko.md) · [확장 기능](extensions.ko.md) · [보안 제보](../SECURITY.md)
