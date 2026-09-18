@@ -1,6 +1,6 @@
 # Conn product contract
 
-**Shared-surface hard cut · unreleased.** [Architecture](architecture.md) · [한국어](PRD.ko.md)
+**Shared-surface hard cut · v0.7.0 preview.** [Architecture](architecture.md) · [한국어](PRD.ko.md)
 
 ## One shell, one shared view
 

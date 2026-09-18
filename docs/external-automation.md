@@ -125,7 +125,7 @@ External sessions start private. They are absent from MCP/public IPC tab lists, 
 explicit public access cannot reveal their screen, input, events, status details,
 titles or cwd. Only the owning native window receives their output.
 
-In the unreleased hardcut the human can open the app's sharing control, choose live
+From v0.7.0 the human can open the app's sharing control, choose live
 agent connections and share the **same terminal process and SSH connection**. Conn
 first revokes the external writer and queued input. It resets prior agent work and
 publishes the current human-visible viewport under a new sharing boundary. It does

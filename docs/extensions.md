@@ -2,8 +2,8 @@
 
 [한국어](extensions.ko.md) · [Trust model](security.md#native-extensions-and-model-data)
 
-**Unreleased hardcut.** The working tree introduces terminal themes, a native OpenAI
-model connection and opt-in command suggestions. These features are not in v0.6.0.
+**Available in v0.7.0 preview.** Terminal themes, a native OpenAI model connection
+and opt-in command suggestions use the shared-surface contract.
 There is no marketplace or arbitrary third-party executable plugin installation.
 
 ## Change a terminal theme

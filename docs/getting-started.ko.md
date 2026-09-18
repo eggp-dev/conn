@@ -6,33 +6,33 @@ Conn을 설치하고 에이전트를 연결해 같은 터미널에서 번갈아 
 
 ## 1. 설치하고 세션 열기
 
-OS와 CPU에 맞는 [v0.6.0 프리뷰](https://github.com/eggplantiny/conn/releases/tag/v0.6.0)를 받으세요. 실제 서명 상태와 실행 검증 결과는 릴리스 안내에서 확인할 수 있습니다.
+OS와 CPU에 맞는 [v0.7.0 프리뷰](https://github.com/eggplantiny/conn/releases/tag/v0.7.0)를 받으세요. 실제 서명 상태와 실행 검증 결과는 릴리스 안내에서 확인할 수 있습니다.
 
 | 플랫폼 | 다운로드 | 설치 |
 |---|---|---|
-| Ubuntu x64 | [`.deb`](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-x86_64-unknown-linux-gnu-desktop.deb) | 아래 명령으로 설치한 뒤 앱 목록에서 Conn을 엽니다. |
-| Ubuntu x64 | [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-x86_64-unknown-linux-gnu-desktop.AppImage) | 실행 권한을 준 뒤 파일을 엽니다. |
-| macOS Apple Silicon | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-aarch64-apple-darwin-desktop.dmg) | DMG를 열고 Conn을 Applications로 옮긴 뒤 그곳에서 실행합니다. |
-| Windows x64 | [설치 `.exe`](https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-x86_64-pc-windows-msvc-setup.exe) | 설치 파일을 실행하고 시작 메뉴에서 Conn을 엽니다. |
+| Ubuntu x64 | [`.deb`](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.deb) | 아래 명령으로 설치한 뒤 앱 목록에서 Conn을 엽니다. |
+| Ubuntu x64 | [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.AppImage) | 실행 권한을 준 뒤 파일을 엽니다. |
+| macOS Apple Silicon | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-aarch64-apple-darwin-desktop.dmg) | DMG를 열고 Conn을 Applications로 옮긴 뒤 그곳에서 실행합니다. |
+| Windows x64 | [설치 `.exe`](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-x86_64-pc-windows-msvc-setup.exe) | 설치 파일을 실행하고 시작 메뉴에서 Conn을 엽니다. |
 
 새 릴리스의 Intel Mac 배포는 잠시 중단합니다. 기존 Intel 파일은 [이전 릴리스](https://github.com/eggplantiny/conn/releases)에 유지하며 Intel Mac에 Apple Silicon 파일을 설치하지 마세요.
 
 Ubuntu에서는 다운로드한 폴더에서 실행합니다.
 
 ```sh
-sudo apt install ./conn-v0.6.0-x86_64-unknown-linux-gnu-desktop.deb
+sudo apt install ./conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.deb
 ```
 
 AppImage를 선택했다면 다음과 같이 실행합니다.
 
 ```sh
-chmod +x ./conn-v0.6.0-x86_64-unknown-linux-gnu-desktop.AppImage
-./conn-v0.6.0-x86_64-unknown-linux-gnu-desktop.AppImage
+chmod +x ./conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.AppImage
+./conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.AppImage
 ```
 
 Linux 빌드 대상은 Ubuntu 24.04·26.04 x64이며 AppImage에도 시스템 라이브러리가 필요합니다. Windows 프리뷰는 의도적으로 무서명 배포하므로 SmartScreen·알 수 없는 배포자 경고가 나올 수 있고 관리되는 PC에서는 설치가 차단될 수 있습니다. Mac 공개 파일은 릴리스의 Developer ID 서명·공증 검사를 통과해야 합니다. 각 대상의 범위는 [플랫폼 지원](platform-support.ko.md)을 참고하세요.
 
-원하면 파일과 함께 [SHA256SUMS](https://github.com/eggplantiny/conn/releases/download/v0.6.0/SHA256SUMS)를 받으세요. Linux는 `sha256sum --ignore-missing -c SHA256SUMS`, macOS는 `shasum -a 256 <파일>` 결과와 해당 줄 비교, Windows는 `Get-FileHash <파일> -Algorithm SHA256`을 사용합니다. 체크섬은 파일 손상을 확인하며 코드 서명과는 별개입니다.
+원하면 파일과 함께 [SHA256SUMS](https://github.com/eggplantiny/conn/releases/download/v0.7.0/SHA256SUMS)를 받으세요. Linux는 `sha256sum --ignore-missing -c SHA256SUMS`, macOS는 `shasum -a 256 <파일>` 결과와 해당 줄 비교, Windows는 `Get-FileHash <파일> -Algorithm SHA256`을 사용합니다. 체크섬은 파일 손상을 확인하며 코드 서명과는 별개입니다.
 
 ## 2. 터미널 설정
 
@@ -110,7 +110,7 @@ conn agent --agent-id demo run "pwd" --reason "Show the current directory withou
 
 cmd.exe에는 `cd`를 사용하세요. 사람의 제어권 회수·승인·모드 변경은 앱에서 합니다.
 `conn log -n 30`은 OS 권한으로 로컬 감사 파일을 읽는 별도 기능이며 에이전트 화면 조회가 아닙니다.
-이 CLI 변경은 미배포 개발 버전에 해당하며 v0.6.0과 다릅니다.
+이 CLI 변경은 v0.7.0부터 적용됩니다. 앱과 MCP 클라이언트를 함께 재시작하세요.
 
 ## 자주 묻는 문제
 
@@ -150,9 +150,9 @@ npm run tauri dev
 
 **업데이트 확인 → 업데이트 설정**에서 자동 확인·다운로드를 끄거나 프리뷰 포함 여부를 바꿀 수 있습니다. 프리뷰 빌드는 기본적으로 프리뷰를 포함하고, 정식 빌드는 포함하지 않습니다. 채널을 바꿔도 이전 버전으로 내리지 않습니다. GitHub 계정이나 토큰은 필요 없습니다.
 
-Apple Silicon macOS, Windows x64, Linux AppImage에서 앱 내 설치를 지원합니다. `.deb`는 패키지 관리자 또는 새 설치 파일을 사용하세요. 기존 0.5.x는 0.6.0을 한 번 직접 설치해야 합니다. 확인·다운로드 실패는 실행 중인 셸에 영향을 주지 않으며 다시 시도하거나 릴리스 페이지에서 받을 수 있습니다.
+Apple Silicon macOS, Windows x64, Linux AppImage에서 앱 내 설치를 지원합니다. `.deb`는 패키지 관리자 또는 새 설치 파일을 사용하세요. 기존 0.5.x는 0.7.0을 한 번 직접 설치해야 합니다. 확인·다운로드 실패는 실행 중인 셸에 영향을 주지 않으며 다시 시도하거나 릴리스 페이지에서 받을 수 있습니다.
 
-## 같은 세션에서 공유와 확장 사용 (미배포)
+## 같은 세션에서 공유와 확장 사용 (v0.7.0)
 
 외부 실행 세션은 비공유로 시작합니다. 해당 창의 공유 메뉴에서 연결한 에이전트를 고르면
 현재 보이는 화면을 공유합니다. 기존 외부 입력 권한은 종료하고 셸·SSH 연결은 유지합니다.

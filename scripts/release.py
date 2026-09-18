@@ -361,29 +361,41 @@ in CI; full interactive GUI installation/collaboration checks remain pending.
 
 ## New in this release
 
-- Signed in-app updates with background checks/downloads and an explicit install/restart choice.
-- A macOS disk image without a license-agreement prompt; MIT notices remain in the app.
-- A readable, horizontally scrollable timeline with stable click targets and shell-session isolation.
-- Refined settings, private external automation, and shell-authored command history.
+- Agents observe the owner's actual terminal viewport, including scroll position, masks and PNG snapshots. Hidden or stale surfaces pause observation and execution.
+- Start or stop sharing the same running shell/SSH connection with selected agents. The human keeps control until granting it; stopping sharing keeps the shell alive.
+- Add themes and opt-in OpenAI command suggestions backed by OS credential storage. Suggestions insert only after acceptance; execution remains separate.
+- Record sharing boundaries without retroactively saving private input. Retire headless/proxy startup, unattended Entrust and public owner-control commands.
 
-0.5.x installations need one manual install of this updater-enabled version. Preview
-builds follow the preview channel by default; turn previews off for stable releases
-only. In-app updates support Apple Silicon macOS, Windows x64 and Linux AppImage.
-Debian packages use package-manager/manual updates. All active shell sessions close
-only after you choose **Install and restart**. First installed-app upgrades on each
-platform still need hands-on verification.
+**Upgrade together:** protocol v2 requires the matching app and CLI/MCP adapter.
+After installing, restart your MCP clients. Existing files, profiles and saved activity
+remain; running shell sessions close during app restart and are not migrated.
+Agents reconnecting with the same name do not inherit explicitly selected access.
 
-한국어: 앱 내 서명 업데이트, 동의 화면 없는 macOS 설치, 읽기 쉬운 타임라인과 간결한
-설정을 제공합니다. 0.5.x는 이번 버전을 한 번 직접 설치해야 합니다. 자동 확인·다운로드는
-작업을 중단하지 않으며 설치/재시작을 선택해야 셸 세션이 종료됩니다. deb는 패키지
-관리자 또는 수동 업데이트를 사용합니다. 각 OS의 실제 버전 간 업데이트는 추가 확인이 필요합니다.
+v0.6.0 installations can discover this preview through the signed updater. Older
+clients need a manual install. Updates support Apple Silicon macOS, Windows x64
+and Linux AppImage; Debian packages use package-manager/manual updates. Installation
+and restart remain your choice. Full installed-app upgrade coverage on every target
+is not claimed by artifact signature checks.
 
-## External automation preview
+한국어: 사람이 실제 보는 화면을 에이전트와 공유하고, 같은 셸·SSH 연결에서 공유를
+켜고 끌 수 있습니다. 테마와 선택형 OpenAI 명령 제안을 추가했습니다. 자동완성은
+기본 비활성이며 수락해도 텍스트만 삽입합니다. 앱·CLI를 함께 업데이트하고 MCP
+클라이언트를 재시작하세요. 파일·설정·저장 기록은 유지하며 실행 중인 셸은 앱 재시작
+시 종료됩니다. v0.6.0은 서명 업데이트를 사용할 수 있고 이전 버전은 직접 설치하세요.
 
-AppleScript support is experimental and disabled by default. Its macOS bundle
-metadata and example compilation are checked in CI; native permission dialogs
-and real external-application integration have not been manually validated. See the
-[automation guide]({REPOSITORY}/blob/{tag}/docs/external-automation.md) before enabling it.
+## Native validation and remaining coverage
+
+The actual Apple Silicon development app passed visible text/PNG, hidden/masked
+synthetic authentication, AppleScript launch, same-SSH sharing, human takeover,
+Keychain save/delete and live-lease focus/minimization guards. See the
+[macOS acceptance report]({REPOSITORY}/blob/{tag}/docs/shared-surface-macos-validation-results.md).
+Native WebKit completion fixtures passed; a real OpenAI request remains unverified.
+The real-user provider path stays opt-in. Development-app checks are separate from
+this release's CI signing/notarization and updater artifact-signature verification.
+Windows interactive GUI and full installed-app upgrades remain unverified.
+
+AppleScript is disabled by default. Enable it for selected local profiles in Settings
+and consult the [automation guide]({REPOSITORY}/blob/{tag}/docs/external-automation.md).
 
 ## Getting started
 
@@ -391,12 +403,12 @@ and real external-application integration have not been manually validated. See 
 - [한국어 사용법]({REPOSITORY}/blob/{tag}/docs/getting-started.ko.md)
 - [What changed]({REPOSITORY}/blob/{tag}/CHANGELOG.md)
 
-For a standalone terminal or MCP workflow, download the CLI for
+For a separate MCP connector, download the matching CLI for
 [Apple Silicon]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'aarch64-apple-darwin')[0]}),
 [Windows x64]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-pc-windows-msvc')[0]}) or
 [Linux x64]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-unknown-linux-gnu')[0]}).
 Linux x64 assets are built on Ubuntu 24.04 and target
-Ubuntu 24.04/26.04; verify these exact assets on both systems before publishing.
+Ubuntu 24.04/26.04; runtime coverage of these exact assets is separate from CI.
 Windows targets x64 and is intentionally unsigned for this preview; a certificate
 is not a release prerequisite. SmartScreen or unknown-publisher prompts may appear.
 macOS apps, their embedded CLI sidecars, and standalone CLIs are Developer ID
@@ -428,7 +440,7 @@ not that the command completed successfully. Start with a disposable project.
 Read the [security model]({REPOSITORY}/blob/{tag}/docs/security.md) and
 [report security issues privately]({REPOSITORY}/security/advisories/new).
 
-한국어: AppleScript는 기본적으로 꺼진 실험적 기능입니다. macOS 사전·예제 컴파일은 CI에서 검사하지만 실제 권한 대화상자와 외부 앱 연동은 수동 검증하지 못했습니다.
+한국어: AppleScript는 기본적으로 꺼져 있습니다. 실제 Mac 개발 앱의 인증·공유·제어 전환을 검증했으며 배포 파일 서명·공증과는 구분합니다. Windows GUI와 모든 플랫폼의 실제 설치 상태 업그레이드, 실제 OpenAI 호출은 추가 검증 대상입니다.
 이 릴리스는 프리뷰입니다. 명령은 사용자 계정 권한으로 실행되며, 승인 기능은
 운영체제 샌드박스가 아닙니다. 실행 기록은 입력 전달을 뜻하며 명령의 성공을 보장하지
 않습니다. macOS 앱·내장 CLI·별도 CLI는 Developer ID로 서명하며 hardened runtime과

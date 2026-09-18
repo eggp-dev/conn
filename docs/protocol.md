@@ -1,7 +1,7 @@
 # Agent socket protocol v2
 
-**Unreleased hardcut.** v2 removes public owner/frontend operations and headless
-observation. Released v0.6.0 still uses the previous contract. Update the app, CLI and
+**v0.7.0 preview.** v2 removes public owner/frontend operations and headless
+observation. v0.6.0 uses the previous contract. Update the app, CLI and
 MCP adapter together; there is no downgrade to a raw-output or Rust-screen fallback.
 
 On Unix, `~/.conn/conn.sock` is local and owner-only (directory 0700, socket 0600).

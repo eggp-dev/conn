@@ -1,6 +1,6 @@
 # Architecture
 
-**Shared-surface hard cut · unreleased.** [Product contract](PRD.md) · [한국어](architecture.ko.md)
+**Shared-surface hard cut · v0.7.0 preview.** [Product contract](PRD.md) · [한국어](architecture.ko.md)
 
 ```mermaid
 flowchart LR
