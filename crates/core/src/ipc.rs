@@ -293,24 +293,30 @@ pub type SessionId = String;
 /// The host spawns the shell, registers it with the hub and tells its UI.
 pub type TabOpener = Arc<dyn Fn(&str, Option<&str>) -> Result<SessionId, String> + Send + Sync>;
 
+struct AgentRegistration {
+    name: String,
+    last_seen: std::time::Instant,
+    catalog_changed: tokio::sync::mpsc::UnboundedSender<()>,
+}
+
 pub struct Hub {
     sessions: parking_lot::Mutex<Vec<(SessionId, SharedSession)>>,
     attended: parking_lot::Mutex<Option<SessionId>>,
     opener: parking_lot::Mutex<Option<TabOpener>>,
-    agents: parking_lot::Mutex<HashMap<ConnId, (String, std::time::Instant)>>,
+    agents: Arc<parking_lot::Mutex<HashMap<ConnId, AgentRegistration>>>,
 }
 
 pub type SharedHub = Arc<Hub>;
 
 impl Hub {
     pub fn new() -> SharedHub {
-        Arc::new(Self { sessions: parking_lot::Mutex::new(Vec::new()), attended: parking_lot::Mutex::new(None), opener: parking_lot::Mutex::new(None), agents: parking_lot::Mutex::new(HashMap::new()) })
+        Arc::new(Self { sessions: parking_lot::Mutex::new(Vec::new()), attended: parking_lot::Mutex::new(None), opener: parking_lot::Mutex::new(None), agents: Arc::new(parking_lot::Mutex::new(HashMap::new())) })
     }
 
     /// Registered agent identities, including connections waiting for a private session to be shared.
     pub fn agent_connections(&self) -> Vec<crate::session::AgentConnection> {
-        let mut out: Vec<_> = self.agents.lock().iter().map(|(conn, (name, at))| crate::session::AgentConnection {
-            conn_id: *conn, agent_id: name.clone(), idle_secs: at.elapsed().as_secs(),
+        let mut out: Vec<_> = self.agents.lock().iter().map(|(conn, agent)| crate::session::AgentConnection {
+            conn_id: *conn, agent_id: agent.name.clone(), idle_secs: agent.last_seen.elapsed().as_secs(),
         }).collect();
         out.sort_by_key(|a| a.conn_id);
         out
@@ -364,6 +370,16 @@ impl Hub {
     pub fn add(&self, id: &str, session: SharedSession) {
         let first = self.sessions.lock().is_empty();
         session.lock().set_tabs_supported(self.tabs_supported());
+        let agents = Arc::downgrade(&self.agents);
+        session.lock().set_participation_listener(Box::new(move |affected| {
+            if let Some(agents) = agents.upgrade() {
+                for (conn, agent) in agents.lock().iter() {
+                    if affected.is_none_or(|ids| ids.contains(conn)) {
+                        let _ = agent.catalog_changed.send(());
+                    }
+                }
+            }
+        }));
         self.sessions.lock().push((id.to_string(), session.clone()));
         if first {
             *self.attended.lock() = Some(id.to_string());
@@ -569,14 +585,25 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
         }
     });
     let (ev_tx, mut ev_rx) = tokio::sync::mpsc::unbounded_channel::<(SessionId, u64, ServerEvent)>();
+    let (catalog_tx, mut catalog_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
     let out_ev = out_tx.clone();
     let forwarder = tokio::spawn(async move {
-        while let Some((sid, generation, ev)) = ev_rx.recv().await {
-            if let Ok(mut v) = serde_json::to_value(&ev) {
-                if let Some(o) = v.as_object_mut() {
-                    o.insert("session".into(), Value::String(sid.clone()));
+        loop {
+            tokio::select! {
+                Some(()) = catalog_rx.recv() => {
+                    // Connection-level invalidation carries no session identity or
+                    // content and must also reach agents whose access was removed.
+                    let _ = out_ev.send(Outbound { line: json!({"event":"tools_changed"}).to_string(), guard: None });
                 }
-                let _ = out_ev.send(Outbound { line: v.to_string(), guard: Some((sid, generation, None)) });
+                Some((sid, generation, ev)) = ev_rx.recv() => {
+                    if let Ok(mut v) = serde_json::to_value(&ev) {
+                        if let Some(o) = v.as_object_mut() {
+                            o.insert("session".into(), Value::String(sid.clone()));
+                        }
+                        let _ = out_ev.send(Outbound { line: v.to_string(), guard: Some((sid, generation, None)) });
+                    }
+                }
+                else => break,
             }
         }
     });
@@ -616,7 +643,7 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
         for sid in &registered {
             if let Some(s) = hub.get_public(sid) { s.lock().note_connection_activity(conn); }
         }
-        if let Some((_, last)) = hub.agents.lock().get_mut(&conn) { *last = std::time::Instant::now(); }
+        if let Some(agent) = hub.agents.lock().get_mut(&conn) { agent.last_seen = std::time::Instant::now(); }
         let disclosure = str_param(&req.params, "session").or_else(|| bound.clone()).or_else(|| hub.public_attended_for(conn))
             .and_then(|id| hub.get(&id).map(|s| { let generation = s.lock().participation_generation(); (id, generation, None::<u64>) }));
         let result = if !introduced && req.method != "hello" {
@@ -629,7 +656,7 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
             Err(session_unavailable())
         } else if req.method == "hello" {
             let name = str_param(&req.params, "agentId").or_else(|| str_param(&req.params, "name")).unwrap_or_else(|| "client".into());
-            hub.agents.lock().insert(conn, (name.clone(), std::time::Instant::now()));
+            hub.agents.lock().insert(conn, AgentRegistration { name: name.clone(), last_seen: std::time::Instant::now(), catalog_changed: catalog_tx.clone() });
             introduced = true;
             identity = ConnIdentity { name };
             if let Some((sid, s)) = hub.resolve_public(str_param(&req.params, "session").as_deref()).filter(|(_, s)| s.lock().participant_allowed(conn)) {

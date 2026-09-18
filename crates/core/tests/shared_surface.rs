@@ -62,22 +62,64 @@ fn sharing_keeps_pty_and_requires_selected_connection_plus_new_frame() {
 fn physical_input_is_not_forgotten_by_sharing_transition() {
     let mut h=Harness::headless(); h.agent(1,"a");
     h.session.set_shared(false).unwrap(); h.session.human_input(b"unfinished");
-    h.session.set_shared_with_agents(true,vec![1]).unwrap(); present(&mut h.session,vec!["unfinished".into()]);
+    let generation=h.session.surface_generation();let audit_len=h.audit_events().len();
+    assert!(matches!(h.session.set_shared_with_agents(true,vec![1]),Err(SessionError::InputPending)));
+    assert!(h.session.is_private());assert_eq!(h.session.surface_generation(),generation);
+    assert_eq!(h.audit_events().len(),audit_len);assert_eq!(h.pty_str(),"unfinished");
+    h.session.human_input(b"\x15");
+    h.session.set_shared_with_agents(true,vec![1]).unwrap();present(&mut h.session,vec!["$".into()]);
     h.session.agent_request_control(1).unwrap();
-    assert!(matches!(h.session.agent_type(1,"append"),Err(SessionError::InputPending)));
-    h.session.human_input(b"\x15"); h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1,"typed by agent").unwrap();
     h.session.set_shared(false).unwrap();
     assert!(h.session.status().input_pending);
     assert!(h.session.current_lease().is_none());
     assert!(h.session.snapshot(Actor::Agent{conn:1}).is_err());
     assert!(h.pty_str().ends_with("typed by agent"), "revocation leaves physical input with its owner");
-    h.session.set_shared_with_agents(true,vec![1]).unwrap();present(&mut h.session,vec!["typed by agent".into()]);
-    h.session.agent_request_control(1).unwrap();
-    assert!(matches!(h.session.agent_type(1,"unsafe append"),Err(SessionError::InputPending)));
+    assert!(matches!(h.session.set_shared_with_agents(true,vec![1]),Err(SessionError::InputPending)));
+    assert!(h.session.is_private());
     h.session.human_input(b"\x15");
     assert!(!h.session.status().input_pending);
+    h.session.set_shared_with_agents(true,vec![1]).unwrap();
     h.session.set_shared(false).unwrap();
+}
+
+#[test]
+fn persistent_private_clients_refresh_tools_on_selection_removal_and_stop() {
+    use std::{sync::mpsc::Receiver,time::{Duration,Instant}};
+    fn catalog_event(events: &Receiver<serde_json::Value>) {
+        let deadline=Instant::now()+Duration::from_secs(2);
+        loop {
+            let event=events.recv_timeout(deadline.saturating_duration_since(Instant::now())).expect("catalog invalidation");
+            if event.get("session").is_none() {
+                assert_eq!(event,json!({"event":"tools_changed"}));return;
+            }
+        }
+    }
+    let mut h=Harness::headless();h.session.set_shared(false).unwrap();
+    let s=Arc::new(parking_lot::Mutex::new(h.session));let hub=Hub::single("private-session",s.clone());
+    let dir=tempfile::tempdir().unwrap();let path=dir.path().join("catalog.sock");
+    let _guard=ipc::serve_in_background(path.clone(),hub).unwrap();
+    let a=Client::connect(&path).unwrap();let b=Client::connect(&path).unwrap();
+    let a_id=a.call("hello",json!({"kind":"agent","agentId":"same-name"})).unwrap()["conn"].as_u64().unwrap();
+    let b_id=b.call("hello",json!({"kind":"agent","agentId":"same-name"})).unwrap()["conn"].as_u64().unwrap();
+    let a_events=a.take_events().unwrap();let b_events=b.take_events().unwrap();
+    assert!(s.lock().conn_kind(a_id).is_none(),"private candidates have no session subscription");
+    assert!(a.call("affordances",json!({})).is_err());
+    s.lock().set_shared_with_agents(true,vec![a_id]).unwrap();
+    catalog_event(&a_events);
+    assert!(b_events.recv_timeout(Duration::from_millis(100)).is_err(),"unselected same-name client learns nothing");
+    present(&mut s.lock(),vec!["shared screen".into()]);
+    assert!(a.call("affordances",json!({})).unwrap().as_array().unwrap().iter().any(|v|v=="snapshot"));
+    assert!(b.call("snapshot",json!({"session":"private-session"})).is_err());
+    s.lock().set_shared_with_agents(true,vec![b_id]).unwrap();
+    catalog_event(&a_events);catalog_event(&b_events);
+    assert!(a.call("affordances",json!({})).is_err());
+    present(&mut s.lock(),vec!["now only b".into()]);
+    assert!(b.call("snapshot",json!({})).is_ok());
+    s.lock().set_shared(false).unwrap();
+    catalog_event(&b_events);
+    assert!(b.call("affordances",json!({})).is_err());
+    assert_eq!(b.call("sessions",json!({})).unwrap()["sessions"],json!([]));
 }
 
 #[test]
@@ -209,7 +251,12 @@ fn external_origin_can_share_without_restoring_external_writer_or_startup_histor
         rows:24,cols:80,audit,policy:PolicyStore::from_policy(Policy::allow_all()),pty_writer:Box::new(common::SharedBuf(output.clone())),
         output:None,master:None,pacing:Pacing::default(),render_prompt:false,shell_pid:None,
     });
-    s.write_external(b"SYNTHETIC_TEST_PASSWORD\r").unwrap();
+    s.write_external(b"SYNTHETIC_TEST_PASSWORD").unwrap();
+    let generation=s.surface_generation();
+    assert!(matches!(s.set_shared_with_agents(true,vec![1]),Err(SessionError::InputPending)));
+    assert!(s.is_private());assert!(s.external_writer_active());assert_eq!(s.surface_generation(),generation);
+    assert!(log.lock().unwrap().is_empty());
+    s.write_external(b"\r").unwrap();
     assert!(log.lock().unwrap().is_empty());
     s.set_shared_with_agents(true,vec![1]).unwrap();
     assert!(s.external_origin());assert!(!s.is_private());assert!(!s.external_writer_active());

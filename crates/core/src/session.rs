@@ -438,11 +438,15 @@ pub struct SessionConfig {
     pub shell_pid: Option<u32>,
 }
 
+/// None means every connected agent was affected (the previous audience was unrestricted).
+type ParticipationListener = Box<dyn Fn(Option<&HashSet<ConnId>>) + Send + Sync>;
+
 pub struct Session {
     // Origin survives participation transitions. Only native owners change sharing.
     external_origin: bool,
     shared: bool,
     participants: Option<HashSet<ConnId>>,
+    participation_listener: Option<ParticipationListener>,
     surface_generation: u64,
     participation_generation: u64,
     output_seq: u64,
@@ -546,6 +550,7 @@ impl Session {
             external_origin: external_private,
             shared: !external_private,
             participants: if external_private { Some(HashSet::new()) } else { None },
+            participation_listener: None,
             surface_generation: 1,
             participation_generation: 1,
             output_seq: 0,
@@ -695,12 +700,24 @@ impl Session {
         self.set_shared_with_agents(shared, Vec::new())
     }
 
+    /// Host-only catalog invalidation. The listener must not lock any session.
+    pub(crate) fn set_participation_listener(&mut self, listener: ParticipationListener) {
+        self.participation_listener = Some(listener);
+    }
+
     pub fn set_shared_with_agents(&mut self, shared: bool, agents: Vec<ConnId>) -> Result<(), SessionError> {
         if agents.len() > 64 { return Err(SessionError::InvalidInput("at most 64 participants".into())); }
         let selected: HashSet<_> = agents.into_iter().collect();
         if !self.process_alive { return Err(SessionError::ProcessExited); }
         if self.shared == shared && self.participants.as_ref() == Some(&selected) { return Ok(()); }
-        if shared && self.input.has_pending() { return Err(SessionError::InputPending); }
+        if shared && (self.input.has_pending() || self.human_input_pending) { return Err(SessionError::InputPending); }
+        let affected = if self.shared && self.participants.is_none() {
+            None
+        } else {
+            let mut ids = if self.shared { self.participants.clone().unwrap_or_default() } else { HashSet::new() };
+            if shared { ids.extend(selected.iter().copied()); }
+            Some(ids)
+        };
         // Revocation cannot be held hostage by a partial agent write. Preserve the
         // physical input for the owner instead of guessing a clear key in a TUI.
         let unfinished_agent_input = self.input.has_pending();
@@ -728,6 +745,9 @@ impl Session {
         if shared { self.audit.record("human", "sharing_started", json!({ "generation": self.surface_generation })); }
         self.broadcast(ServerEvent::SharingChanged { shared, generation: self.surface_generation });
         self.notify_tools_changed();
+        // New participants have no session subscription yet; removed participants'
+        // session events are deliberately discarded by the transport's ACL guard.
+        if let Some(listener) = &self.participation_listener { listener(affected.as_ref()); }
         Ok(())
     }
 
