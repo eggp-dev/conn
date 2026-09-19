@@ -1,0 +1,180 @@
+---
+import type { Lang } from "../i18n/landing";
+import { beats, proposalBeat, storyCopy, takeoverBeat } from "../story";
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const t = storyCopy[lang];
+const config = JSON.stringify({ beats, proposalBeat, takeoverBeat, takeover: t.lines[takeoverBeat], tookOver: t.tookOver });
+---
+
+<!-- Shown only when the script turns it on (wide screen, motion allowed). Everyone else gets the
+     still crops in the section below, which say the same things. -->
+<section class="story" data-story data-config={config} aria-label={t.label}>
+  <h2>{t.heading}</h2>
+  <div class="track" style={`--beats: ${beats.length}`}>
+    <div class="pin">
+      <div class="lines">
+        {
+          t.lines.map((line, index) => (
+            <div class="beat-line" data-line={index} data-on={index === 0 ? "" : undefined}>
+              <span class="count">0{index + 1}</span>
+              <h3 data-title>{line[0]}</h3>
+              <p data-sub>{line[1]}</p>
+            </div>
+          ))
+        }
+      </div>
+      <div class="window" data-window>
+        <video muted playsinline preload="none" poster="/story/poster.webp" data-src="/story/take.mp4" tabindex="-1" aria-hidden="true"></video>
+        <p class="hint" data-hint hidden>
+          <span class="caret" aria-hidden="true"></span>
+          <span data-hint-key>{t.hintKey}</span>
+          <span data-hint-touch>{t.hintTouch}</span>
+        </p>
+      </div>
+      <div class="rail" role="group" aria-label={t.label}>
+        {
+          t.rail.map((name, index) => (
+            <button type="button" data-beat={index} aria-current={index === 0 ? "step" : undefined}>
+              <i>0{index + 1}</i>
+              {name}
+            </button>
+          ))
+        }
+      </div>
+      <p class="fine">{t.note}</p>
+    </div>
+  </div>
+</section>
+
+<script>
+  type Beat = { key: string; start: number; hold: number };
+  type Config = { beats: Beat[]; proposalBeat: number; takeoverBeat: number; takeover: [string, string]; tookOver: [string, string] };
+
+  const story = document.querySelector<HTMLElement>("[data-story]");
+  const wide = matchMedia("(min-width: 900px) and (min-height: 620px)");
+  const calm = matchMedia("(prefers-reduced-motion: reduce)");
+
+  if (story) {
+    const config = JSON.parse(story.dataset.config!) as Config;
+    const track = story.querySelector<HTMLElement>(".track")!;
+    const film = story.querySelector<HTMLVideoElement>("video")!;
+    const frame = story.querySelector<HTMLElement>("[data-window]")!;
+    const hint = story.querySelector<HTMLElement>("[data-hint]")!;
+    const lines = [...story.querySelectorAll<HTMLElement>("[data-line]")];
+    const steps = [...story.querySelectorAll<HTMLButtonElement>("[data-beat]")];
+    const count = config.beats.length;
+
+    let on = false;
+    let inView = false;
+    let current = -1;
+    let stopAt = 0;
+    let ticking = 0;
+    let tookOver = false;
+    let settle = 0;
+
+    const load = () => {
+      if (film.src) return;
+      film.src = film.dataset.src!;
+      film.load();
+    };
+
+    const rest = () => {
+      cancelAnimationFrame(ticking);
+      film.pause();
+      if (Math.abs(film.currentTime - stopAt) > 0.04) film.currentTime = stopAt;
+      hint.hidden = current !== config.proposalBeat;
+    };
+
+    const follow = () => {
+      if (film.currentTime >= stopAt || film.ended) return rest();
+      ticking = requestAnimationFrame(follow);
+    };
+
+    const show = (index: number) => {
+      for (const [at, line] of lines.entries()) line.toggleAttribute("data-on", at === index);
+      for (const [at, step] of steps.entries()) at === index ? step.setAttribute("aria-current", "step") : step.removeAttribute("aria-current");
+      const words = index === config.takeoverBeat && tookOver ? config.tookOver : config.takeover;
+      const line = lines[config.takeoverBeat]!;
+      line.querySelector("[data-title]")!.textContent = words[0];
+      line.querySelector("[data-sub]")!.textContent = words[1];
+    };
+
+    // Forward: the beat plays as it was recorded, then rests. Backward: straight to its resting frame.
+    const go = (index: number) => {
+      if (index === current) return;
+      const forward = index > current;
+      if (index !== config.takeoverBeat) tookOver = tookOver && index > config.takeoverBeat;
+      current = index;
+      hint.hidden = true;
+      show(index);
+      load();
+      cancelAnimationFrame(ticking);
+      const beat = config.beats[index]!;
+      stopAt = beat.hold;
+      if (!forward) return rest();
+      film.currentTime = beat.start;
+      film.play().then(() => (ticking = requestAnimationFrame(follow)), rest);
+    };
+
+    const offsetOf = (index: number) => {
+      const top = track.getBoundingClientRect().top + scrollY;
+      return top + ((index + 0.5) / count) * (track.offsetHeight - innerHeight);
+    };
+
+    const onScroll = () => {
+      if (!on) return;
+      const box = track.getBoundingClientRect();
+      const span = track.offsetHeight - innerHeight;
+      inView = box.top < innerHeight * 0.6 && box.bottom > innerHeight * 0.4;
+      if (!inView) {
+        if (!film.paused) rest();
+        return;
+      }
+      const progress = Math.min(0.9999, Math.max(0, -box.top / span));
+      const index = Math.floor(progress * count);
+      // A jump across several beats (the rail, a fast flick) should not play each one it passes.
+      clearTimeout(settle);
+      settle = window.setTimeout(() => go(index), index === current + 1 ? 0 : 90);
+    };
+
+    const takeBack = () => {
+      if (!on || !inView || current !== config.proposalBeat) return false;
+      tookOver = true;
+      scrollTo({ top: offsetOf(config.takeoverBeat), behavior: "smooth" });
+      return true;
+    };
+
+    // Only keys that type something: scrolling keys, shortcuts and focused controls keep their meaning.
+    addEventListener("keydown", (event) => {
+      if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
+      if (!(event.key === "Enter" || (event.key.length === 1 && event.key !== " "))) return;
+      if (event.target instanceof Element && event.target.closest("a, button, input, textarea, select, [contenteditable]")) return;
+      takeBack();
+    });
+    frame.addEventListener("click", () => takeBack());
+    for (const step of steps) {
+      step.addEventListener("click", () => {
+        step.blur(); // a focused button would swallow the visitor's next key
+        scrollTo({ top: offsetOf(Number(step.dataset.beat)), behavior: "smooth" });
+      });
+    }
+
+    const apply = () => {
+      on = wide.matches && !calm.matches;
+      document.documentElement.classList.toggle("story-on", on);
+      if (on) onScroll();
+      else film.pause();
+    };
+    wide.addEventListener("change", apply);
+    calm.addEventListener("change", apply);
+    addEventListener("scroll", onScroll, { passive: true });
+    addEventListener("resize", onScroll, { passive: true });
+    new IntersectionObserver((entries) => entries.some((entry) => entry.isIntersecting) && on && load(), { rootMargin: "150% 0px" }).observe(story);
+    apply();
+  }
+</script>
