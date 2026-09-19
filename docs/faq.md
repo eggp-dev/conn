@@ -22,6 +22,14 @@ Typing reclaims terminal control and prevents subsequent agent input. It does **
 
 Control approval and command approval are separate: allowing an agent to take control does not bypass command policy.
 
+## Why does Conn ask whether an agent may join?
+
+Your ordinary tabs are open to every agent connection you have allowed, so Conn asks once when a new connection appears: **Allow** or **Deny**. Until you answer, that connection learns nothing about your sessions. The answer applies to that live connection only; a client that reconnects, or another window of the same client, asks again. If every local agent is yours to trust, turn the question off in **Settings → Agents**. Sessions started by an external launcher stay private until you share them.
+
+## Can the agent keep working while I look at something else?
+
+Yes, from v0.8.0. An agent reads and works in the session it is bound to even when Conn is minimized, behind another app, or showing a different tab. It never follows your view to another tab. What limits it is sharing, the mode you chose, command policy and approvals, and control: your typing takes control back at once, and an agent holds control in one tab at a time. To stop an agent from reading a session, stop sharing it or use Observe mode to keep it from typing.
+
 ## What should I try first?
 
 [Change the working directory together](first-collaboration.md). The example uses a disposable local workspace, one small file and your existing agent. No SSH server or remote machine is needed. A successful handoff means the agent checks the new location and finishes there.
@@ -52,7 +60,7 @@ the same authenticated connection. Child output, shell history and other OS stor
 
 From v0.6.0, Conn checks and downloads signed updates in the background. Choose **Install and restart** when ready; installing closes current shell sessions. Use **Check for updates → Update preferences** to change automatic behavior.
 
-In-app installation supports Apple Silicon macOS, Windows x64 and Linux AppImage. `.deb` uses a new package or package manager. Older 0.5.x installs need one manual upgrade to 0.6.0. [Installation and updates](getting-started.md#updates-v060-and-later)
+In-app installation supports Apple Silicon macOS, Windows x64 and Linux AppImage. `.deb` uses a new package or package manager, because a system package cannot replace itself without administrator rights; choose the AppImage on Linux if you want in-app updates. Older 0.5.x installs need one manual upgrade to 0.6.0. [Installation and updates](getting-started.md#updates-v060-and-later)
 
 ## How can I help?
 
