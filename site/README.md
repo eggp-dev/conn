@@ -31,6 +31,21 @@ which sidebar group, is decided in `src/site.config.mjs`; the repository address
   not mock-ups. `../media/demo/RECORDING-REMOTE.md` says what was prepared.
 - The star count appears from 50 stars on; below that the button stands alone.
 
+## The scroll story
+
+Below the film, the landing page walks through the same take beat by beat (`src/components/Story.astro`,
+beats and copy in `src/story.ts`). Scrolling forward plays a beat at its recorded speed and rests on its
+last frame; scrolling back goes straight to that frame. At the proposal beat the page waits: any typing
+key (or a tap) plays the takeover, which is the product's own promise made with the visitor's hand.
+
+- It is an enhancement. The script turns it on for wide screens when motion is allowed; phones,
+  `prefers-reduced-motion` and no-JavaScript visitors get the still crops, and the story video is not
+  downloaded for them.
+- `public/story/take.mp4` is the recorded take, only resized, with a keyframe at every beat boundary.
+  After a retake run `sh scripts/encode-story.sh` (needs ffmpeg), adjust the times in `src/story.ts`
+  and the key list in the script together, and commit both files it writes.
+- Nothing is sped up, cut inside a beat, or drawn over the footage except the key hint.
+
 ## Hosting
 
 Vercel project with **Root Directory** `site` and "Include files outside the Root Directory in the

@@ -132,6 +132,34 @@ section h2 { font-size: clamp(27px, 3.8vw, 46px); line-height: 1.18; letter-spac
 footer { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 26px; padding: 30px var(--gutter) 46px; border-top: 1px solid #ffffff12; color: var(--faint); font-size: 13.5px; }
 footer a:hover { color: var(--fg); }
 
+/* Scroll story: off until the script turns it on; then it replaces the still crops. */
+.story { display: none; }
+.story-on .story { display: block; padding-top: clamp(56px, 9vh, 110px); }
+.story-on .promises { display: none; }
+.story h2 { padding: 0 var(--gutter); }
+.track { height: calc(var(--beats) * 85vh + 100vh); margin-top: clamp(20px, 4vh, 48px); }
+.pin { position: sticky; top: 53px; height: calc(100vh - 53px); display: grid; grid-template-rows: auto auto auto auto; align-content: center; justify-items: center; gap: clamp(12px, 2.2vh, 24px); padding: 12px var(--gutter) 18px; }
+.lines { display: grid; width: min(100%, 60em); text-align: center; }
+.beat-line { grid-area: 1 / 1; display: grid; gap: 8px; justify-items: center; align-content: end; opacity: 0; transform: translateY(10px); transition: opacity .45s ease, transform .45s ease; pointer-events: none; }
+.beat-line[data-on] { opacity: 1; transform: none; }
+.beat-line h3 { font-size: clamp(24px, 3.3vw, 44px); line-height: 1.16; letter-spacing: -0.03em; }
+.beat-line p { color: var(--soft); font-size: clamp(15px, 1.4vw, 18.5px); min-height: 1.6em; }
+.window { position: relative; width: min(100%, 1360px, calc((100vh - 53px - 290px) * 1920 / 864)); aspect-ratio: 1920 / 864; border-radius: clamp(10px, 1.2vw, 18px); overflow: hidden; border: 1px solid var(--line); background: #07070c; box-shadow: 0 40px 140px -50px #8575ff77; }
+.window video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.hint { position: absolute; left: 50%; top: 59%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-radius: 999px; background: #000000cc; backdrop-filter: blur(10px); border: 1px solid #b9adff80; color: var(--fg); font-size: clamp(14px, 1.3vw, 17px); font-weight: 500; white-space: nowrap; box-shadow: 0 0 60px -10px #8575ffaa; animation: hint-in .5s ease both; cursor: pointer; }
+.hint[hidden] { display: none; }
+.caret { width: 9px; height: 1.15em; background: var(--violet); border-radius: 2px; animation: blink 1.1s steps(2, start) infinite; }
+[data-hint-touch] { display: none; }
+@media (pointer: coarse) { [data-hint-key] { display: none; } [data-hint-touch] { display: inline; } }
+@keyframes blink { to { visibility: hidden; } }
+@keyframes hint-in { from { opacity: 0; transform: translate(-50%, -40%); } }
+.rail { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.rail button { appearance: none; border: 0; background: none; color: var(--faint); font: 500 13px/1 var(--sans); padding: 8px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; gap: 7px; align-items: baseline; transition: color .2s, background .2s; }
+.rail button i { font: 500 11px/1 var(--mono); font-style: normal; color: inherit; opacity: .7; }
+.rail button:hover { color: var(--soft); }
+.rail button[aria-current] { color: var(--fg); background: #ffffff12; }
+.rail button[aria-current] i { color: var(--violet); opacity: 1; }
+
 @media (max-width: 900px) {
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .how ol { grid-template-columns: minmax(0, 1fr); }

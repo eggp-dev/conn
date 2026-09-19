@@ -10,6 +10,7 @@ import release from "../generated/release.json";
 import { copy, type Lang } from "../i18n/landing";
 import { origin, repository } from "../site.config.mjs";
 import InstallCommand from "./InstallCommand.astro";
+import Story from "./Story.astro";
 
 interface Props {
   lang: Lang;
@@ -104,6 +105,8 @@ const social = new URL(`/media/conn-remote-${lang}-social.webp`, origin).href;
           <a href={`${github}/blob/main/media/demo/RECORDING-REMOTE.md`}>{t.filmHow} →</a>
         </p>
       </section>
+
+      <Story lang={lang} />
 
       <section class="promises">
         <h2>{t.promisesTitle}</h2>
