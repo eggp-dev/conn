@@ -6,7 +6,7 @@
  import CompletionBar from '../../src/components/CompletionBar.svelte';
  import { st,newTab } from '../../src/lib/store.svelte.ts';
  import { extensions } from '../../src/lib/extensions.svelte.ts';
- const calls=[];let publishing=true;let promptReady=false;let responseStatus='ready';let requestCount=0;
+ const calls=[];let promptReady=false;let responseStatus='ready';let requestCount=0;
  window.__TAURI_INTERNALS__={invoke:async(_,{name,args})=>{
   calls.push({name,args});
   if(name==='status')return {surfaceAvailable:true,completionPromptReady:promptReady,shared:true,controller:{type:'human'}};
@@ -22,7 +22,6 @@
   st.tabs.fixture=newTab('fixture',1);st.active='fixture';Object.assign(st.tabs.fixture,{shared:true,attended:true,statusReady:true});
   extensions.catalog={apiVersion:1,extensions:[],themes:[],keyStatus:'stored',settings:{theme:'conn.theme.midnight',model:'fixture',completionEnabled:true,providerEnabled:true}};
   const component=mount(CompletionBar,{target:document.querySelector('#component')});
-  const publication=setInterval(()=>{if(publishing)st.tabs.fixture.surfacePublishedSerial++;},60);
   try {
    await wait(1000);report('initial/configured state does not request a model',count('completion_request')===0);
    st.tabs.fixture.humanInputRevision++;await wait(1050);report('unknown prompt quietly skips automatic requests',count('completion_request')===0&&!st.completionOpen);
@@ -38,10 +37,9 @@
    report('disabled suggestions never start an automatic request',count('completion_request')===2);
    extensions.catalog.settings.completionEnabled=true;extensions.catalog.keyStatus='missing';st.tabs.fixture.humanInputRevision++;await wait(1050);
    report('missing credentials skip automatic requests quietly',count('completion_request')===2&&!st.completionOpen);
-   publishing=false;st.completionRequest++;await wait(240);
-   report('pre-dock surfaceAvailable cannot start a request without a new renderer acknowledgement',count('completion_request')===2);
-   publishing=true;await wait(200);report('post-layout acknowledgement releases the waiting request',count('completion_request')===3);
+   st.completionRequest++;await wait(240);
+   report('an explicit request needs no renderer acknowledgement; the core revision guards acceptance',count('completion_request')===3);
    report('model requests carry no raw input or screen strings from the UI',calls.filter(c=>c.name==='completion_request').every(c=>Object.keys(c.args).sort().join(',')==='explicit,session'));
-  }catch(error){report(String(error),false);}finally{clearInterval(publication);await unmount(component);}
+  }catch(error){report(String(error),false);}finally{await unmount(component);}
  };
 </script></html>

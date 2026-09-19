@@ -63,7 +63,7 @@ Use your own API key. Model availability and charges depend on that API account.
 
 When enabled, automatic requests wait for an 800 ms typing pause and require the native
 host to confirm an idle local shell prompt under human control. The trigger contains no
-typed text; request context still comes only from the presented frame. Authentication,
+typed text; request context still comes only from the current session terminal grid. Authentication,
 editors, running commands, external-origin and unconfirmed shells do not automatically
 trigger suggestions. A manual request remains available in unconfirmed environments;
 the user must ensure this is a command-entry context. Disable **Command suggestions**

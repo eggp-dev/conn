@@ -51,6 +51,7 @@ In **Settings → Agents → Connect your agent**:
 1. Choose Codex / ChatGPT local tasks, Claude Code, Cursor, GitHub Copilot in VS Code, or Copilot CLI.
 2. Click **Set up** to register the MCP server and collaboration skill.
 3. Restart or reconnect your client following the card's hint. Keep Conn open and ask your agent to read the current terminal.
+4. The first time an agent connects, Conn shows **wants to join**. Press **Allow**. The agent's waiting call continues by itself. Each new connection asks once; turn this off under **Settings → Agents → Ask before a new agent joins** if you prefer.
 
 **Configured** means the files are saved; **Connected now** appears while the client is attached to Conn. Client trust prompts and command approvals remain separate. [Client paths, updates, removal and troubleshooting](agent-integrations.md).
 
@@ -122,10 +123,11 @@ requires command review. These CLI changes take effect in v0.7.0. Restart the ap
 |---|---|
 | Agent cannot find the CLI | Copy the configuration from Settings again. The desktop connection uses an absolute path and needs no `PATH` change. |
 | Agent cannot connect | Keep Conn open and use its current endpoint. Copy the configuration again after moving the app. |
-| Agent reads but cannot type | Check Observe mode, tool permissions, control ownership, and whether its tab is visible. |
+| `admission_pending` | Press **Allow** on the "wants to join" card in the Conn window, then let the agent retry. |
+| Agent reads but cannot type | Check Observe mode, tool permissions and control ownership. Your typing takes control back; the agent must request it again. |
 | Request stays pending | Look for a control request, command approval, or Co-pilot proposal. |
-| `unattended` or `suspended` | Return to that tab and obtain a fresh snapshot. The agent cannot change your visible tab. |
-| `surface_unavailable` | Show and focus the terminal, close covering panels, and retry after it renders. |
+| Agent works in a tab you are not viewing | Expected: access follows sharing, mode and control, not window focus or the visible tab. Stop sharing or use Observe mode to restrict it. |
+| `surface_unavailable` | The terminal changed after the agent last read it. Take a fresh snapshot and retry. |
 | Compound command is blocked | With `isolate_dangerous: true`, submit navigation, the dangerous action, and verification separately. |
 | Command is still running | Wait and read another snapshot; a submission result is not an exit status. |
 

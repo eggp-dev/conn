@@ -6,34 +6,39 @@
 contract. The released v0.6.0 app keeps externally created sessions private for their
 whole lifetime and does not provide the sharing transition or native model extensions.
 
-## One terminal, one presented surface
+<a id="one-terminal-one-presented-surface"></a>
 
-Conn mediates a terminal shared by a human and participating agents. A snapshot comes
-from the owner-rendered terminal viewport, including its current scroll position and
-alternate screen. The internal Rust terminal parser remains a command-policy tracker;
-it is not an agent observation source or fallback. Agents receive neither raw PTY output
-nor an independent scrollback search interface.
+## One shared terminal session
 
-The native owner supplies a surface ID, generation, rendered-frame revision and output
-sequence. A frame must match the current output and sharing boundary. A missing,
-invalidated or stale frame is unavailable; a native parser snapshot is not substituted.
-The frame expires without an owner heartbeat. Concealed terminal cells are excluded
-from the rendered text projection. A PNG of the rendered surface is included when the
-renderer can produce it; `imageUnavailable` explicitly marks text-only results.
+Observation is the current terminal grid parsed from PTY output in Conn's core.
+Window focus, minimization, overlays and tab selection are not access controls.
+No renderer heartbeat is required. Agents do not follow the human across tabs;
+explicit session participation still applies to every read and write.
 
-The human-visible terminal is the intended boundary, not the entire desktop. The UI
-suppresses publication for inactive tabs, lost focus, hidden documents and its own
-obscuring panels. This is not a universal OS compositor/occlusion detector. Native
-window coverage, accessibility scaling and renderer differences need platform checks.
-Pixels and text extraction must be tested together; text cannot express every graphical
-terminal state. A compromised owner webview is inside this trust boundary.
+The grid contains no raw keyboard input, process memory, environment or scrollback.
+No-echo passwords are absent; masked passwords appear as masks. ANSI conceal and
+explicit equal foreground/background colors are suppressed in text projection.
+An agent cannot submit a cursor line that contains such withheld text, because the
+resolved command is echoed back to it. Colors that merely look alike under a theme
+(for example black text on a default dark background) are not detected.
+A child printing plaintext secrets exposes them to all authorized observers.
 
-Visible credentials can be shared. A hidden password stays absent; masked input appears
-as masks. If a child later prints a secret, it becomes visible to both actors. Clearing
-Conn's viewport does not erase a child application's history, tmux buffers, OS memory,
-previous snapshots or copies already delivered to a model.
+This is a terminal-text contract, not pixel equality with the owner's viewport.
+Scroll position, themes, graphical terminal protocols and desktop overlays are not
+exported. Theme-dependent color coincidences and graphical rendering are not a
+security boundary. Do not hide credentials using colors; use no-echo input.
+Clearing the screen cannot erase prior snapshots, child history or model copies.
+The small pinned terminal-parser patch and its tests are documented in
+[the parser patch notes](../vendor/vt100/CONN-PATCH.md).
 
 ## Participation, control and the local owner
+
+The local socket is restricted to the same OS user. Within that boundary the desktop app
+asks before a new agent connection participates: until the owner presses **Allow**, the
+connection learns nothing about any session and is not a sharing candidate. The answer
+binds to the live connection, never to its display name, and a denied connection stays
+out. This is a consent boundary, not protection against malware already running as the
+same user. The prompt can be disabled in settings for fully trusted local setups.
 
 Sharing and input control are separate. Explicit sharing selections use live connection
 IDs, not display names: reconnecting or choosing another agent's name does not inherit
@@ -41,11 +46,11 @@ that selection. Removing a participant or stopping sharing invalidates queued di
 and pending agent work. Ordinary newly opened shared tabs retain their initial
 collaboration policy until the owner makes an explicit participant selection.
 
-Only the native owner window may publish a frame, change sharing, decide approvals,
+Only the native owner window may change sharing, decide approvals,
 change settings or supply human input. Public IPC accepts agent connections only.
 Declaring `kind: human` or `kind: frontend` does not confer owner authority. There is no
-public raw-output subscription, frontend fallback, Entrust continuation on an unobserved
-tab, or headless observation mode. See [protocol v2](protocol.md).
+public raw-output subscription or frontend identity fallback. Authorized session
+observation remains available without an active renderer. See [protocol v2](protocol.md).
 
 Control requests and command approvals remain distinct. Human input revokes an agent's
 lease before reaching the PTY. Grace can delay an allowed Enter, and the owner may
@@ -219,12 +224,12 @@ from saved timeline data. Back up work as files/version control.
 
 ## 한국어 요약
 
-**v0.7.0부터 적용되는 공유 화면 계약입니다.**
+**개발 중인 공유 셸 화면 계약입니다. 배포판의 동작과 구분합니다.**
 
 - 사람과 에이전트가 같은 표시 화면을 사용합니다. 에이전트에게 원시 PTY 출력이나
-  별도 스크롤백을 제공하지 않고, 화면이 없거나 오래됐으면 조회를 중단합니다.
+  원시 입력·스크롤백을 제공하지 않습니다. 창 가림·최소화·다른 탭 선택은 공유 권한을 바꾸지 않습니다.
 - 숨김 입력은 복원하지 않고 별표는 별표로 보냅니다. 이미 보이는 민감정보나 나중에
-  자식이 다시 출력한 정보는 공유될 수 있습니다. 모든 OS 창 가림을 탐지한다는 보장은 아닙니다.
+  자식이 다시 출력한 정보는 공유될 수 있습니다. 픽셀 스크린샷은 제공하지 않으며 색상이나 테마는 비밀을 숨기는 수단이 아닙니다.
 - 공유 대상은 표시 이름이 아니라 실제 연결 ID입니다. 공개 소켓에서 인간·프런트엔드
   역할을 자칭해도 승인·공유·화면 게시·직접 입력 권한을 얻지 못합니다.
 - 비공유 인증 후 같은 PTY·SSH 연결에서 공유할 수 있습니다. 외부 입력 권한과 큐를

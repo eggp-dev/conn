@@ -1,5 +1,6 @@
 [workspace]
 resolver = "2"
+exclude = ["vendor/vt100"]
 members = ["crates/core", "crates/cli", "crates/frontend", "crates/browser-harness"]
 
 [workspace.package]
@@ -12,7 +13,7 @@ repository = "https://github.com/eggplantiny/conn"
 conn-core = { path = "crates/core", version = "0.7.0" }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "time", "macros", "signal"] }
 portable-pty = "0.8"
-vt100 = "0.15"
+vt100 = { path = "vendor/vt100", version = "0.15.2" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"

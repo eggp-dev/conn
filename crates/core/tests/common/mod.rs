@@ -28,16 +28,9 @@ impl EventSink for VecSink {
     }
 }
 
-/// Explicit owner presentation for tests. Independent of the policy VT parser.
+/// Feed a deterministic terminal output grid; never fabricate renderer frames.
 pub fn present(session: &mut Session, screen: Vec<String>) {
-    let generation = session.surface_generation();
-    let output_seq = session.output_seq();
-    let size = session.status().size;
-    session.publish_surface(conn_core::screen::SurfaceFrame {
-        surface_id: "test-owner".into(), generation, revision: session.surface_revision().saturating_add(1), output_seq,
-        rows: size.rows, cols: size.cols, cursor: Some(conn_core::screen::Cursor { row: 0, col: 0 }),
-        screen, alternate_screen: false, visible: true, image: None, image_unavailable: true,
-    }).unwrap();
+    session.pty_output(format!("\x1b[2J\x1b[H{}",screen.join("\r\n")).as_bytes());
 }
 
 pub struct Harness {

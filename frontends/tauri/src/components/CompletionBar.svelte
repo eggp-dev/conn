@@ -53,20 +53,9 @@
     if(expected!==version || !readyForAutomatic(session,inputRevision) || !status.completionPromptReady) return;
    }
    working=true;error='';st.completionOpen=true;
-   // Flush dock layout, then require an acknowledged renderer publication after it.
-   // An old surfaceAvailable=true from before the dock opened is insufficient.
+   // Apply the dock layout before requesting the current backend terminal grid.
    await tick();
-   await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
-   const publication=st.tabs[session]?.surfacePublishedSerial ?? 0;
-   let presented=false;
-   for(let attempt=0;attempt<40;attempt++) {
-    if(expected!==version || st.active!==session) return;
-    if(!explicit && !readyForAutomatic(session,inputRevision)) {await close();return;}
-    const status=await cmd<CompletionStatus>('status',{session});
-    if(status.surfaceAvailable && st.tabs[session]?.surfacePublishedSerial>publication) {presented=true;break;}
-    await new Promise(resolve=>setTimeout(resolve,100));
-   }
-   if(!presented) throw new Error("Presentation unavailable");
+   if(expected!==version || st.active!==session) return;
    const result=await cmd<Job>('completion_request',{session,explicit});
    if(expected!==version) return;
    job=result;st.completionOpen=true;

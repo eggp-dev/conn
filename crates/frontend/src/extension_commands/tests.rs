@@ -46,23 +46,7 @@ fn setup() -> (tempfile::TempDir, Arc<Harness>, String) {
         .expect("no-echo child did not start");
     let session = engine(&h.state, &id).unwrap().session();
     let mut s = session.lock();
-    let generation = s.surface_generation();
-    let output_seq = s.output_seq();
-    s.publish_surface(conn_core::screen::SurfaceFrame {
-        surface_id: "test-owner".into(),
-        generation,
-        revision: 1,
-        output_seq,
-        rows: 24,
-        cols: 80,
-        cursor: None,
-        screen: vec!["ready".into()],
-        alternate_screen: false,
-        visible: true,
-        image: None,
-        image_unavailable: true,
-    })
-    .unwrap();
+    s.pty_output(b"ready");
     drop(s);
     (dir, h, id)
 }
@@ -145,6 +129,6 @@ fn stop_sharing_cancels_ready_completion_in_session_transaction() {
 }
 
 #[test]
-fn hidden_surface_cancels_ready_completion_in_session_transaction() {
-    assert_owner_action_cancels_atomically("invalidate_surface", json!({}));
+fn resize_cancels_ready_completion_in_session_transaction() {
+    assert_owner_action_cancels_atomically("resize", json!({"rows":30,"cols":90}));
 }

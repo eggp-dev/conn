@@ -64,7 +64,6 @@ pub enum ServerEvent {
     /// Owner-only raw PTY output, base64. Never sent on public agent sockets.
     Output { data: String, #[serde(rename = "outputSeq")] output_seq: u64 },
     SharingChanged { shared: bool, generation: u64 },
-    SurfaceInvalidated { generation: u64 },
     ProcessExited { #[serde(rename = "exitCode")] exit_code: Option<u32> },
     PacingChanged { pacing: Pacing },
     AffordanceMaskChanged { allow: Option<Vec<Affordance>> },
@@ -87,9 +86,7 @@ pub enum ServerEvent {
     TabOpened { #[serde(rename = "agentId")] agent_id: String, reason: Option<String> },
     /// An agent's connection moved between tabs. Sent to both sessions.
     AgentSwitchedTab { #[serde(rename = "agentId")] agent_id: String, from: String, to: String },
-    /// The holder's writes are blocked (human away) / allowed again.
-    ControlSuspended { reason: String },
-    ControlResumed,
+    /// The human explicitly returned control to the previous agent.
     ControlHandedBack { lease: String, #[serde(rename = "agentId")] agent_id: String, #[serde(rename = "lastCmd")] last_cmd: Option<String> },
     SessionAllowsChanged { allows: Vec<String> },
 }
@@ -219,13 +216,9 @@ pub enum SessionError {
     ProposalPending(String),
     #[error("intent is required: say in one line what this command does and changes")]
     IntentRequired,
-    #[error("the human is not looking at this session; call terminal_request_attention and wait")]
-    Unattended,
-    #[error("suspended: the human left this session; wait for them to return")]
-    Suspended,
     #[error("'{0}' is not available right now")]
     NotAvailable(String),
-    #[error("no current owner-presented surface is available")]
+    #[error("terminal screen revision is no longer current")]
     SurfaceUnavailable,
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
@@ -450,7 +443,7 @@ pub struct Session {
     surface_generation: u64,
     participation_generation: u64,
     output_seq: u64,
-    surface: Option<(SurfaceFrame, Instant)>,
+    surface_id: String,
     external_writer_active: bool,
     execution_profile: Option<crate::backend::Profile>,
     authority: Authority,
@@ -554,7 +547,7 @@ impl Session {
             surface_generation: 1,
             participation_generation: 1,
             output_seq: 0,
-            surface: None,
+            surface_id: uuid::Uuid::new_v4().to_string(),
             external_writer_active: external_private,
             authority: Authority::new(Duration::from_secs(cfg.pacing.lease_ttl_secs)),
             policy: cfg.policy,
@@ -611,7 +604,6 @@ impl Session {
     pub fn is_private(&self) -> bool { !self.shared }
     pub fn external_origin(&self) -> bool { self.external_origin }
     pub fn surface_generation(&self) -> u64 { self.surface_generation }
-    pub fn surface_revision(&self) -> u64 { self.surface.as_ref().map_or(0, |(frame, _)| frame.revision) }
     pub fn participation_generation(&self) -> u64 { self.participation_generation }
     pub fn output_seq(&self) -> u64 { self.output_seq }
     /// Native owner installs a log at the moment sharing is enabled, never at external startup.
@@ -633,13 +625,6 @@ impl Session {
             && !self.external_origin && self.authority.controller().is_human()
     }
 
-    pub fn authoritative_surface(&self) -> Result<SurfaceFrame, SessionError> {
-        self.require_shared()?;
-        let frame = self.presented_surface()?;
-        if frame.output_seq != self.output_seq { return Err(SessionError::SurfaceUnavailable); }
-        Ok(frame.clone())
-    }
-
     /// Completion insertion is a human acceptance, not a second unchecked writer.
     pub fn accept_completion(&mut self, surface_id: &str, generation: u64, revision: u64, text: &str) -> Result<(), SessionError> {
         let frame = self.authoritative_surface()?;
@@ -653,46 +638,19 @@ impl Session {
         Ok(())
     }
 
-    /// Owner observation was obscured or replaced. Pending decisions survive
-    /// layout changes; all execution waits for a fresh presented surface.
-    pub fn invalidate_surface(&mut self) -> u64 {
-        self.surface = None;
-        self.surface_generation = self.surface_generation.saturating_add(1);
-        self.broadcast(ServerEvent::SurfaceInvalidated { generation: self.surface_generation });
-        self.notify_tools_changed();
-        self.surface_generation
-    }
-
-    pub fn publish_surface(&mut self, frame: SurfaceFrame) -> Result<(), SessionError> {
-        if !frame.validate() || frame.generation != self.surface_generation || frame.output_seq != self.output_seq {
-            return Err(SessionError::InvalidInput("invalid or obsolete surface frame".into()));
-        }
-        if let Some((old, _)) = &self.surface {
-            if old.surface_id != frame.surface_id || frame.revision < old.revision || frame.output_seq < old.output_seq {
-                return Err(SessionError::InvalidInput("surface owner or revision changed without invalidation".into()));
-            }
-            if old.revision == frame.revision && old != &frame {
-                return Err(SessionError::InvalidInput("surface contents changed without advancing revision".into()));
-            }
-        }
-        if !frame.visible {
-            self.invalidate_surface();
-            return Ok(());
-        }
-        let revision = frame.revision;
-        let changed = self.surface.as_ref().is_none_or(|(old, _)| old.revision != frame.revision || old.output_seq != frame.output_seq);
-        self.surface = Some((frame, Instant::now()));
-        if changed { self.broadcast(ServerEvent::ScreenChanged { revision }); }
-        Ok(())
-    }
-
-    fn presented_surface(&self) -> Result<&SurfaceFrame, SessionError> {
-        let (frame, received) = self.surface.as_ref().ok_or(SessionError::SurfaceUnavailable)?;
-        if !self.attended || !frame.visible || frame.generation != self.surface_generation || frame.output_seq != self.output_seq
-            || received.elapsed() > Duration::from_secs(3) {
-            return Err(SessionError::SurfaceUnavailable);
-        }
-        Ok(frame)
+    /// Current terminal grid derived exclusively from PTY output. Window focus,
+    /// renderer heartbeats and scrollback position never authorize participation.
+    pub fn authoritative_surface(&self) -> Result<SurfaceFrame, SessionError> {
+        self.require_shared()?;
+        let size = self.screen.size();
+        Ok(SurfaceFrame {
+            surface_id: self.surface_id.clone(), generation: self.surface_generation,
+            revision: self.screen.revision(), output_seq: self.output_seq,
+            rows: size.rows, cols: size.cols,
+            cursor: self.screen.visible_cursor(), screen: self.screen.rows(),
+            alternate_screen: self.screen.alternate_screen(),
+            image: None, image_unavailable: true,
+        })
     }
 
     /// Only the local owner may add/remove agent participation. The PTY is untouched.
@@ -729,7 +687,6 @@ impl Session {
         self.shared = shared;
         self.participation_generation = self.participation_generation.saturating_add(1);
         self.participants = Some(selected);
-        self.surface = None;
         self.surface_generation = self.surface_generation.saturating_add(1);
         self.input.reset();
         self.shell_submissions.clear();
@@ -1221,16 +1178,12 @@ impl Session {
         self.attended
     }
 
-    fn attended_for(&self, _conn: ConnId) -> bool { self.attended }
 
     pub fn effective_mode(&self) -> AgentMode { self.mode }
 
     pub fn set_attended(&mut self, attended: bool) {
         if self.attended == attended { return; }
         self.attended = attended;
-        self.participation_generation = self.participation_generation.saturating_add(1);
-        if !attended { self.cancel_agent_work("human_left"); }
-        self.invalidate_surface();
         self.audit.record("human", if attended { "attend" } else { "leave" }, json!({}));
         self.broadcast(ServerEvent::AttentionChanged { attended });
         if attended { self.attention_request = None; }
@@ -1265,10 +1218,48 @@ impl Session {
         if self.affordances(Actor::Agent { conn }).contains(&a) {
             return Ok(());
         }
-        if !self.attended_for(conn) {
-            return Err(SessionError::Unattended);
-        }
         Err(SessionError::NotAvailable(a.name().into()))
+    }
+
+    /// Destination authorization for explicit connection navigation. Independent
+    /// of shell liveness and owner attention; it grants neither reads nor writes.
+    pub fn agent_can_navigate(&self, conn: ConnId) -> Result<(), SessionError> {
+        // The public transport has authenticated the connection; destination
+        // registration is intentionally lazy and happens after this ACL check.
+        if !self.participant_allowed(conn) {
+            return Err(SessionError::NotAvailable("participation not granted".into()));
+        }
+        self.check_mask(Affordance::SwitchTab)?;
+        if !self.tabs_supported || self.mode == AgentMode::Observe {
+            return Err(SessionError::NotAvailable("switch_tab".into()));
+        }
+        Ok(())
+    }
+
+    /// A live, participating source may pin its agents: an owner mask without
+    /// `switch_tab` holds. A source that is gone, private, exited or no longer
+    /// open to `conn` never blocks recovery.
+    pub fn blocks_navigation_from(&self, conn: ConnId) -> bool {
+        self.process_alive && self.participant_allowed(conn) && self.check_mask(Affordance::SwitchTab).is_err()
+    }
+
+    /// `conn` moved its binding elsewhere. Like a lock, the lease belongs to the
+    /// tab: nothing stays held or queued here by an agent that has left.
+    pub fn agent_left_tab(&mut self, conn: ConnId) {
+        if self.is_private() { return; }
+        self.cancel_scheduled_if(|s| s.conn == conn, "agent_left_tab");
+        self.reject_proposal_if(|p| p.conn == conn, "agent_left_tab");
+        for id in self.control_requests.iter().filter(|r| r.conn == conn && r.state == ControlRequestState::Pending).map(|r| r.request_id.clone()).collect::<Vec<_>>() {
+            self.finish_control_request(&id, ControlRequestState::Denied);
+        }
+        for id in self.approvals.pending_for_conn(conn) {
+            self.finish_approval(&id, ApprovalState::Denied, "agent_left_tab");
+        }
+        if let Some(lease) = self.authority.revoke_if_held_by(conn) {
+            self.audit.record(&lease.agent_id, "lease_released", json!({ "lease": lease.label(), "reason": "left_tab" }));
+            self.broadcast(ServerEvent::ControlRevoked { lease: lease.label(), agent_id: lease.agent_id, reason: RevokeReason::Released });
+            self.notify_tools_changed();
+        }
     }
 
     /// This session was just opened as a tab by `conn`. It starts unattended and
@@ -1364,16 +1355,12 @@ impl Session {
             Actor::Agent { conn } => self.approvals.has_pending_for(conn),
             Actor::Human => false,
         };
-        let attended = match actor {
-            Actor::Agent { conn } => self.attended_for(conn),
-            Actor::Human => true,
-        };
         let state = AffordanceState {
             controller: self.authority.controller(),
             process_alive: self.process_alive,
             has_pending_approval: has_pending,
             any_pending_approval: self.approvals.first_pending().is_some(),
-            attended,
+            attended: self.attended,
             tabs: self.tabs_supported,
         };
         let mut out = affordances_for(actor, &state);
@@ -1397,13 +1384,8 @@ impl Session {
         if let Actor::Agent { conn } = actor {
             self.require_participant(conn)?;
             self.check_mask(Affordance::Snapshot)?;
-            // The agent sees exactly what the human sees. Nobody looking → nothing to see.
-            if !self.attended_for(conn) {
-                return Err(SessionError::Unattended);
-            }
         }
-        let frame = self.presented_surface()?;
-        if frame.output_seq != self.output_seq { return Err(SessionError::SurfaceUnavailable); }
+        let frame = self.authoritative_surface()?;
         let projection = frame.projection();
         if let Actor::Agent { conn } = actor {
             self.audit.record(&self.agent_name(conn), "observe", json!({ "rev": projection.revision }));
@@ -1441,10 +1423,7 @@ impl Session {
             return Err(SessionError::ProcessExited);
         }
         self.check_mask(Affordance::RequestControl)?;
-        if !self.attended_for(conn) {
-            return Err(SessionError::Unattended);
-        }
-        self.presented_surface()?;
+        self.require_shared()?;
         if self.mode == AgentMode::Observe {
             return Err(SessionError::WrongMode(self.mode));
         }
@@ -1485,7 +1464,7 @@ impl Session {
 
     fn grant_original(&mut self, conn: ConnId, reason: Option<String>, via: &str, original_request: Option<serde_json::Value>) -> Result<LeaseInfo, SessionError> {
         self.require_participant(conn)?;
-        self.presented_surface()?;
+        self.require_shared()?;
         let agent_id = self.agent_name(conn);
         let lease = self.authority.request(&agent_id, conn, Instant::now())?;
         self.last_agent = Some((conn, agent_id.clone()));
@@ -1654,7 +1633,6 @@ impl Session {
     /// it — and recorded as such; `deny` still blocks.
     pub fn accept_proposal(&mut self, proposal_id: &str) -> Result<KeyResult, SessionError> {
         self.require_shared()?;
-        self.presented_surface()?;
         let Some(p) = self.proposal.clone() else { return Err(SessionError::NotFound(proposal_id.into())) };
         if p.proposal_id != proposal_id {
             return Err(SessionError::NotFound(proposal_id.into()));
@@ -1735,9 +1713,6 @@ impl Session {
             return Err(SessionError::ProcessExited);
         }
         self.check_mask(a)?;
-        if !self.attended_for(conn) {
-            return Err(SessionError::Suspended);
-        }
         match self.authority.check_and_touch(conn, Instant::now()) {
             Ok(()) => {}
             Err(AuthorityError::Expired) => {
@@ -1748,7 +1723,7 @@ impl Session {
             }
             Err(e) => return Err(e.into()),
         }
-        self.presented_surface()?;
+        self.require_shared()?;
         if let Some(id) = self.approvals.pending_for_conn(conn).first() {
             return Err(SessionError::ApprovalPending(id.clone()));
         }
@@ -1863,6 +1838,11 @@ impl Session {
         if intent.is_none() && self.policy.require_intent() {
             return Err(SessionError::IntentRequired);
         }
+        // The resolved command is echoed back to the agent and may come from the
+        // raw cursor row. An agent never submits a line it cannot fully observe.
+        if self.screen.cursor_line_hidden() {
+            return Err(SessionError::InvalidInput("the cursor line contains concealed text; only the human can submit it".into()));
+        }
         let agent_id = self.agent_name(conn);
         // The cursor row is only a visual fragment when a command wraps (or
         // scrolls beyond the screen). Keep the full tracked input authoritative
@@ -1892,7 +1872,13 @@ impl Session {
                         cancel_reason: None,
                     });
                     self.audit.record(&agent_id, "exec_scheduled", json!({ "cmd": cmd, "exec": exec_id, "graceMs": grace_ms, "intent": intent }));
-                    self.broadcast(ServerEvent::ExecScheduled { exec_id: exec_id.clone(), agent_id, cmd: cmd.clone(), intent, grace_ms });
+                    self.broadcast(ServerEvent::ExecScheduled { exec_id: exec_id.clone(), agent_id: agent_id.clone(), cmd: cmd.clone(), intent, grace_ms });
+                    // Grace is the human's chance to object; a tab nobody is looking at must knock.
+                    if !self.attended {
+                        let reason = Some(format!("grace: {cmd}"));
+                        self.attention_request = Some(AttentionRequest { agent_id: agent_id.clone(), reason: reason.clone(), at: chrono::Local::now().format("%H:%M:%S").to_string() });
+                        self.broadcast(ServerEvent::AttentionRequested { agent_id, reason });
+                    }
                     return Ok(KeyResult::Scheduled { exec_id, cmd, grace_ms });
                 }
                 self.execute_now_with(&agent_id, &cmd, intent);
@@ -1951,7 +1937,6 @@ impl Session {
     /// Frontend/human: run a scheduled execution right now (co-sign during the grace window).
     pub fn execute_now_scheduled(&mut self, exec_id: &str) -> Result<(), SessionError> {
         self.require_shared()?;
-        self.presented_surface()?;
         match &mut self.scheduled {
             Some(s) if s.exec_id == exec_id && s.state == ExecState::Scheduled => {
                 s.state = ExecState::Executed;
@@ -1994,8 +1979,7 @@ impl Session {
             return Err(SessionError::ProcessExited);
         }
         self.check_mask(Affordance::Interrupt)?;
-        if !self.attended_for(conn) { return Err(SessionError::Suspended); }
-        self.presented_surface()?;
+        self.require_shared()?;
         self.authority.check_and_touch(conn, Instant::now())?;
         self.cancel_scheduled_if(|s| s.conn == conn, "interrupted");
         for id in self.approvals.pending_for_conn(conn) {
@@ -2044,7 +2028,6 @@ impl Session {
         }
         if decision != ApprovalDecision::Deny {
             self.require_shared()?;
-            self.presented_surface()?;
         }
         let state = match decision {
             ApprovalDecision::Grant | ApprovalDecision::AllowSession => ApprovalState::Granted,
@@ -2150,7 +2133,7 @@ impl Session {
         if self.is_private() {
             if self.screen_dirty {
                 self.screen_dirty = false;
-                // Internal VT changes are not presented frame notifications.
+                self.broadcast(ServerEvent::ScreenChanged { revision: self.screen.revision() });
             }
             return;
         }
@@ -2175,10 +2158,7 @@ impl Session {
         for id in self.control_requests.iter().filter(|r| r.state == ControlRequestState::Pending && now.duration_since(r.created) >= ttl).map(|r| r.request_id.clone()).collect::<Vec<_>>() {
             self.finish_control_request(&id, ControlRequestState::Expired);
         }
-        let surface_ready = self.presented_surface().is_ok();
-        if !surface_ready && self.scheduled.as_ref().is_some_and(|s| s.state == ExecState::Scheduled && now.saturating_duration_since(s.due) > Duration::from_secs(3)) {
-            self.cancel_scheduled_if(|_| true, "surface_unavailable");
-        }
+        let surface_ready = self.shared;
         if let Some(s) = &mut self.scheduled {
             if surface_ready && s.state == ExecState::Scheduled && s.due <= now {
                 s.state = ExecState::Executed;
@@ -2188,7 +2168,7 @@ impl Session {
         }
         if self.screen_dirty {
             self.screen_dirty = false;
-            // Internal VT changes are not presented frame notifications.
+            self.broadcast(ServerEvent::ScreenChanged { revision: self.screen.revision() });
         }
         match self.policy.maybe_reload() {
             Reload::Unchanged => {}
@@ -2213,7 +2193,7 @@ impl Session {
             external_origin: self.external_origin,
             surface_generation: self.surface_generation,
             output_seq: self.output_seq,
-            surface_available: self.presented_surface().is_ok_and(|f| f.output_seq == self.output_seq),
+            surface_available: self.shared,
             completion_prompt_ready: self.completion_prompt_ready(),
             input_pending: self.human_input_pending || self.input.has_pending(),
             external_input_available: self.external_writer_active(),

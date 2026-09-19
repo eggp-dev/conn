@@ -8,10 +8,10 @@ flowchart LR
   U -->|input and decisions| S[Session authority and policy]
   S --> P[PTY and child]
   P -->|sequenced output| U
-  U -->|presented viewport| F[Surface frame gate]
+  P -->|PTY output| F[Core terminal grid]
   A[External MCP actor] -->|observation and control request| S
   S --> F
-  F -->|authorized frame| A
+  F -->|authorized grid| A
   F --> E[Extension host]
   E --> M[Native model adapter]
   K[OS credential store] --> M
@@ -27,25 +27,20 @@ flowchart LR
 - Tauri and the token/Origin-protected browser harness use `conn-frontend::Harness`.
   Each command carries the adapter-established owning window, never a public
   caller's claimed window identity.
-- The Svelte/xterm renderer publishes the actual DOM viewport after rendering.
-  Offscreen scrollback and hidden cell data are not a second observation channel.
+- The Svelte/xterm renderer displays output; it does not authorize observation.
+  Core snapshots exclude scrollback and suppressed cells.
 - Public IPC is an agent endpoint. MCP does not decide permission; core checks it
   for every request. The native owner bridge is not available through IPC.
 
 ## Frame identity and freshness
 
-A frame identifies `surfaceId`, `generation`, `revision`, `outputSeq`, terminal
-size, visible lines, nullable cursor and alternate-screen state. A raster image is
-optional and explicitly unavailable when the renderer cannot capture it. Text must
-come from presented cells, never from the private terminal buffer as a fallback.
+A grid revision identifies `surfaceId`, `generation`, `revision`, `outputSeq`,
+size, visible text, nullable cursor and alternate-screen state. The core parses PTY
+output with a bounded, zero-scrollback terminal model. Snapshots are text-only.
 
-Output is monotonically sequenced. Sharing, attention and explicit invalidation
-advance the surface generation. Consumers require a current generation, current
-output sequence, visible owner surface and a recent publication. Periodic refresh
-keeps an unchanged visible frame alive; it does not authorize stale output.
-
-No frame provider means no agent observation. Internal VT parsing remains only
-where command-policy tracking requires it. It is never a replacement observation.
+Sharing changes advance the generation; output, cursor and resize changes update the
+screen revision. Completion acceptance checks this same identity. No foreground,
+heartbeat or owner-renderer publication participates in authorization.
 
 ## Transitions
 
@@ -54,8 +49,8 @@ where command-policy tracking requires it. It is never a replacement observation
 | Human input | Revoke conflicting authority; cancel stale proposals; deliver human input |
 | Start sharing | End external writer and queue; select actual connections; invalidate old frame; human retains control |
 | Stop sharing | Cancel agent work/observations; invalidate frame; keep PTY/process |
-| Hide/blur/cover | Invalidate observation; pause agent execution; cancel completion jobs. Existing human decisions require a fresh frame to continue |
-| New visible frame | Validate owner/generation/sequence; replace bounded frame |
+| Hide/blur/cover/tab switch | UI state only; shared-session access and leases remain unchanged |
+| PTY output | Update bounded core terminal grid and revision |
 | Disconnect | Remove connection identity; revoke its authority; never transfer selection by name |
 | Close | Cancel jobs, writer and sessions owned by that window |
 

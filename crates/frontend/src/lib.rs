@@ -17,7 +17,7 @@ use std::sync::Arc;
 use serde_json::{json, Value};
 use conn_core::affordance::Affordance;
 use conn_core::approval::Decision;
-use conn_core::ipc::{Hub, ServerGuard, SharedHub};
+use conn_core::ipc::{AdmissionPolicy, Hub, ServerGuard, SharedHub};
 use conn_core::session::{AgentMode, ServerEvent};
 use conn_core::{Engine, EngineConfig, Pacing, LaunchSpec};
 use std::path::PathBuf;
@@ -76,6 +76,10 @@ impl Harness {
         let extensions = extensions::Extensions::load(&config_dir);
         let state = Arc::new(AppState { pending_sessions: Default::default(), startup: Default::default(), automation, extensions, windows: Default::default(), output: Default::default(), integration_home, config_dir, socket, engines: Default::default(), hub: Hub::new(), server: Default::default(), seq: parking_lot::Mutex::new(0), defaults: parking_lot::Mutex::new(defaults) });
         let app = AppHandle { state: Arc::downgrade(&state), emit };
+        state.hub.set_admission_policy(admission_policy(&state.defaults.lock()));
+        let notify = app.clone();
+        // Connection-level, so every owner window hears it; any of them may answer.
+        state.hub.set_admission_listener(Arc::new(move |change| { let _ = notify.emit("ss:admission", serde_json::to_value(change).unwrap_or(Value::Null)); }));
         Self { state, app }
     }
     pub fn shutdown(&self) {
@@ -129,10 +133,6 @@ impl Harness {
         if let Some(id) = active {
             if self.state.hub.attended_id().as_deref() != Some(&id) { self.state.hub.set_attended(&id); }
         }
-    }
-    pub fn blur_window(&self, window: &str) {
-        let ids = self.state.windows.lock().sessions(window);
-        for id in ids { surface_commands::invalidate(&self.state, &id); }
     }
     /// Closing one native window must not terminate another window's shell.
     pub fn close_window(&self, window: &str) {
@@ -297,7 +297,7 @@ fn spawn_tab_with(app: &AppHandle, state: &AppState, window: &str, mut rows: u16
             ServerEvent::Output { .. } => {}, // Raw output uses the early writer above.
             other => {
                 let mut v = serde_json::to_value(&other).unwrap_or(Value::Null);
-                if matches!(v["event"].as_str(), Some("control_granted" | "control_revoked" | "mode_changed" | "sharing_changed" | "surface_invalidated" | "attention_changed" | "process_exited")) {
+                if matches!(v["event"].as_str(), Some("control_granted" | "control_revoked" | "mode_changed" | "sharing_changed" | "process_exited")) {
                     if let Some(state) = handle.state.upgrade() { state.extensions.cancel(&sid); }
                 }
                 if let Some(o) = v.as_object_mut() {
@@ -339,8 +339,32 @@ fn get_defaults(state: &AppState) -> Value {
     state.defaults.lock().clone()
 }
 
-/// Store `{mode?, gate?, pacing?, mask?}` as the defaults for new tabs.
-fn set_defaults(state: &AppState, defaults: Value) -> Result<(), String> {
+/// The desktop app asks before a new agent connection joins. Ordinary tabs are open
+/// to every admitted connection, so this is where the owner consents. `"allow"` opts out.
+fn admission_policy(defaults: &Value) -> AdmissionPolicy {
+    if defaults.get("admission").and_then(Value::as_str) == Some("allow") { AdmissionPolicy::Allow } else { AdmissionPolicy::Ask }
+}
+
+fn set_admission(state: &AppState, ask: bool) -> Result<Value, String> {
+    let mut defaults = state.defaults.lock().clone();
+    if !defaults.is_object() { defaults = json!({}); }
+    defaults["admission"] = json!(if ask { "ask" } else { "allow" });
+    set_defaults(state, defaults)?;
+    Ok(json!({"ask": ask}))
+}
+
+fn decide_admission(state: &AppState, conn: u64, allow: bool) -> Result<Value, String> {
+    if state.hub.decide_admission(conn, allow) { Ok(json!({"decided": true})) } else { Err("Connection is no longer waiting".into()) }
+}
+
+/// Store `{mode?, gate?, pacing?, mask?, admission?}`. All but `admission` apply to new tabs.
+fn set_defaults(state: &AppState, mut defaults: Value) -> Result<(), String> {
+    // Tab defaults are saved as a whole; the connection-level choice is kept unless named.
+    if !defaults.is_object() { defaults = json!({}); }
+    if defaults.get("admission").is_none() {
+        if let Some(kept) = state.defaults.lock().get("admission").cloned() { defaults["admission"] = kept; }
+    }
+    state.hub.set_admission_policy(admission_policy(&defaults));
     *state.defaults.lock() = defaults.clone();
     std::fs::write(defaults_path(state), serde_json::to_string_pretty(&defaults).unwrap()).map_err(|e| e.to_string())
 }
@@ -616,6 +640,10 @@ fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Resul
         "update_info" => Ok(json!({"version": env!("CARGO_PKG_VERSION"), "os": std::env::consts::OS, "arch": std::env::consts::ARCH})),
         "open_release" => updates::open(&arg::<String>(&args, "url")?).map(|_| Value::Null),
         "get_defaults" => serde_json::to_value(get_defaults(state)).map_err(|e|e.to_string()),
+        "pending_admissions" => Ok(json!(state.hub.pending_admissions().into_iter().map(|a| json!({"connId":a.conn_id,"agentId":a.agent_id})).collect::<Vec<_>>())),
+        "admission_policy" => Ok(json!({"ask": state.hub.admission_policy() == AdmissionPolicy::Ask})),
+        "set_admission" => set_admission(state, arg::<bool>(&args, "ask")?),
+        "decide_admission" => decide_admission(state, arg::<u64>(&args, "connId")?, arg::<bool>(&args, "allow")?),
         "set_defaults" => serde_json::to_value(set_defaults(state, arg::<Value>(&args, "defaults")?)?).map_err(|e|e.to_string()),
         "agents" => serde_json::to_value(agents(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
         "policy_rules" => serde_json::to_value(policy_rules(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),

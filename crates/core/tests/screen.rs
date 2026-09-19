@@ -55,3 +55,29 @@ fn resize_changes_size() {
     let sz = s.size();
     assert_eq!((sz.rows, sz.cols), (30, 100));
 }
+
+#[test]
+fn concealed_split_sequences_wide_cells_and_equal_colors_are_not_observed() {
+    let mut s=ScreenModel::new(5,80);
+    for bytes in [b"ID: user Password: \x1b[".as_slice(),b"8mSECRET",b"\x1b[28m ******"] {s.process(bytes);}
+    assert!(!s.rows().join("\n").contains("SECRET"));
+    assert!(s.rows()[0].contains("******"));
+    s.process("\r\n\x1b[8m암호\x1b[28mOK".as_bytes());
+    assert_eq!(s.rows()[1],"    OK");
+    s.process(b"\r\n\x1b[31;41mCOLOR_SECRET\x1b[0m visible");
+    assert!(!s.rows().join("\n").contains("COLOR_SECRET"));
+    s.process(b"\r\n\x1b[38;2;12;34;56;48;2;12;34;56mRGB_SECRET\x1b[0m");
+    assert!(!s.rows().join("\n").contains("RGB_SECRET"));
+    s.process(b"\r\n\x1b[8:0mSUBPARAM_SECRET\x1b[0m \x1b[1;8mCOMBINED_SECRET\x1b[0m shown");
+    let text=s.rows().join("\n");
+    assert!(!text.contains("SUBPARAM_SECRET")&&!text.contains("COMBINED_SECRET")&&text.contains("shown"));
+}
+
+#[test]
+fn cursor_only_conceal_rewrites_and_alternate_screen_advance_revision() {
+    let mut s=ScreenModel::new(3,30);s.process(b"visible");let r=s.revision();
+    s.process(b"\r\x1b[8mvisible\x1b[0m");assert!(s.revision()>r);assert_eq!(s.rows()[0],"");
+    let r=s.revision();s.process(b"\x1b[?25l");assert!(s.revision()>r);assert!(s.visible_cursor().is_none());
+    s.process(b"\x1b[?1049hALT");assert!(s.alternate_screen());assert_eq!(s.rows()[0],"ALT");
+    s.process(b"\x1b[?1049l");assert!(!s.alternate_screen());assert!(!s.rows().join("\n").contains("ALT"));
+}

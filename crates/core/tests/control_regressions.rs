@@ -50,14 +50,15 @@ fn dirty_history_input_blocks_mode_switch_even_when_tracker_text_is_empty() {
 }
 
 #[test]
-fn return_requires_new_frame_and_control_decision() {
+fn tab_return_preserves_lease_but_release_requires_new_control_decision() {
     let mut h = Harness::headless();
     h.agent(1, "claude");
     h.session.agent_request_control(1).unwrap();
     h.session.set_attended(false);
     h.session.set_control_gate(true);
     h.session.set_attended(true);
-    common::present(&mut h.session, vec![]);
+    assert!(h.session.current_lease().is_some());
+    h.session.agent_release_control(1).unwrap();
     assert!(h.session.current_lease().is_none());
     assert!(matches!(h.session.agent_request_control_with(1, None).unwrap(), ControlOutcome::Pending { .. }));
 }
@@ -87,14 +88,14 @@ fn copilot_interrupt_reaches_pty_and_rejects_proposal() {
     assert_eq!(h.pty_bytes(), b"\x03");
     assert_eq!(h.session.proposal_state(&id), Some(ProposalState::Rejected));
     h.session.set_attended(false);
-    assert!(matches!(h.session.agent_interrupt(1), Err(SessionError::Suspended)));
-    assert_eq!(h.pty_bytes(), b"\x03", "interrupt cannot write to an unentrusted hidden tab");
+    h.session.agent_interrupt(1).unwrap();
+    assert_eq!(h.pty_bytes(), b"\x03\x03", "background interrupt reaches the same shared shell");
 }
 
 #[test]
-fn hidden_surface_cannot_append_to_existing_shell_input() {
+fn revoked_sharing_cannot_append_to_existing_shell_input() {
     let mut h=Harness::headless();h.agent(1,"claude");h.session.agent_request_control(1).unwrap();
-    h.session.agent_type(1,"echo stale").unwrap();h.session.set_attended(false);
+    h.session.agent_type(1,"echo stale").unwrap();h.session.set_shared(false).unwrap();
     assert!(h.session.agent_type(1,"echo proposed").is_err());
     assert!(h.session.agent_interrupt(1).is_err());
     h.session.set_attended(true);common::present(&mut h.session,vec!["echo stale".into()]);

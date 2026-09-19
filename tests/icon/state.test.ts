@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {connMarkState, graceProgress, type MarkInput} from '../../frontends/tauri/src/lib/connMark.ts';
-const base: MarkInput = {processAlive:true,policyBlockedUntil:0,paused:false,controller:{type:'human'},ctlReq:null,approval:null,attention:null,proposal:null,grace:null};
+const base: MarkInput = {processAlive:true,policyBlockedUntil:0,controller:{type:'human'},ctlReq:null,approval:null,attention:null,proposal:null,grace:null};
 test('terminal availability and human decisions outrank agent ownership',()=>{
  const agent={...base,controller:{type:'agent' as const}};
  assert.equal(connMarkState(base,true,0),'human');
@@ -12,11 +12,11 @@ test('terminal availability and human decisions outrank agent ownership',()=>{
  assert.equal(connMarkState({...agent,processAlive:false,approval:{}},true,0),'offline');
  assert.equal(connMarkState(agent,false,0),'offline');
 });
-test('block feedback expires and paused state freezes grace ownership',()=>{
+test('block feedback expires and grace ownership remains visible',()=>{
  const agent={...base,controller:{type:'agent' as const},policyBlockedUntil:2400};
  assert.equal(connMarkState(agent,true,500),'blocked');
  assert.equal(connMarkState(agent,true,2400),'agent');
- assert.equal(connMarkState({...base,paused:true,grace:{start:0,ms:2000}},true,500),'paused');
+ assert.equal(connMarkState({...base,grace:{start:0,ms:2000}},true,500),'grace');
 });
 test('grace uses the real timestamp and duration with no fake progress on cancellation',()=>{
  const grace={start:1000,ms:5000};

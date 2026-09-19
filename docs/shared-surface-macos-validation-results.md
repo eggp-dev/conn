@@ -1,5 +1,7 @@
 # Shared-surface macOS validation results
 
+> Historical results for the pre-hardcut foreground contract. Focus/minimize denial is no longer expected. This report does not validate the new session-screen implementation; rerun the macOS acceptance checklist.
+
 The previously observed tooling blocker is resolved. Exercised functionality passes, including writes and Enter denied after focus loss and minimization **while the same agent lease remains valid**. No product release blocker was confirmed. Signed distribution, notarization, and update-artifact validation remain outside the completed development-build assessment.
 
 ## Source and scope

@@ -16,13 +16,14 @@
   import Hold from "./components/Hold.svelte";
   import GraceBar from "./components/GraceBar.svelte";
   import ControlRequest from "./components/ControlRequest.svelte";
+  import AdmissionRequest from "./components/AdmissionRequest.svelte";
   import HandbackChip from "./components/HandbackChip.svelte";
   import Timeline from "./components/Timeline.svelte";
   import Toasts from "./components/Toasts.svelte";
   import HandoffWash from "./components/HandoffWash.svelte";
   import { newTimeline, recordTimeline, savedTimelines } from "./lib/timeline";
   import { invoke, listen } from "./lib/transport";
-  import { cmd, changeMode, onEvent, onTabOpened, log, type Pacing } from "./lib/bridge";
+  import { cmd, changeMode, onEvent, onTabOpened, onAdmission, log, type Pacing } from "./lib/bridge";
   import { st, cur, tab, tabIndex, newTab, toast, announce, type TabState } from "./lib/store.svelte";
   import { THEMES, agentColor } from "./lib/themes";
   import { t as tr, tabName, fmtMs, setLang, LANGS, i18n } from "./lib/i18n.svelte";
@@ -73,7 +74,7 @@
       t.timeline.recording = false; t.controller = { type: "human" };
       t.agents = []; t.lastAgent = null; t.openedBy = null;
       t.approval = null; t.ctlReq = null; t.proposal = null; t.grace = null; t.attention = null;
-      t.handback = false; t.typing = false; t.paused = false;
+      t.handback = false; t.typing = false;
       t.statusReady = true;
       return;
     }
@@ -98,16 +99,10 @@
   }
   async function select(id: string) {
     if (id === st.active || !tab(id)) return;
-    const from = tab(st.active);
     st.active = id;
     st.centerOpen = false; st.timelineOpen = false;
     await invoke("attend", { session: id });
-    // Leaving the displayed surface pauses agent participation; no actor retains a hidden view.
-    if (from && from.shared && from.controller.type === "agent") {
-      from.paused = true;
-
-    }
-    const to = tab(id)!; to.paused = false; to.attention = null;
+    tab(id)!.attention = null;
     terms[id]?.refit(); focusTerm();
   }
   async function openTab(profileId?: string) {
@@ -162,7 +157,7 @@
       { id: "ctl-deny", group: "conn", now: true, danger: true, label: tr("a.ctl.deny", { agent: c.ctlReq?.agentId ?? "" }), aliases: ["deny", "거부"], run: () => cur().ctlReq && cmd("decide_control", { requestId: cur().ctlReq!.id, grant: false }), when: () => !!cur().ctlReq },
       ...st.order.map((id, i) => {
         const tb = tab(id)!;
-        const flags = [tb.approval ? tr("badge.approval") : "", tb.proposal?.ready ? tr("badge.proposal", { agent: tb.proposal.agentId }) : "", tb.attention ? tr("badge.knock", { agent: tb.attention.agentId }) : "", tb.paused ? tr("badge.paused") : "", tb.controller.type === "agent" ? tr("conn.agent", { agent: tb.controller.agentId ?? "" }) : ""].filter(Boolean).join(" · ");
+        const flags = [tb.approval ? tr("badge.approval") : "", tb.proposal?.ready ? tr("badge.proposal", { agent: tb.proposal.agentId }) : "", tb.attention ? tr("badge.knock", { agent: tb.attention.agentId }) : "", tb.controller.type === "agent" ? tr("conn.agent", { agent: tb.controller.agentId ?? "" }) : ""].filter(Boolean).join(" · ");
         return { id: `tab-${id}`, group: "tabs", now: needsYou(tb) && id !== st.active, label: tr("a.tab.go", { name: `${i + 1} · ${tb.title}` }), hint: flags || undefined, keys: i < 9 ? shortcutLabel(`⌘${i + 1}`) : undefined, aliases: ["tab", "탭", tb.title, tb.openedBy ?? ""], active: () => st.active === id, run: () => select(id) } as Action;
       }),
       { id: "tab-new", group: "tabs", label: tr("a.tab.new"), keys: shortcutLabel("⌘T"), aliases: ["new tab", "새 탭"], run: openTab },
@@ -236,6 +231,10 @@
 
   onMount(async () => {
     const connectionListener = listen<{ connected: boolean }>("ss:connection", ({payload}) => { st.backendOnline = payload.connected; });
+    const admissionListener = onAdmission((p) => {
+      st.admissions = st.admissions.filter(a => a.connId !== p.connId);
+      if (p.state === "pending") { st.admissions = [...st.admissions, { connId: p.connId, agentId: p.agentId }]; announce(tr("admission.announce", { agent: p.agentId }), agentColor(p.agentId), "attention", 3200); }
+    });
     const tabListener = onTabOpened(async (p) => {
       // Agent tabs stay in the background; an explicit external-launch request may select its new tab.
       if (!tab(p.session)) addTab(p.session);
@@ -273,7 +272,6 @@
         void syncStatus(t.id);
         return;
       }
-      if (ev.event === "surface_invalidated") { t.surfaceGeneration = ev.generation ?? t.surfaceGeneration; t.surfaceAvailable = false; return; }
       if (!t.shared) {
         if (ev.event === "process_exited") t.processAlive = false;
         if (ev.event === "attention_changed") t.attended = !!ev.attended;
@@ -307,8 +305,8 @@
         case "control_request_resolved": if (t.ctlReq?.id === ev.requestId) t.ctlReq = null; break;
         case "attention_requested": t.attention = { agentId: ev.agentId, reason: ev.reason }; announce(tr("attention.asks", { agent: ev.agentId, where: tabName(tabIndex(t.id)) }), agentColor(ev.agentId), "attention", 3200, ev.reason); break;
         case "tab_opened":
-          // An agent opened this tab. It starts unattended: the agent cannot see or
-          // write until you display that surface. The tab knocks meanwhile.
+          // An agent opened this tab. Your view stays where it is; the tab knocks so
+          // you can decide to look. Its access follows participation and control.
           t.openedBy = ev.agentId; t.attention = { agentId: ev.agentId, reason: ev.reason };
 
           announce(tr("tab.opened.by", { agent: ev.agentId, where: tabName(tabIndex(t.id)) }), agentColor(ev.agentId), "attention", 3200, ev.reason ?? tr("tab.opened.hint"));
@@ -322,8 +320,6 @@
           }
           break;
         case "attention_changed": t.attended = !!ev.attended; if (ev.attended) t.attention = null; break;
-        case "control_suspended": t.paused = true; break;
-        case "control_resumed": t.paused = false; break;
         case "agent_input":
           t.typing = true; if (typingTimers[t.id]) clearTimeout(typingTimers[t.id]); typingTimers[t.id] = window.setTimeout(() => (t.typing = false), 500);
           break;
@@ -370,7 +366,7 @@
       }
     });
     try {
-      await Promise.all([connectionListener, tabListener, abortListener, eventListener]);
+      await Promise.all([connectionListener, admissionListener, tabListener, abortListener, eventListener]);
       await refreshProfiles();
       await refreshExtensions().catch(() => {});
       const info = await invoke<{ socket: string; shell: string; session: string | null; sessions: string[]; externalPending?: boolean }>("start", { rows: 24, cols: 80 });
@@ -390,6 +386,8 @@
           else if (!live) st.pastTimelines[id] = history;
         }
       }
+      // A window opened later, or a reload, must still see who is waiting.
+      try { st.admissions = await invoke<{ connId: number; agentId: string }[]>("pending_admissions"); } catch {}
       st.booted = true; st.backendOnline = true;
       await tick();
       await invoke("ui_ready");
@@ -415,7 +413,7 @@
   <TabStrip onselect={select} onclose={closeTab} onnew={openTab} onsettings={() => openSettings(st.settingsTab)} onpalette={() => { st.settingsOpen = false; st.centerOpen = false; st.paletteOpen = true; }} ontimeline={() => { st.timelineOpen = !st.timelineOpen; }} />
   {#if st.active}<Island onopen={() => { st.paletteOpen = false; st.centerOpen = !st.centerOpen; }} />{/if}
   {#if !!cur().shared}
-  <div class="interaction-dock" bind:clientHeight={dockHeight}><ControlRequest /><Hold /><Ghost /><GraceBar /><HandbackChip bind:this={chip} /><CompletionBar /></div>
+  <div class="interaction-dock" bind:clientHeight={dockHeight}><AdmissionRequest /><ControlRequest /><Hold /><Ghost /><GraceBar /><HandbackChip bind:this={chip} /><CompletionBar /></div>
   <Timeline bind:height={timelineHeight} />
   {/if}
   <Toasts />

@@ -35,7 +35,7 @@ or passwords in a report, screenshot, shell command or commit.
    remain masked. Verify PNG output where available; explicitly report
    `imageUnavailable` or any missing renderer capability.
 2. Check inactive tabs, internal overlays, unfocused/minimized windows and window
-   closure: unavailable/stale surfaces must deny agent observation and execution.
+   closure: shared sessions must remain readable and writable under the same lease and policy. Closing a window must terminate its sessions and cancel pending work.
    The contract does not claim detection of every other application's occlusion.
 3. Use AppleScript to start an isolated external session, inject synthetic login
    input, and observe the real child program. Test hidden and star-masked input.

@@ -24,7 +24,7 @@ fn frame(h:&Harness,id:&str,revision:u64)->Value {
     json!({"surfaceId":"owner-renderer","generation":status["surfaceGeneration"],"revision":revision,"outputSeq":status["outputSeq"],"rows":24,"cols":80,"cursor":null,"screen":["visible synthetic frame"],"alternateScreen":false,"visible":true})
 }
 #[test]
-fn native_frames_are_sequenced_owner_bound_and_explicitly_invalidated() {
+fn native_output_is_sequenced_and_renderer_cannot_inject_observations() {
     let (_dir,h,output,id)=setup();
     let entries=output.lock().unwrap();
     assert!(entries.iter().all(|v|v["generation"].is_u64()&&v["outputSeq"].is_u64()&&v["window"]=="main"));
@@ -32,11 +32,10 @@ fn native_frames_are_sequenced_owner_bound_and_explicitly_invalidated() {
     assert!(seq.windows(2).all(|w|w[0]<w[1]));drop(entries);
     let f=frame(&h,&id,1);
     assert!(h.invoke_in_window("wrong-window","publish_surface",json!({"session":id,"frame":f})).is_err());
-    h.invoke("publish_surface",json!({"session":id,"frame":f})).unwrap();
-    assert_eq!(h.invoke("status",json!({"session":id})).unwrap()["surfaceAvailable"],true);
-    h.blur_window("main");
-    assert_eq!(h.invoke("status",json!({"session":id})).unwrap()["surfaceAvailable"],false);
     assert!(h.invoke("publish_surface",json!({"session":id,"frame":f})).is_err());
+    assert_eq!(h.invoke("status",json!({"session":id})).unwrap()["surfaceAvailable"],true);
+    h.focus_window("other-window");
+    assert_eq!(h.invoke("status",json!({"session":id})).unwrap()["surfaceAvailable"],true);
     assert!(h.invoke("completion_request",json!({"session":id,"explicit":true,"context":"hidden override"})).is_err());
 }
 #[test]

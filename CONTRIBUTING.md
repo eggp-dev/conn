@@ -54,7 +54,7 @@ Reloading or disconnecting the browser ends its live sessions. Test with disposa
 |---|---|
 | `crates/core` | PTY, session control, policy, audit, IPC, shell/backend profiles |
 | `crates/cli` | MCP adapter, agent commands, local profile and log utilities |
-| `crates/frontend` | Owner-window harness, presented surfaces, sharing, native extensions |
+| `crates/frontend` | Owner-window harness, sharing, native extensions |
 | `crates/browser-harness` | Local browser-test transport to the shared harness |
 | `frontends/tauri/src` | Shared Svelte UI, terminal renderer, timeline, settings, i18n |
 | `frontends/tauri/src-tauri` | Tauri adapter, native configuration, packaging |
