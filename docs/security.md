@@ -40,6 +40,8 @@ binds to the live connection, never to its display name, and a denied connection
 out. This is a consent boundary, not protection against malware already running as the
 same user. The prompt can be disabled in settings for fully trusted local setups.
 
+Human input ends anything an agent has queued: a grace execution, a Co-pilot proposal and a pending command approval. The approval is denied and its typed line is cleared before the human's bytes reach the shell, so what is approved is always exactly what was reviewed.
+
 Sharing and input control are separate. Explicit sharing selections use live connection
 IDs, not display names: reconnecting or choosing another agent's name does not inherit
 that selection. Removing a participant or stopping sharing invalidates queued disclosure
