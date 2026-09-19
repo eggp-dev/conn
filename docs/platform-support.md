@@ -2,7 +2,7 @@
 
 English · [한국어](platform-support.ko.md) · [Install](getting-started.md) · [Release](releasing.md)
 
-Conn provides its MIT-licensed source and native binaries through [GitHub Releases](https://github.com/eggplantiny/conn/releases/tag/v0.7.0). All desktop packages use the same Rust engine and Svelte UI. The browser harness is a development adapter.
+Conn provides its MIT-licensed source and native binaries through [GitHub Releases](https://github.com/eggplantiny/conn/releases/tag/v0.8.0). All desktop packages use the same Rust engine and Svelte UI. The browser harness is a development adapter.
 
 ## Targets for upcoming preview releases
 

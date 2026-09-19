@@ -1,6 +1,6 @@
 # Agent socket protocol v2
 
-**v0.7.0 preview.** v2 removes public owner/frontend operations and headless
+**v0.8.0 preview.** v2 removes public owner/frontend operations and headless
 observation. v0.6.0 uses the previous contract. Update the app, CLI and
 MCP adapter together; there is no downgrade to a raw-output or Rust-screen fallback.
 

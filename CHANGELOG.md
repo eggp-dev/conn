@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 — Preview · 2026-09-19
 
 - **Breaking contract change from 0.7.0:** agents observe the current terminal grid of their shared session, parsed from PTY output in the core. Window focus, the visible tab, minimization, covering panels and renderer heartbeats no longer gate reading or writing. The `unattended` / `suspended` errors, `surface_invalidated`, `control_suspended` and `control_resumed` events, and the renderer frame publication commands are removed. Snapshots are text only: no screenshot, scrollback or owner scroll position.
 - Unchanged protections: an agent stays bound to its own session and never follows the human's view; participation, mode, policy, approvals and the control lease still apply to every read and write; human typing takes control back; stopping sharing, removing a participant, disconnecting or process exit cancels pending agent work.
