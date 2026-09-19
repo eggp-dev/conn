@@ -76,6 +76,10 @@ A green CI build alone is not a claim that every installer or interaction passed
 
 For implementation details, see [Tauri's GitHub pipeline guide](https://v2.tauri.app/distribute/pipelines/github/) and the repository's [signing contract](macos-signing.md).
 
+## One-line installs after a release
+
+Nothing to do by hand. `scripts/install.sh` always resolves the newest published release. The Homebrew tap ([eggplantiny/homebrew-tap](https://github.com/eggplantiny/homebrew-tap)) checks for a new release every six hours, rewrites the cask from that release's `SHA256SUMS`, and then installs it for real on a macOS runner (audit, install, signature, notarization and version checks, uninstall). To update it at once, run its **Follow Conn releases** workflow. If this repository moves, change `REPO` in `scripts/install.sh`, `CONN_REPO` and the two addresses in the tap's cask, and the install lines in the READMEs.
+
 ## Failed release or rollback
 
 A build or signing failure leaves the release unpublished. Correct the cause and rerun the draft workflow. An unpublished retag decision must be explicit and documented. For a public release, preserve its tag and binaries, document the problem, and ship a patch version. Never silently replace public assets.

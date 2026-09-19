@@ -19,7 +19,15 @@ Conn은 지금 쓰는 AI 에이전트와 함께 쓰는 터미널입니다. 에�
 
 ## 설치
 
-Rust나 Node.js는 필요 없습니다. 에이전트 연결 도구가 함께 들어 있습니다.
+```sh
+# macOS (Apple Silicon)
+brew install --cask eggplantiny/tap/conn
+
+# Linux (x86_64): 내 계정에만 AppImage 설치, 체크섬 검증, sudo 불필요
+curl -fsSL https://raw.githubusercontent.com/eggplantiny/conn/main/scripts/install.sh | sh
+```
+
+Rust나 Node.js는 필요 없습니다. 에이전트 연결 도구가 함께 들어 있습니다. 두 방법 모두 아래 다운로드와 같은 서명된 릴리스 파일을 설치하며, 이후에는 앱 안에서 업데이트됩니다. Windows는 설치 파일을 사용하세요.
 
 | 운영체제 | v0.8.1 프리뷰 |
 |---|---|

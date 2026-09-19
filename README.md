@@ -19,7 +19,15 @@ Conn is a terminal you share with the AI agent you already use. The agent picks 
 
 ## Install
 
-No Rust or Node.js required; the agent connector is included.
+```sh
+# macOS (Apple Silicon)
+brew install --cask eggplantiny/tap/conn
+
+# Linux (x86_64): AppImage for your user, checksum verified, no sudo
+curl -fsSL https://raw.githubusercontent.com/eggplantiny/conn/main/scripts/install.sh | sh
+```
+
+No Rust or Node.js required; the agent connector is included. Both install the same signed release files as the downloads below, and the app updates itself afterwards. Windows: use the installer.
 
 | Platform | v0.8.1 preview |
 |---|---|

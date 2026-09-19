@@ -76,6 +76,10 @@ CI 빌드 통과만으로 모든 설치·조작이 검증되지는 않습니다.
 
 구현 참고: [Tauri GitHub 파이프라인](https://v2.tauri.app/distribute/pipelines/github/), 저장소의 [서명 기준](macos-signing.ko.md).
 
+## 릴리스 후 한 줄 설치
+
+손으로 할 일은 없습니다. `scripts/install.sh`는 항상 가장 최근에 공개된 릴리스를 찾습니다. Homebrew tap([eggplantiny/homebrew-tap](https://github.com/eggplantiny/homebrew-tap))은 6시간마다 새 릴리스를 확인해 그 릴리스의 `SHA256SUMS`로 cask를 다시 쓰고, macOS 러너에서 실제로 설치해 봅니다(audit, 설치, 서명·공증·버전 확인, 제거). 바로 반영하려면 tap의 **Follow Conn releases** 워크플로를 실행하세요. 저장소를 옮기면 `scripts/install.sh`의 `REPO`, tap의 `CONN_REPO`와 cask 안의 주소 두 곳, README의 설치 명령을 바꾸세요.
+
 ## 실패와 복구
 
 빌드·서명 실패 시 릴리스는 미공개 상태로 남습니다. 원인을 고치고 초안 워크플로를 다시 실행하세요. 미공개 태그를 바꾸는 결정은 명시적으로 기록해야 합니다. 공개한 릴리스라면 태그와 바이너리를 보존하고 문제를 기록한 뒤 패치 버전을 배포합니다. 공개 파일을 조용히 교체하지 않습니다.

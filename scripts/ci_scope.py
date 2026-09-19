@@ -19,6 +19,8 @@ ALL = [LINUX, "macos-15", "windows-2022"]
 # Read by people only. `plugin/**/*.md` is compiled into the binaries and is NOT documentation here.
 DOCS_PREFIXES = ("docs/", "media/", ".github/ISSUE_TEMPLATE/")
 DOCS_ROOT_FILES = ("LICENSE", "NOTICE")
+# Shipped to users but not part of any build; the always-on job checks it (`sh -n`).
+LIGHT_FILES = ("scripts/install.sh",)
 # The Svelte UI. The native shell under src-tauri is excluded below.
 FRONTEND_PREFIX = "frontends/tauri/"
 NATIVE_SHELL_PREFIX = "frontends/tauri/src-tauri/"
@@ -30,7 +32,7 @@ def classify(path: str) -> str:
     """Return docs, frontend, platform or native for one repository path."""
     if path.startswith(PLATFORM_PREFIXES) and not path.startswith(DOCS_PREFIXES):
         return "platform"
-    if path.startswith(DOCS_PREFIXES) or path in DOCS_ROOT_FILES or ("/" not in path and path.endswith(".md")):
+    if path.startswith(DOCS_PREFIXES) or path in DOCS_ROOT_FILES or path in LIGHT_FILES or ("/" not in path and path.endswith(".md")):
         return "docs"
     if path.startswith(FRONTEND_PREFIX):
         return "frontend"

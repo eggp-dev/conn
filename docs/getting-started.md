@@ -6,6 +6,17 @@ Install Conn, connect your agent, and take turns in the same terminal. The deskt
 
 ## 1. Install and open a session
 
+One line, if you prefer:
+
+```sh
+brew install --cask eggplantiny/tap/conn                                                        # macOS, Apple Silicon
+curl -fsSL https://raw.githubusercontent.com/eggplantiny/conn/main/scripts/install.sh | sh     # Linux x86_64
+```
+
+The cask installs the signed and notarized DMG and checks it against the SHA-256 published with the release. The Linux script downloads the AppImage, verifies it against the release's `SHA256SUMS`, and installs it for your user only (`~/.local/bin`, an app-menu entry, no sudo); it refuses to install on a checksum mismatch. `CONN_VERSION=v0.8.1` pins a release. AppImages need FUSE 2: on Ubuntu 24.04 and newer, `sudo apt install libfuse2t64`. Both keep updating from inside the app. Read the script before piping it to a shell if you like: [`scripts/install.sh`](../scripts/install.sh).
+
+Or download a file yourself:
+
 Download the [v0.8.1 preview](https://github.com/eggplantiny/conn/releases/tag/v0.8.1) for your OS and CPU. See the release notes for the exact signing and runtime verification results.
 
 | Platform | Download | Install |
