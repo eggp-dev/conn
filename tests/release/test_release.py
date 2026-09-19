@@ -90,8 +90,10 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(manifest["version"], self.version)
         self.assertEqual(set(manifest["platforms"]), {"darwin-aarch64", "linux-x86_64", "windows-x86_64"})
         for entry in manifest["platforms"].values():
-            self.assertTrue(entry["url"].startswith(f"{release.REPOSITORY}/releases/download/{self.tag}/conn-{self.tag}-"))
+            # Installed 0.6.0-0.8.1 apps reject any other prefix, so this must survive the move to the organization.
+            self.assertTrue(entry["url"].startswith(f"https://github.com/eggplantiny/conn/releases/download/{self.tag}/conn-{self.tag}-"))
             self.assertTrue((self.out / entry["url"].rsplit("/", 1)[1]).is_file())
+        self.assertEqual(release.REPOSITORY, "https://github.com/eggp-dev/conn")
         sig = next(self.out.glob("*.sig")); sig.write_text("corrupt")
         with self.assertRaisesRegex(release.ReleaseError, "signature"):
             release.finalize(self.out, self.tag, self.sha, self.root)

@@ -1,4 +1,4 @@
-export const RELEASES = 'https://github.com/eggplantiny/conn/releases/';
+export const RELEASES = 'https://github.com/eggp-dev/conn/releases/';
 export type Platform = { version: string; os: string; arch: string };
 export type Release = { tag: string; notes: string; preview: boolean; url: string; download?: string };
 function version(value: string) {
@@ -36,7 +36,7 @@ export function selectRelease(data: unknown, platform: Platform, previews: boole
 }
 export async function checkRelease(platform: Platform, previews: boolean, signal: AbortSignal): Promise<Release | null> {
   // Public, credential-free lookup. Listing includes previews, unlike /latest.
-  const response = await fetch('https://api.github.com/repos/eggplantiny/conn/releases?per_page=100', { signal, credentials: 'omit', headers: { Accept: 'application/vnd.github+json' } });
+  const response = await fetch('https://api.github.com/repos/eggp-dev/conn/releases?per_page=100', { signal, credentials: 'omit', headers: { Accept: 'application/vnd.github+json' } });
   if (!response.ok) throw new Error(response.status === 403 || response.status === 429 ? 'rate' : 'network');
   return selectRelease(await response.json(), platform, previews);
 }

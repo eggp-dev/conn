@@ -45,7 +45,7 @@
       }
     },
     "publisher": "Conn contributors",
-    "homepage": "https://github.com/eggplantiny/conn",
+    "homepage": "https://github.com/eggp-dev/conn",
     "category": "DeveloperTool",
     "shortDescription": "A shared terminal for humans and AI agents.",
     "longDescription": "Work with your AI agent in the same live shell. Review requests, hand over control, take it back, and inspect commands and collaboration decisions in one timeline. Includes English and Korean interface languages and a local MCP adapter.",

@@ -10,7 +10,7 @@ Ready-to-review copy. These drafts have not been posted. Replace a local media r
 
 Work in the same shell as your AI agent. Step in, make a correction, and ask it to continue from what you changed.
 
-Primary action: [Download Conn](https://github.com/eggplantiny/conn#download). Next: [Try the first collaboration](first-collaboration.md).
+Primary action: [Download Conn](https://github.com/eggp-dev/conn#download). Next: [Try the first collaboration](first-collaboration.md).
 
 ## Short introduction
 
@@ -20,7 +20,7 @@ Primary action: [Download Conn](https://github.com/eggplantiny/conn#download). N
 >
 > Conn is an open-source desktop preview for Apple Silicon macOS, Windows x64 and Ubuntu x64. It includes setup for Codex, Claude Code, Cursor and GitHub Copilot. Try the small local example, and tell me where the handoff felt confusing.
 >
-> https://github.com/eggplantiny/conn
+> https://github.com/eggp-dev/conn
 
 Suggested companion: the short directory-correction clip. Keep the video disclosure nearby: **Actual Codex + Conn; prepared scenario, automated user role, shortened waits.**
 
@@ -28,7 +28,7 @@ Suggested companion: the short directory-correction clip. Keep the video disclos
 
 **Title:** Show HN: Conn — share a terminal with your AI agent and take over by typing
 
-**Destination:** https://github.com/eggplantiny/conn
+**Destination:** https://github.com/eggp-dev/conn
 
 **Introductory comment:**
 

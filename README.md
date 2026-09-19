@@ -21,21 +21,21 @@ Conn is a terminal you share with the AI agent you already use. The agent picks 
 
 ```sh
 # macOS (Apple Silicon)
-brew install --cask eggplantiny/tap/conn
+brew install --cask eggp-dev/tap/conn
 
 # Linux (x86_64): AppImage for your user, checksum verified, no sudo
-curl -fsSL https://raw.githubusercontent.com/eggplantiny/conn/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/eggp-dev/conn/main/scripts/install.sh | sh
 ```
 
 No Rust or Node.js required; the agent connector is included. Both install the same signed release files as the downloads below, and the app updates itself afterwards. Windows: use the installer.
 
 | Platform | v0.8.1 preview |
 |---|---|
-| macOS · Apple Silicon | [Download for Mac](https://github.com/eggplantiny/conn/releases/download/v0.8.1/conn-v0.8.1-aarch64-apple-darwin-desktop.dmg) |
-| Windows · x64 | [Download installer](https://github.com/eggplantiny/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-pc-windows-msvc-setup.exe) |
-| Ubuntu · x64 | [Download .deb](https://github.com/eggplantiny/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-unknown-linux-gnu-desktop.AppImage) |
+| macOS · Apple Silicon | [Download for Mac](https://github.com/eggp-dev/conn/releases/download/v0.8.1/conn-v0.8.1-aarch64-apple-darwin-desktop.dmg) |
+| Windows · x64 | [Download installer](https://github.com/eggp-dev/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-pc-windows-msvc-setup.exe) |
+| Ubuntu · x64 | [Download .deb](https://github.com/eggp-dev/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggp-dev/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-unknown-linux-gnu-desktop.AppImage) |
 
-Mac downloads are signed and notarized. Windows previews are unsigned. Linux builds use Ubuntu 24.04, and the AppImage updates in-app while the `.deb` updates by installing a new package; Intel Mac distribution is paused. [Installation and updates](docs/getting-started.md) · [All assets and checksums](https://github.com/eggplantiny/conn/releases/tag/v0.8.1)
+Mac downloads are signed and notarized. Windows previews are unsigned. Linux builds use Ubuntu 24.04, and the AppImage updates in-app while the `.deb` updates by installing a new package; Intel Mac distribution is paused. [Installation and updates](docs/getting-started.md) · [All assets and checksums](https://github.com/eggp-dev/conn/releases/tag/v0.8.1)
 
 ## First five minutes
 
@@ -79,7 +79,7 @@ Upgrade the app and restart its MCP clients together. [Changelog](CHANGELOG.md) 
 - [The story: a small correction in a shared terminal](docs/collaboration-story.md)
 - [FAQ: control, SSH, passwords, and history](docs/faq.md)
 - [Profiles and backends](docs/backends.md) · [CLI setup](docs/getting-started.md) · [External automation](docs/external-automation.md)
-- [Contribute](CONTRIBUTING.md) · [Report a problem](https://github.com/eggplantiny/conn/issues/new/choose) · [Report a security issue](SECURITY.md)
+- [Contribute](CONTRIBUTING.md) · [Report a problem](https://github.com/eggp-dev/conn/issues/new/choose) · [Report a security issue](SECURITY.md)
 
 **Preview · MIT licensed.**
 

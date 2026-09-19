@@ -48,7 +48,7 @@ jobs:
   build:
     needs: validate
     # Release secrets are never available to pull requests or manual branch runs.
-    if: github.repository == 'eggplantiny/conn' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+    if: github.repository == 'eggp-dev/conn' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
     strategy:
       fail-fast: false
       matrix:

@@ -7,7 +7,10 @@ use std::{sync::Arc, time::Duration};
 use tauri::{Manager, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
-const RELEASES: &str = "https://github.com/eggplantiny/conn/releases";
+const RELEASES: &str = "https://github.com/eggp-dev/conn/releases";
+/// Where the repository lived until it moved to the organization. Builds up to 0.8.1 trust only
+/// this address, so update manifests keep using it and this build has to accept it too.
+const LEGACY_RELEASES: &str = "https://github.com/eggplantiny/conn/releases";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -90,9 +93,11 @@ fn candidate(
 }
 
 fn trusted_asset(url: &str, tag: &str) -> bool {
-    let prefix = format!("{RELEASES}/download/{tag}/conn-{tag}-");
-    url.strip_prefix(&prefix)
-        .is_some_and(|s| !s.is_empty() && !s.contains(['/', '?', '#', '%']))
+    [RELEASES, LEGACY_RELEASES].iter().any(|releases| {
+        let prefix = format!("{releases}/download/{tag}/conn-{tag}-");
+        url.strip_prefix(&prefix)
+            .is_some_and(|s| !s.is_empty() && !s.contains(['/', '?', '#', '%']))
+    })
 }
 
 #[tauri::command]
@@ -131,7 +136,7 @@ pub async fn app_update(
                     .build()
                     .map_err(|e| e.to_string())?;
                 let data: Value = client
-                    .get("https://api.github.com/repos/eggplantiny/conn/releases?per_page=100")
+                    .get("https://api.github.com/repos/eggp-dev/conn/releases?per_page=100")
                     .send()
                     .await
                     .map_err(|_| "Could not reach GitHub. Try again later.")?
@@ -273,12 +278,19 @@ mod tests {
     }
     #[test]
     fn payload_must_belong_to_the_selected_repository_and_tag() {
-        assert!(trusted_asset(
-            &format!("{RELEASES}/download/v0.6.0/conn-v0.6.0-desktop.AppImage"),
-            "v0.6.0"
-        ));
+        // The organization's address, and the one update manifests keep using for builds up to 0.8.1.
+        for releases in [RELEASES, LEGACY_RELEASES] {
+            assert!(trusted_asset(
+                &format!("{releases}/download/v0.6.0/conn-v0.6.0-desktop.AppImage"),
+                "v0.6.0"
+            ));
+        }
+        assert_eq!(RELEASES, "https://github.com/eggp-dev/conn/releases");
+        assert_eq!(LEGACY_RELEASES, "https://github.com/eggplantiny/conn/releases");
         for url in [
             "https://evil.example/conn-v0.6.0.exe",
+            "https://github.com/someone-else/conn/releases/download/v0.6.0/conn-v0.6.0-desktop.AppImage",
+            "https://github.com/eggp-dev/other/releases/download/v0.6.0/conn-v0.6.0-desktop.AppImage",
             "https://github.com/eggplantiny/conn/releases/download/v0.5.1/conn-v0.5.1.exe",
             "https://github.com/eggplantiny/conn/releases/download/v0.6.0/conn-v0.6.0-../../bad",
         ] {

@@ -7,7 +7,7 @@ members = ["crates/core", "crates/cli", "crates/frontend", "crates/browser-harne
 version = "0.8.1"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/eggplantiny/conn"
+repository = "https://github.com/eggp-dev/conn"
 
 [workspace.dependencies]
 conn-core = { path = "crates/core", version = "0.8.1" }

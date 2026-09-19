@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install the Conn desktop app with one line.
 #
-#   curl -fsSL https://raw.githubusercontent.com/eggplantiny/conn/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/eggp-dev/conn/main/scripts/install.sh | sh
 #
 # Linux x86_64: downloads the AppImage of the newest release, verifies it against the release's
 # SHA256SUMS, and installs it for the current user only (no sudo). The AppImage updates itself from
@@ -12,7 +12,7 @@
 #   CONN_REPO=owner/name  the repository to install from, if it has moved
 set -eu
 
-REPO="${CONN_REPO:-eggplantiny/conn}"
+REPO="${CONN_REPO:-eggp-dev/conn}"
 BIN_DIR="${CONN_BIN_DIR:-$HOME/.local/bin}"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}"
 
@@ -24,7 +24,7 @@ os="$(uname -s)"; arch="$(uname -m)"
 case "$os" in
   Darwin)
     [ "$arch" = arm64 ] || die "macOS builds are Apple Silicon only for now. See https://github.com/$REPO/releases"
-    say "On macOS install Conn with Homebrew:"; say ""; say "  brew install --cask eggplantiny/tap/conn"; say ""
+    say "On macOS install Conn with Homebrew:"; say ""; say "  brew install --cask eggp-dev/tap/conn"; say ""
     say "Or download the signed and notarized DMG: https://github.com/$REPO/releases"; exit 0 ;;
   Linux) [ "$arch" = x86_64 ] || die "Linux builds are x86_64 only for now (this is $arch). See https://github.com/$REPO/releases" ;;
   *) die "unsupported system '$os'. Windows: download the installer from https://github.com/$REPO/releases" ;;

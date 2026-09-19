@@ -25,8 +25,13 @@ import uuid
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-REPOSITORY = "https://github.com/eggplantiny/conn"
-REPOSITORY_SLUG = "eggplantiny/conn"
+REPOSITORY = "https://github.com/eggp-dev/conn"
+REPOSITORY_SLUG = "eggp-dev/conn"
+# Do not "fix" this one. Conn 0.6.0 to 0.8.1 only install an update whose download address starts
+# with the address they were built with, and they cannot be told otherwise. GitHub keeps serving
+# this address for as long as nobody creates a repository with the old name, so the update manifest
+# keeps using it. Builds from 0.8.2 on trust both addresses (see src-tauri/src/updates.rs).
+UPDATER_REPOSITORY = "https://github.com/eggplantiny/conn"
 TARGETS = {
     "x86_64-unknown-linux-gnu": (".deb", ".AppImage"),
     "aarch64-apple-darwin": (".dmg",),
@@ -149,7 +154,7 @@ def updater_manifest(artifacts: Path, version: str):
             evidence = read_json(artifacts / signing_name(version, target)).get("updater", {})
             if evidence != {"archive": name, "sha256": sha256(artifacts / name), "containedAppVerified": True}:
                 raise ReleaseError("macOS updater archive lacks matching notarized-app evidence")
-        entries[platform] = {"url": f"{REPOSITORY}/releases/download/v{version}/{name}", "signature": signature}
+        entries[platform] = {"url": f"{UPDATER_REPOSITORY}/releases/download/v{version}/{name}", "signature": signature}
     return {"version": version, "platforms": entries}
 
 

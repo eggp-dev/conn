@@ -10,7 +10,7 @@
 
 AI 에이전트와 같은 셸에서 일하세요. 직접 고치고, 바뀐 화면에서 이어가게 하세요.
 
-첫 행동: [Conn 다운로드](https://github.com/eggplantiny/conn/blob/main/README.ko.md#다운로드). 다음 행동: [첫 협업 해보기](first-collaboration.ko.md).
+첫 행동: [Conn 다운로드](https://github.com/eggp-dev/conn/blob/main/README.ko.md#다운로드). 다음 행동: [첫 협업 해보기](first-collaboration.ko.md).
 
 ## 짧은 소개 글
 
@@ -20,7 +20,7 @@ AI 에이전트와 같은 셸에서 일하세요. 직접 고치고, 바뀐 화�
 >
 > Apple Silicon macOS·Windows x64·Ubuntu x64용 오픈소스 프리뷰입니다. Codex, Claude Code, Cursor, GitHub Copilot의 연결 설정을 지원합니다. 작은 로컬 예제를 해보고 제어권을 주고받을 때 헷갈린 부분을 알려주세요.
 >
-> https://github.com/eggplantiny/conn
+> https://github.com/eggp-dev/conn
 
 짧은 경로 보정 영상을 함께 사용합니다. **실제 Codex와 Conn을 사용했고, 준비된 시나리오에서 사람 역할은 자동화했으며 대기 시간은 편집했다**는 설명을 가까이 둡니다.
 
@@ -40,7 +40,7 @@ AI 에이전트와 같은 셸에서 일하세요. 직접 고치고, 바뀐 화�
 >
 > 에이전트 작업 도중 직접 키보드를 잡고 싶었던 순간은 언제였나요?
 >
-> https://github.com/eggplantiny/conn
+> https://github.com/eggp-dev/conn
 
 게시할 커뮤니티의 규칙을 먼저 확인하고, 제작자가 직접 소개하는 글임을 밝힙니다. 같은 홍보글을 여러 곳에 무차별 반복하거나 투표·댓글을 조직하지 않습니다. 영어 공개용 제목과 Show HN 초안은 [영문 자료](launch-kit.md)에 있습니다.
 

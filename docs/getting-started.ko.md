@@ -9,24 +9,24 @@ Conn을 설치하고 에이전트를 연결해 같은 터미널에서 번갈아 
 한 줄로 설치할 수 있습니다.
 
 ```sh
-brew install --cask eggplantiny/tap/conn                                                        # macOS, Apple Silicon
-curl -fsSL https://raw.githubusercontent.com/eggplantiny/conn/main/scripts/install.sh | sh     # Linux x86_64
+brew install --cask eggp-dev/tap/conn                                                        # macOS, Apple Silicon
+curl -fsSL https://raw.githubusercontent.com/eggp-dev/conn/main/scripts/install.sh | sh     # Linux x86_64
 ```
 
 cask는 서명·공증된 DMG를 설치하며 릴리스와 함께 공개된 SHA-256으로 확인합니다. Linux 스크립트는 AppImage를 내려받아 릴리스의 `SHA256SUMS`와 대조한 뒤 내 계정에만 설치합니다(`~/.local/bin`, 앱 메뉴 항목, sudo 불필요). 체크섬이 맞지 않으면 설치하지 않습니다. `CONN_VERSION=v0.8.1`로 버전을 고정할 수 있습니다. AppImage는 FUSE 2가 필요합니다. Ubuntu 24.04 이상에서는 `sudo apt install libfuse2t64`를 실행하세요. 두 방법 모두 이후에는 앱 안에서 업데이트됩니다. 셸에 넘기기 전에 스크립트를 읽어 보셔도 좋습니다: [`scripts/install.sh`](../scripts/install.sh).
 
 직접 파일을 받으려면:
 
-OS와 CPU에 맞는 [v0.8.1 프리뷰](https://github.com/eggplantiny/conn/releases/tag/v0.8.1)를 받으세요. 실제 서명 상태와 실행 검증 결과는 릴리스 안내에서 확인할 수 있습니다.
+OS와 CPU에 맞는 [v0.8.1 프리뷰](https://github.com/eggp-dev/conn/releases/tag/v0.8.1)를 받으세요. 실제 서명 상태와 실행 검증 결과는 릴리스 안내에서 확인할 수 있습니다.
 
 | 플랫폼 | 다운로드 | 설치 |
 |---|---|---|
-| Ubuntu x64 | [`.deb`](https://github.com/eggplantiny/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-unknown-linux-gnu-desktop.deb) | 아래 명령으로 설치한 뒤 앱 목록에서 Conn을 엽니다. |
-| Ubuntu x64 | [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-unknown-linux-gnu-desktop.AppImage) | 실행 권한을 준 뒤 파일을 엽니다. |
-| macOS Apple Silicon | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.8.1/conn-v0.8.1-aarch64-apple-darwin-desktop.dmg) | DMG를 열고 Conn을 Applications로 옮긴 뒤 그곳에서 실행합니다. |
-| Windows x64 | [설치 `.exe`](https://github.com/eggplantiny/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-pc-windows-msvc-setup.exe) | 설치 파일을 실행하고 시작 메뉴에서 Conn을 엽니다. |
+| Ubuntu x64 | [`.deb`](https://github.com/eggp-dev/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-unknown-linux-gnu-desktop.deb) | 아래 명령으로 설치한 뒤 앱 목록에서 Conn을 엽니다. |
+| Ubuntu x64 | [AppImage](https://github.com/eggp-dev/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-unknown-linux-gnu-desktop.AppImage) | 실행 권한을 준 뒤 파일을 엽니다. |
+| macOS Apple Silicon | [`.dmg`](https://github.com/eggp-dev/conn/releases/download/v0.8.1/conn-v0.8.1-aarch64-apple-darwin-desktop.dmg) | DMG를 열고 Conn을 Applications로 옮긴 뒤 그곳에서 실행합니다. |
+| Windows x64 | [설치 `.exe`](https://github.com/eggp-dev/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-pc-windows-msvc-setup.exe) | 설치 파일을 실행하고 시작 메뉴에서 Conn을 엽니다. |
 
-새 릴리스의 Intel Mac 배포는 잠시 중단합니다. 기존 Intel 파일은 [이전 릴리스](https://github.com/eggplantiny/conn/releases)에 유지하며 Intel Mac에 Apple Silicon 파일을 설치하지 마세요.
+새 릴리스의 Intel Mac 배포는 잠시 중단합니다. 기존 Intel 파일은 [이전 릴리스](https://github.com/eggp-dev/conn/releases)에 유지하며 Intel Mac에 Apple Silicon 파일을 설치하지 마세요.
 
 Ubuntu에서는 다운로드한 폴더에서 실행합니다.
 
@@ -43,7 +43,7 @@ chmod +x ./conn-v0.8.1-x86_64-unknown-linux-gnu-desktop.AppImage
 
 Linux 빌드 대상은 Ubuntu 24.04·26.04 x64이며 AppImage에도 시스템 라이브러리가 필요합니다. Windows 프리뷰는 의도적으로 무서명 배포하므로 SmartScreen·알 수 없는 배포자 경고가 나올 수 있고 관리되는 PC에서는 설치가 차단될 수 있습니다. Mac 공개 파일은 릴리스의 Developer ID 서명·공증 검사를 통과해야 합니다. 각 대상의 범위는 [플랫폼 지원](platform-support.ko.md)을 참고하세요.
 
-원하면 파일과 함께 [SHA256SUMS](https://github.com/eggplantiny/conn/releases/download/v0.8.1/SHA256SUMS)를 받으세요. Linux는 `sha256sum --ignore-missing -c SHA256SUMS`, macOS는 `shasum -a 256 <파일>` 결과와 해당 줄 비교, Windows는 `Get-FileHash <파일> -Algorithm SHA256`을 사용합니다. 체크섬은 파일 손상을 확인하며 코드 서명과는 별개입니다.
+원하면 파일과 함께 [SHA256SUMS](https://github.com/eggp-dev/conn/releases/download/v0.8.1/SHA256SUMS)를 받으세요. Linux는 `sha256sum --ignore-missing -c SHA256SUMS`, macOS는 `shasum -a 256 <파일>` 결과와 해당 줄 비교, Windows는 `Get-FileHash <파일> -Algorithm SHA256`을 사용합니다. 체크섬은 파일 손상을 확인하며 코드 서명과는 별개입니다.
 
 ## 2. 터미널 설정
 
@@ -145,7 +145,7 @@ cmd.exe에는 `cd`를 사용하세요. 사람의 제어권 회수·승인·모�
 소스 빌드는 개발이나 직접 수정할 때 사용합니다. rustup으로 Rust와 네이티브 컴파일러·링커를 설치하세요. 데스크톱 빌드에는 **Node.js 24**와 [Tauri 필수 구성 요소](https://v2.tauri.app/start/prerequisites/)도 필요합니다. 저장소에서 Rust 도구 버전을 고정합니다.
 
 ```sh
-git clone https://github.com/eggplantiny/conn.git
+git clone https://github.com/eggp-dev/conn.git
 cd conn
 cargo install --path crates/cli --locked
 cd frontends/tauri

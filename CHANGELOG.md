@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Conn's repository moved to `github.com/eggp-dev/conn`. The updater now looks for releases there and trusts both the new and the previous address, so older installations keep updating and this build does too. Install with one line: `brew install --cask eggp-dev/tap/conn` on macOS, or the install script on Linux.
+
 ## 0.8.1 — Preview · 2026-09-19
 
 - Fix: typing while a command approval was pending left the approval alive with your keystrokes appended to the agent's typed line, so approving afterwards could run a line that was never reviewed. Human input now denies pending approvals and clears that line before your input reaches the shell.

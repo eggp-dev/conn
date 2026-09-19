@@ -19,7 +19,7 @@ Conn은 초기 단계의 프로젝트입니다. 명확한 재현 절차, 꼼꼼�
 rustup, **Node.js 24**, 네이티브 데스크톱 개발을 위한 [Tauri 필수 구성 요소](https://v2.tauri.app/start/prerequisites/)를 설치합니다. Rust 버전은 `rust-toolchain.toml`에 고정되어 있습니다. CI는 릴리스 도구에 Python 3.12도 사용합니다.
 
 ```sh
-git clone https://github.com/eggplantiny/conn.git
+git clone https://github.com/eggp-dev/conn.git
 cd conn
 ```
 

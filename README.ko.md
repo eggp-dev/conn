@@ -21,21 +21,21 @@ Conn은 지금 쓰는 AI 에이전트와 함께 쓰는 터미널입니다. 에�
 
 ```sh
 # macOS (Apple Silicon)
-brew install --cask eggplantiny/tap/conn
+brew install --cask eggp-dev/tap/conn
 
 # Linux (x86_64): 내 계정에만 AppImage 설치, 체크섬 검증, sudo 불필요
-curl -fsSL https://raw.githubusercontent.com/eggplantiny/conn/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/eggp-dev/conn/main/scripts/install.sh | sh
 ```
 
 Rust나 Node.js는 필요 없습니다. 에이전트 연결 도구가 함께 들어 있습니다. 두 방법 모두 아래 다운로드와 같은 서명된 릴리스 파일을 설치하며, 이후에는 앱 안에서 업데이트됩니다. Windows는 설치 파일을 사용하세요.
 
 | 운영체제 | v0.8.1 프리뷰 |
 |---|---|
-| macOS · Apple Silicon | [Mac용 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.8.1/conn-v0.8.1-aarch64-apple-darwin-desktop.dmg) |
-| Windows · x64 | [설치 파일 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-pc-windows-msvc-setup.exe) |
-| Ubuntu · x64 | [.deb 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-unknown-linux-gnu-desktop.AppImage) |
+| macOS · Apple Silicon | [Mac용 다운로드](https://github.com/eggp-dev/conn/releases/download/v0.8.1/conn-v0.8.1-aarch64-apple-darwin-desktop.dmg) |
+| Windows · x64 | [설치 파일 다운로드](https://github.com/eggp-dev/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-pc-windows-msvc-setup.exe) |
+| Ubuntu · x64 | [.deb 다운로드](https://github.com/eggp-dev/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggp-dev/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-unknown-linux-gnu-desktop.AppImage) |
 
-Mac 배포 파일은 서명·공증되어 있습니다. Windows 프리뷰는 무서명이며, Linux는 Ubuntu 24.04에서 빌드하며, AppImage는 앱 안에서 업데이트되고 `.deb`는 새 패키지를 설치해 업데이트합니다. Intel Mac 배포는 잠시 중단했습니다. [설치·업데이트 안내](docs/getting-started.ko.md) · [전체 파일·체크섬](https://github.com/eggplantiny/conn/releases/tag/v0.8.1)
+Mac 배포 파일은 서명·공증되어 있습니다. Windows 프리뷰는 무서명이며, Linux는 Ubuntu 24.04에서 빌드하며, AppImage는 앱 안에서 업데이트되고 `.deb`는 새 패키지를 설치해 업데이트합니다. Intel Mac 배포는 잠시 중단했습니다. [설치·업데이트 안내](docs/getting-started.ko.md) · [전체 파일·체크섬](https://github.com/eggp-dev/conn/releases/tag/v0.8.1)
 
 ## 처음 5분
 
@@ -79,7 +79,7 @@ https://github.com/user-attachments/assets/4f06180c-6a2c-4c10-99e1-7941db86470b
 - [협업 이야기: 같은 터미널에서의 작은 보정](docs/collaboration-story.ko.md)
 - [FAQ: 제어권·SSH·암호·기록](docs/faq.ko.md)
 - [프로필과 백엔드](docs/backends.md) · [CLI 설치](docs/getting-started.ko.md) · [외부 자동화](docs/external-automation.ko.md)
-- [기여하기](CONTRIBUTING.ko.md) · [문제 제보](https://github.com/eggplantiny/conn/issues/new/choose) · [보안 제보](SECURITY.md)
+- [기여하기](CONTRIBUTING.ko.md) · [문제 제보](https://github.com/eggp-dev/conn/issues/new/choose) · [보안 제보](SECURITY.md)
 
 **프리뷰 · MIT 라이선스.**
 
