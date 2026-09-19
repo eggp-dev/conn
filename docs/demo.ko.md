@@ -2,7 +2,7 @@
 
 [English](demo.md) · 한국어 · [Conn으로 돌아가기](../README.ko.md)
 
-[![실제 Codex 세션과 Conn의 공유 터미널](assets/conn-handoff-ko-poster.webp)](assets/conn-handoff-ko.mp4)
+[![15초 미리보기. 실제 Codex 세션과 Conn의 공유 터미널](assets/conn-handoff-preview-ko.webp)](assets/conn-handoff-ko.mp4)
 
 [70초 영상](assets/conn-handoff-ko.mp4) · [15초 영상](assets/conn-handoff-short-ko.mp4) · [자막](assets/conn-handoff-ko.vtt) · [직접 해보기](first-collaboration.ko.md)
 

@@ -2,7 +2,9 @@
 
 English · [한국어](demo-test-repair.ko.md) · [Back to Conn](../README.md)
 
-[Watch in English](https://github.com/user-attachments/assets/c20ec712-1915-44c2-a6a2-08b83e6951c4) · [Watch in Korean](https://github.com/user-attachments/assets/4f06180c-6a2c-4c10-99e1-7941db86470b)
+https://github.com/user-attachments/assets/c20ec712-1915-44c2-a6a2-08b83e6951c4
+
+[Watch in Korean](https://github.com/user-attachments/assets/4f06180c-6a2c-4c10-99e1-7941db86470b)
 
 ## One task, two turns
 
