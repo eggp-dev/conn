@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.1 — Preview · 2026-09-19
 
 - Fix: typing while a command approval was pending left the approval alive with your keystrokes appended to the agent's typed line, so approving afterwards could run a line that was never reviewed. Human input now denies pending approvals and clears that line before your input reaches the shell.
 
