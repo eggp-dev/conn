@@ -81,8 +81,16 @@ impl From<SessionError> for RpcError {
 fn trace_refusal(reason: &str, conn: ConnId, session: &str) {
     static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     if *ENABLED.get_or_init(|| std::env::var_os("CONN_TRACE_REFUSALS").is_some_and(|v| !v.is_empty())) {
-        eprintln!("conn refusal {} conn={conn} session={session} reason={reason}", chrono::Local::now().format("%H:%M:%S%.3f"));
+        eprintln!("conn refusal {} conn={conn} session={} reason={reason}", chrono::Local::now().format("%H:%M:%S%.3f"), trace_label(session));
     }
+}
+
+/// The named session or tab comes from the agent. Keep it to one bounded, escaped
+/// token so a request cannot forge trace lines or drive the owner's terminal.
+fn trace_label(requested: &str) -> String {
+    let mut label: String = requested.chars().take(96).flat_map(char::escape_default).collect();
+    if requested.chars().nth(96).is_some() { label.push('…'); }
+    label
 }
 
 fn session_unavailable() -> RpcError {
@@ -884,7 +892,7 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
         } else if req.method == "switch_tab" {
             let want = req.params.get("tab").cloned().or_else(|| req.params.get("session").cloned()).unwrap_or(Value::Null);
             match hub.find_public_tab(&want, conn) {
-                None => { trace_refusal("no such shared tab for this connection (private, not selected, or closed)", conn, &want.to_string()); Err(session_unavailable()) }
+                None => { trace_refusal("no such shared tab for this connection (private, not selected, or closed)", conn, &want.as_str().map(str::to_owned).unwrap_or_else(|| want.to_string())); Err(session_unavailable()) }
                 Some((to, ts)) => {
                     let pinned = bound.as_ref().filter(|from| **from != to).and_then(|b| hub.get_public(b)).is_some_and(|s| s.lock().blocks_navigation_from(conn));
                     let allowed = if pinned { Err(SessionError::Masked("switch_tab".into())) } else { ts.lock().agent_can_navigate(conn) };
@@ -1154,4 +1162,20 @@ impl Client {
     }
 
 
+}
+
+#[cfg(test)]
+mod tests {
+    use super::trace_label;
+
+    #[test]
+    fn trace_labels_cannot_forge_lines_or_drive_a_terminal() {
+        assert_eq!(trace_label("t1-64099c19"), "t1-64099c19");
+        let hostile = trace_label("x\nconn refusal 00:00:00 conn=9 reason=forged\x1b[2J\r");
+        assert!(!hostile.contains('\n') && !hostile.contains('\r') && !hostile.contains('\x1b'), "{hostile}");
+        assert!(hostile.starts_with("x\\nconn refusal"));
+        let long = trace_label(&"a".repeat(5000));
+        assert_eq!(long.chars().count(), 97);
+        assert!(long.ends_with('…'));
+    }
 }

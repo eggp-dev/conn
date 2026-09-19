@@ -104,6 +104,23 @@ Workspace: 256 passed, 0 failed, 1 ignored, including the new regression.
 | Refusal trace | Works: a `snapshot` naming an unlisted tab printed `no such shared session … conn=1 session=3` to stderr, while the agent got the generic reply. Gap found: the `switch_tab` refusal (`find_public_tab` → none) was not traced, and that is exactly the call that failed in the first run. A trace line was added there in the working tree. |
 | Private external session | Still invisible: `switch_tab 3` and `snapshot` by tab number refused. The launcher's later `write text` succeeded because the session was never shared, which is the expected private-session behaviour, not the late-write rejection tested above. |
 
+### Linux review of aa73383
+
+- The `switch_tab` trace line matches the intent and the other lines: an owner-side,
+  opt-in diagnostic that names a session or tab, never terminal content.
+- Review found one gap shared by every trace line: the named session or tab comes from
+  the agent and reached the owner's stderr unbounded, and on the generic path unescaped,
+  so a request could forge trace lines or send terminal escapes to an owner who had
+  tracing on. `trace_label` now bounds the value to 96 characters and escapes control
+  characters for all lines. Ordinary session IDs print unchanged. Unit test:
+  `trace_labels_cannot_forge_lines_or_drive_a_terminal`.
+- Linux workspace tests after this change: 257 passed, 0 failed, 1 ignored.
+- Finding 2 is closed as not reproduced after three attempts on two platforms (the
+  original sequence on macOS twice, its replay on Linux once). No code path was found
+  that refuses one connection's `switch_tab` for a session its own `list_tabs` shows.
+  The trace stays in place; if the symptom returns, run with `CONN_TRACE_REFUSALS=1`
+  and reopen with the printed connection id and cause.
+
 ## Not verified here
 
 - Signed distribution, notarization and updater artifacts (release artifacts required).
