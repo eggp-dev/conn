@@ -9,7 +9,7 @@
 Conn is a terminal you share with the AI agent you already use. The agent picks up the shell **you** are in: the server you logged into, the environment you activated, the directory you chose. You watch every command as it runs, approve the risky ones, and take over by typing.
 
 - **It starts where you are.** Open the SSH session, container or virtualenv yourself, then let the agent continue in that live shell. A password typed at a hidden prompt never reaches it.
-- **Nothing runs behind your back.** Every command the agent submits carries a one-line reason. By default `rm`, `sudo`, `git push --force`, `kubectl delete` and file overwrites wait for your approval, and one approval covers one action.
+- **Nothing runs behind your back.** Every command the agent submits carries a one-line reason. By default `rm`, `sudo`, `git push --force`, `kubectl delete` and file overwrites wait for your approval, and one approval covers one action. Inside an SSH session, or any program Conn cannot inspect, **every** agent command waits for your review.
 - **Type to take over.** Any keystroke takes control back before the agent's next input reaches the shell. Fix what is wrong, then tell it to read the screen and continue.
 - **Your agent, your model.** Works with **Codex, Claude Code, Cursor and GitHub Copilot** over MCP. Conn runs no model and needs no extra subscription.
 
@@ -43,7 +43,7 @@ For Codex, use the desktop app, CLI or IDE extension with a local task. The conv
 | | |
 |---|---|
 | **Three modes** | **Observe**: the agent only reads. **Co-pilot**: it proposes a line and you press Enter. **Autopilot**: it runs commands and the policy asks when it matters. |
-| **Approvals** | Deny and confirm rules in a plain YAML policy. A dangerous command chained to others is refused and must be sent alone. |
+| **Approvals** | Deny and confirm rules in a plain YAML policy. A dangerous command chained to others is refused and must be sent alone. On a remote host or inside another program, each command is reviewed one at a time. |
 | **Ask before joining** | A new agent connection learns nothing about your sessions until you press Allow. |
 | **One tab at a time** | An agent holds control in a single tab, stays in the session it was given, and never follows your view. |
 | **A record of what happened** | The timeline keeps commands, handoffs, approvals and refusals together, with the agent's stated reasons. |
