@@ -91,6 +91,19 @@ Native evidence was inspected as window captures during the run; no images are c
    input being driven by coordinates, a stray quit or window close is the first thing to
    rule out.
 
+### macOS re-check of the follow-up (ac9cb26)
+
+Same Mac, rebuilt isolated bundle at `ac9cb26`, started with `CONN_TRACE_REFUSALS=1`.
+Workspace: 256 passed, 0 failed, 1 ignored, including the new regression.
+
+| Check | Result |
+|---|---|
+| Finding 1: one lease per connection | PASS on the native app, on ordinary tabs and on a shared external session (control requested in the bound tab, then by name in the external session: the bound tab returned to human). Bound to tab 1 with `lease` held there, `request_control` naming tab 2 released tab 1 (controller back to human) and granted tab 2. A `snapshot` of tab 1 by name left tab 2 held; renewing in place kept it; `switch_tab` back to tab 1 released every lease. |
+| Finding 2: replay on ordinary tabs | No refusal. Control requested in both tabs, `status` and `snapshot` on each every 4 s for 30 s, then `switch_tab`: all succeeded and the trace stayed empty. |
+| Finding 2: replay on a shared external session | No refusal, no exit. With screen control restored: admission card answered, AppleScript SSH login shared through the native panel with the agent selected, then the first-run sequence replayed in order (snapshot; `request_control` in the bound tab and, by name, in the shared session; Escape sent into that window; a second automation window created; a second agent `hello` left pending). `status`, `snapshot` and `switch_tab` on the shared session every 5 s for three minutes: 105 calls, all succeeded, trace empty, app still running, launcher's late write rejected. The first-run symptom remains unreproduced; the trace is in place for the next occurrence. |
+| Refusal trace | Works: a `snapshot` naming an unlisted tab printed `no such shared session … conn=1 session=3` to stderr, while the agent got the generic reply. Gap found: the `switch_tab` refusal (`find_public_tab` → none) was not traced, and that is exactly the call that failed in the first run. A trace line was added there in the working tree. |
+| Private external session | Still invisible: `switch_tab 3` and `snapshot` by tab number refused. The launcher's later `write text` succeeded because the session was never shared, which is the expected private-session behaviour, not the late-write rejection tested above. |
+
 ## Not verified here
 
 - Signed distribution, notarization and updater artifacts (release artifacts required).

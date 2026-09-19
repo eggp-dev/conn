@@ -884,7 +884,7 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
         } else if req.method == "switch_tab" {
             let want = req.params.get("tab").cloned().or_else(|| req.params.get("session").cloned()).unwrap_or(Value::Null);
             match hub.find_public_tab(&want, conn) {
-                None => Err(session_unavailable()),
+                None => { trace_refusal("no such shared tab for this connection (private, not selected, or closed)", conn, &want.to_string()); Err(session_unavailable()) }
                 Some((to, ts)) => {
                     let pinned = bound.as_ref().filter(|from| **from != to).and_then(|b| hub.get_public(b)).is_some_and(|s| s.lock().blocks_navigation_from(conn));
                     let allowed = if pinned { Err(SessionError::Masked("switch_tab".into())) } else { ts.lock().agent_can_navigate(conn) };
