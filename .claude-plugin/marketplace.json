@@ -9,7 +9,7 @@
       "name": "conn",
       "source": "./plugin",
       "description": "Conn: MCP server + working-etiquette skill.",
-      "version": "0.8.1"
+      "version": "0.8.2"
     }
   ]
 }
