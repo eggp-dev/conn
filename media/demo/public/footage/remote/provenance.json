@@ -1,0 +1,66 @@
+{
+ "film": "remote-takeover",
+ "recorded": "2026-09-19",
+ "sourceRevision": "5ce66f6e7178ce388f01a7f07b8a8f127f42292f",
+ "connVersion": "0.8.1",
+ "agent": {
+  "client": "Claude Code 2.1.278, headless, one session for the whole take",
+  "model": "sonnet",
+  "transport": "Conn MCP stdio server (conn mcp --agent-id claude-code --tools static)"
+ },
+ "environment": "Ubuntu; native Conn backend and the actual Svelte frontend through the browser test adapter; a disposable OpenSSH server in a local container bound to 127.0.0.1 with a synthetic password; default policy; local Bash shell integration active",
+ "capture": {
+  "method": "Chrome DevTools Page.startScreencast, JPEG 95, 1200x540 CSS pixels at 2x",
+  "frames": 2443,
+  "realSeconds": 64.69,
+  "filmSeconds": 46.67,
+  "editing": "One continuous take. No frame in which the picture changes was removed or reordered. Spans in which the screen did not change were shortened: to 0.45s while the agent was thinking, up to 3.2s while a card waited for the human. After the take ends on a still screen, its last frame is held for 4.6s while the agent's reply is shown."
+ },
+ "humanRole": "Automated by the operator through real browser key and mouse events: typed ssh staging and the password, clicked Allow, Approve and Deny on the actual cards, typed ./api.sh unlock.",
+ "visiblePrompts": [
+  "The API on staging is down. Look at my Conn terminal and get it running again.",
+  "I cleared the stale lock myself, so keep the cache. Read the terminal and continue."
+ ],
+ "agentBrief": "The agent was given a prepared brief that listed the plan, including clearing the cache with rm -rf cache/ when it found the stale lock, and told it to stop if denied or if the human took the keyboard. The wrong turn is staged; the agent's tool calls, wording and stated reasons are its own.",
+ "cards": [
+  {
+   "command": "./api.sh status",
+   "statedReason": "Show the current status of the API service (read-only)",
+   "label": "Review command in this shell/remote environment"
+  },
+  {
+   "command": "tail -n 3 api.log",
+   "statedReason": "Show the last 3 lines of api.log (read-only) to find why the API stopped",
+   "label": "Review command in this shell/remote environment"
+  },
+  {
+   "command": "rm -rf cache/",
+   "statedReason": "Delete the entire cache/ directory, including the stale index.lock blocking startup",
+   "label": "Review command in this shell/remote environment"
+  },
+  {
+   "command": "./api.sh start",
+   "statedReason": "Start the API service via api.sh (cache and lock already handled)",
+   "label": "Review command in this shell/remote environment"
+  },
+  {
+   "command": "./api.sh health",
+   "statedReason": "Run the API health check (read-only) to confirm the service is up",
+   "label": "Review command in this shell/remote environment"
+  }
+ ],
+ "result": {
+  "healthy": true,
+  "controller": "human"
+ },
+ "passwordOnScreen": false,
+ "browserRuntimeErrors": [],
+ "clipSha256": {
+  "public/footage/remote/take.mp4": "b2297527d93f0795de73a9de3b68bc31736470759ebf2b226582260a0553e577"
+ },
+ "agentReplies": [
+  "The `rm -rf cache/` command was denied, so I'm stopping here without retrying or trying another route.",
+  "The API is back up on :8080. `./api.sh health` returns `{\"status\": \"ok\", \"cache\": \"warm\"}`, the cache is intact, and I've released control."
+ ],
+ "messageCards": "The cards that show the human's prompts and the agent's final reply are editorial graphics, not a recording of the agent client. The English text is verbatim (the prompts as sent, the reply as written by the agent); the Korean film shows translations of the same messages."
+}

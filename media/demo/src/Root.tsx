@@ -6,10 +6,16 @@ import { durationInFrames, fps } from "./footage";
 import { HandoffFilm, HandoffShort } from "./handoff/HandoffFilm";
 import { HandoffPoster } from "./handoff/HandoffPoster";
 import { handoffDuration, handoffFps, shortDuration } from "./handoff/edit";
+import { RemoteFilm, RemoteShort } from "./remote/RemoteFilm";
+import { remoteDuration, remoteFps, shortDuration as remoteShortDuration } from "./remote/edit";
 
 export const RemotionRoot: React.FC = () => {
   return (
     <>
+      <Composition id="ConnRemoteEN" component={RemoteFilm} durationInFrames={remoteDuration} fps={remoteFps} width={1920} height={1080} defaultProps={{ language: "en" as const }} />
+      <Composition id="ConnRemoteShortEN" component={RemoteShort} durationInFrames={remoteShortDuration} fps={remoteFps} width={1920} height={1080} defaultProps={{ language: "en" as const }} />
+      <Composition id="ConnRemoteShortKO" component={RemoteShort} durationInFrames={remoteShortDuration} fps={remoteFps} width={1920} height={1080} defaultProps={{ language: "ko" as const }} />
+      <Composition id="ConnRemoteKO" component={RemoteFilm} durationInFrames={remoteDuration} fps={remoteFps} width={1920} height={1080} defaultProps={{ language: "ko" as const }} />
       <Composition id="ConnHandoffEN" component={HandoffFilm} durationInFrames={handoffDuration} fps={handoffFps} width={1920} height={1080} defaultProps={{ language: "en" }} />
       <Composition id="ConnHandoffKO" component={HandoffFilm} durationInFrames={handoffDuration} fps={handoffFps} width={1920} height={1080} defaultProps={{ language: "ko" }} />
       <Composition id="ConnHandoffShortEN" component={HandoffShort} durationInFrames={shortDuration} fps={handoffFps} width={1920} height={1080} defaultProps={{ language: "en" }} />

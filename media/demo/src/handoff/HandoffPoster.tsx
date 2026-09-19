@@ -2,6 +2,7 @@ import { CanvasImage, staticFile, useVideoConfig } from "remotion";
 import { BrandMark } from "../BrandMark";
 import { Stage } from "../Stage";
 import { handoffCopy, type HandoffLanguage } from "./edit";
+import { repository } from "../brand";
 
 /** The product screenshot is a frame from the real recording, never a mockup. */
 export const HandoffPoster: React.FC<{ language: HandoffLanguage }> = ({ language }) => {
@@ -38,7 +39,7 @@ export const HandoffPoster: React.FC<{ language: HandoffLanguage }> = ({ languag
           <svg width="15" height="18" viewBox="0 0 15 18"><path d="M1 1L14 9L1 17Z" fill="#c7b7ff" /></svg>
         </span>{copy.watch}
       </div>
-      <div style={{ position: "absolute", left: 85, bottom: 82, fontSize: 26, color: "#88879d" }}>github.com/eggplantiny/conn</div>
+      <div style={{ position: "absolute", left: 85, bottom: 82, fontSize: 26, color: "#88879d" }}>{repository}</div>
     </div>
   </Stage>;
 };

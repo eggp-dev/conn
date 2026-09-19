@@ -1,0 +1,54 @@
+1
+00:00:00,300 --> 00:00:04,477
+You log in.
+Your password never reaches your agent.
+
+2
+00:00:04,477 --> 00:00:07,977
+You: The API on staging is down. Look at my Conn terminal and get it running again.
+
+3
+00:00:07,977 --> 00:00:10,279
+It asks to join. Once.
+
+4
+00:00:10,279 --> 00:00:14,194
+It picks up the shell you are already in.
+
+5
+00:00:14,194 --> 00:00:24,012
+On your server, every command waits for you.
+
+6
+00:00:24,012 --> 00:00:26,508
+It wants to delete the whole cache.
+
+7
+00:00:26,508 --> 00:00:27,828
+You say no.
+
+8
+00:00:27,828 --> 00:00:30,698
+Then you just type.
+Your keystroke takes the terminal back.
+
+9
+00:00:30,698 --> 00:00:34,398
+You: I cleared the stale lock myself, so keep the cache. Read the terminal and continue.
+
+10
+00:00:34,398 --> 00:00:41,960
+It reads what you did.
+
+11
+00:00:41,960 --> 00:00:46,870
+And finishes the job.
+
+12
+00:00:46,870 --> 00:00:51,270
+Claude Code: The API is back up on :8080. ./api.sh health returns {"status": "ok", "cache": "warm"}, the cache is intact, and I've released control.
+
+13
+00:00:51,670 --> 00:00:57,270
+Your agent works in your terminal. You keep the keyboard.
+Real Conn, a real SSH login and a real Claude Code session in one continuous take. Prepared scenario; still moments shortened.

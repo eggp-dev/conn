@@ -1,6 +1,7 @@
 import { CanvasImage, Easing, Interactive, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { Stage } from "../Stage";
 import { handoffCopy, type HandoffLanguage } from "./edit";
+import { repository } from "../brand";
 
 export const ClosingScene: React.FC<{ language: HandoffLanguage; short?: boolean }> = ({ language, short = false }) => {
   const frame = useCurrentFrame();
@@ -21,7 +22,7 @@ export const ClosingScene: React.FC<{ language: HandoffLanguage; short?: boolean
     <Interactive.Div name="Download Conn" style={{ position: "absolute", top: 631, left: 120, right: 120,
       textAlign: "center", fontSize: 31, color: "#b5b4c6" }}>{copy.closing}</Interactive.Div>
     <Interactive.Div name="Repository URL" style={{ position: "absolute", top: 714, left: 120, right: 120,
-      textAlign: "center", fontSize: 36, color: "#c5bafa" }}>github.com/eggplantiny/conn</Interactive.Div>
+      textAlign: "center", fontSize: 36, color: "#c5bafa" }}>{repository}</Interactive.Div>
     <Interactive.Div name="Recording disclosure" style={{ position: "absolute", bottom: 86, left: 100, right: 100,
       textAlign: "center", fontSize: 24, color: "#9999ac" }}>{copy.disclosure}</Interactive.Div>
   </Stage>;

@@ -1,3 +1,12 @@
+/**
+ * The one place the films name the repository. If it moves (for example to an organization),
+ * change this line and re-render; nothing else in media/demo spells the address out.
+ * GitHub keeps redirecting the old address after a transfer, so already published films stay valid.
+ */
+export const repository = "github.com/eggplantiny/conn";
+
+/** Agent clients Conn sets up today, as shown in the closing card. */
+export const worksWith = ["Claude Code", "Codex", "Cursor", "GitHub Copilot"] as const;
 import { AbsoluteFill } from "remotion";
 import { fontFamily } from "./fonts";
 
@@ -14,10 +23,16 @@ import { durationInFrames, fps } from "./footage";
 import { HandoffFilm, HandoffShort } from "./handoff/HandoffFilm";
 import { HandoffPoster } from "./handoff/HandoffPoster";
 import { handoffDuration, handoffFps, shortDuration } from "./handoff/edit";
+import { RemoteFilm, RemoteShort } from "./remote/RemoteFilm";
+import { remoteDuration, remoteFps, shortDuration as remoteShortDuration } from "./remote/edit";
 
 export const RemotionRoot: React.FC = () => {
   return (
     <>
+      <Composition id="ConnRemoteEN" component={RemoteFilm} durationInFrames={remoteDuration} fps={remoteFps} width={1920} height={1080} defaultProps={{ language: "en" as const }} />
+      <Composition id="ConnRemoteShortEN" component={RemoteShort} durationInFrames={remoteShortDuration} fps={remoteFps} width={1920} height={1080} defaultProps={{ language: "en" as const }} />
+      <Composition id="ConnRemoteShortKO" component={RemoteShort} durationInFrames={remoteShortDuration} fps={remoteFps} width={1920} height={1080} defaultProps={{ language: "ko" as const }} />
+      <Composition id="ConnRemoteKO" component={RemoteFilm} durationInFrames={remoteDuration} fps={remoteFps} width={1920} height={1080} defaultProps={{ language: "ko" as const }} />
       <Composition id="ConnHandoffEN" component={HandoffFilm} durationInFrames={handoffDuration} fps={handoffFps} width={1920} height={1080} defaultProps={{ language: "en" }} />
       <Composition id="ConnHandoffKO" component={HandoffFilm} durationInFrames={handoffDuration} fps={handoffFps} width={1920} height={1080} defaultProps={{ language: "ko" }} />
       <Composition id="ConnHandoffShortEN" component={HandoffShort} durationInFrames={shortDuration} fps={handoffFps} width={1920} height={1080} defaultProps={{ language: "en" }} />
@@ -170,6 +185,7 @@ export const FootageStage: React.FC<{ id: ClipId; language: Language; accent: st
 };
 import { CanvasImage, staticFile } from "remotion";
 import { Stage } from "./Stage";
+import { repository } from "./brand";
 
 export const Poster: React.FC = () => <Stage>
   <div style={{ position: "absolute", width: 880, height: 880, left: 900, top: 30, borderRadius: "50%",
@@ -189,7 +205,7 @@ export const Poster: React.FC = () => <Stage>
     </div>
     Watch Codex + Conn work together
   </div>
-  <div style={{ position: "absolute", left: 172, bottom: 115, fontSize: 24, color: "#717689" }}>github.com/eggplantiny/conn</div>
+  <div style={{ position: "absolute", left: 172, bottom: 115, fontSize: 24, color: "#717689" }}>{repository}</div>
 </Stage>;
 import { registerRoot } from "remotion";
 import { RemotionRoot } from "./Root";
@@ -212,6 +228,7 @@ import { CanvasImage, staticFile, useVideoConfig } from "remotion";
 import { BrandMark } from "../BrandMark";
 import { Stage } from "../Stage";
 import { handoffCopy, type HandoffLanguage } from "./edit";
+import { repository } from "../brand";
 
 /** The product screenshot is a frame from the real recording, never a mockup. */
 export const HandoffPoster: React.FC<{ language: HandoffLanguage }> = ({ language }) => {
@@ -248,13 +265,14 @@ export const HandoffPoster: React.FC<{ language: HandoffLanguage }> = ({ languag
           <svg width="15" height="18" viewBox="0 0 15 18"><path d="M1 1L14 9L1 17Z" fill="#c7b7ff" /></svg>
         </span>{copy.watch}
       </div>
-      <div style={{ position: "absolute", left: 85, bottom: 82, fontSize: 26, color: "#88879d" }}>github.com/eggplantiny/conn</div>
+      <div style={{ position: "absolute", left: 85, bottom: 82, fontSize: 26, color: "#88879d" }}>{repository}</div>
     </div>
   </Stage>;
 };
 import { CanvasImage, Easing, Interactive, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { Stage } from "../Stage";
 import { handoffCopy, type HandoffLanguage } from "./edit";
+import { repository } from "../brand";
 
 export const ClosingScene: React.FC<{ language: HandoffLanguage; short?: boolean }> = ({ language, short = false }) => {
   const frame = useCurrentFrame();
@@ -275,7 +293,7 @@ export const ClosingScene: React.FC<{ language: HandoffLanguage; short?: boolean
     <Interactive.Div name="Download Conn" style={{ position: "absolute", top: 631, left: 120, right: 120,
       textAlign: "center", fontSize: 31, color: "#b5b4c6" }}>{copy.closing}</Interactive.Div>
     <Interactive.Div name="Repository URL" style={{ position: "absolute", top: 714, left: 120, right: 120,
-      textAlign: "center", fontSize: 36, color: "#c5bafa" }}>github.com/eggplantiny/conn</Interactive.Div>
+      textAlign: "center", fontSize: 36, color: "#c5bafa" }}>{repository}</Interactive.Div>
     <Interactive.Div name="Recording disclosure" style={{ position: "absolute", bottom: 86, left: 100, right: 100,
       textAlign: "center", fontSize: 24, color: "#9999ac" }}>{copy.disclosure}</Interactive.Div>
   </Stage>;
@@ -430,7 +448,434 @@ export const RecordedScene: React.FC<{
     }}>{cue?.caption}</Interactive.Div>
   </Stage>;
 };
-import { FootageStage } from "../FootageStage";
+import { Video } from "@remotion/media";
+import { AbsoluteFill, CanvasImage, Easing, Freeze, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
+import { fontFamily } from "../fonts";
+import { camera, clicks, closingSeconds, cues, footageSeconds, remoteCopy, remoteFps, replySeconds, shortClosingSeconds, shortDissolve, shortParts, type Cue, type RemoteLanguage } from "./edit";
+import { worksWith } from "../brand";
+import { repository } from "../brand";
+
+const STAGE = { w: 1920, h: 1080 };
+// The take is 1200x540 CSS pixels at 2x. At 1.4x on the stage its 19px terminal type reads at about 27px.
+const WINDOW = { w: 1680, h: 756, left: 120, top: 60, source: { w: 1200, h: 540 } };
+const ease = Easing.bezier(0.45, 0, 0.15, 1);
+
+function shotAt(second: number) {
+  const i = Math.max(1, camera.findIndex((s) => s.t >= second));
+  const a = camera[i - 1] ?? camera[0], b = camera[i] ?? camera[camera.length - 1];
+  const k = b.t === a.t ? 1 : ease(Math.min(1, Math.max(0, (second - a.t) / (b.t - a.t))));
+  return { scale: a.scale + (b.scale - a.scale) * k, x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
+}
+
+/** The recording as one window on a black stage. The camera moves; the recording itself is never cut. */
+const Recording: React.FC<{ offset?: number; intro?: boolean }> = ({ offset = 0, intro = true }) => {
+  const local = useCurrentFrame() / remoteFps;
+  const second = local + offset;
+  const shot = shotAt(second);
+  // Keep the chosen point of the recording in the middle of the window, without showing past its edges.
+  const clamp = (v: number, size: number) => Math.min(0, Math.max(size - size * shot.scale, size / 2 - v * size * shot.scale));
+  const tx = clamp(shot.x, WINDOW.w), ty = clamp(shot.y, WINDOW.h);
+  const appear = intro ? interpolate(local, [0, 0.7], [0, 1], { extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) }) : 1;
+  return <div style={{ position: "absolute", left: WINDOW.left, top: WINDOW.top, width: WINDOW.w, height: WINDOW.h, borderRadius: 22, overflow: "hidden",
+    opacity: appear, scale: String(interpolate(appear, [0, 1], [0.985, 1])), boxShadow: "0 0 0 1px #ffffff17, 0 40px 120px #7d6bff1f, 0 8px 30px #000c", background: "#0b0d14" }}>
+    <div style={{ position: "absolute", width: WINDOW.w, height: WINDOW.h, transformOrigin: "0 0", transform: `translate(${tx}px, ${ty}px) scale(${shot.scale})` }}>
+      <Video name="One continuous take of Conn with a real agent" src={staticFile("footage/remote/take.mp4")} trimBefore={Math.round(offset * remoteFps)} muted objectFit="fill" style={{ width: WINDOW.w, height: WINDOW.h }} />
+      {clicks.map((c) => {
+        const age = second - c.t;
+        if (age < -0.12 || age > 0.7) return null;
+        const grow = interpolate(age, [-0.12, 0.7], [0.2, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) });
+        const size = 96 * grow;
+        return <div key={c.t} style={{ position: "absolute", left: (c.x / WINDOW.source.w) * WINDOW.w - size / 2, top: (c.y / WINDOW.source.h) * WINDOW.h - size / 2, width: size, height: size,
+          borderRadius: "50%", border: "2.5px solid #ffffff", background: "#ffffff22", opacity: interpolate(age, [-0.12, 0, 0.7], [0, 0.95, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) }} />;
+      })}
+    </div>
+  </div>;
+};
+
+/** Inline code in a message: `like this`. */
+const Rich: React.FC<{ text: string }> = ({ text }) => <>{text.split("`").map((part, i) => i % 2
+  ? <span key={i} style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.86em", padding: "2px 9px", borderRadius: 9, background: "#ffffff14", whiteSpace: "nowrap" }}>{part}</span>
+  : <span key={i}>{part}</span>)}</>;
+
+/** A message between you and your agent. The agent lives in another app; this card is how the film says so. */
+const MessageCard: React.FC<{ cue: Cue; language: RemoteLanguage; age: number }> = ({ cue, language, age }) => {
+  const you = cue.from === "you"; const copy = remoteCopy[language];
+  // You type; the agent thinks for a beat, then answers.
+  const typed = you ? Math.floor(interpolate(age, [0.25, 1.55], [0, cue.line.length], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })) : cue.line.length;
+  const thinking = !you && age < 0.75;
+  return <div style={{ display: "flex", flexDirection: "column", alignItems: you ? "flex-end" : "flex-start", gap: 12, width: 1240 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 23, color: "#9c9cae" }}>
+      <div style={{ width: 34, height: 34, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 700,
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", background: you ? "#7767ff" : "#23232d", color: you ? "#fff" : "#d9d5ff", boxShadow: you ? "none" : "inset 0 0 0 1px #ffffff1f" }}>{you ? "↑" : ">_"}</div>
+      <span style={{ color: "#e4e2f2", fontWeight: 700 }}>{you ? `${cue.sub} → Claude Code` : cue.sub}</span>
+      <span>{copy.agentNote}</span>
+    </div>
+    <div style={{ maxWidth: 1240, padding: "18px 30px", borderRadius: 30, fontSize: language === "ko" ? 31 : 32, lineHeight: 1.34, letterSpacing: -0.4, textAlign: "left",
+      background: you ? "linear-gradient(180deg, #8575ff, #6b5bf3)" : "#1c1c25", color: "#fff", boxShadow: you ? "0 18px 50px #6b5bf340" : "inset 0 0 0 1px #ffffff1a, 0 18px 50px #0009",
+      borderBottomRightRadius: you ? 10 : 30, borderBottomLeftRadius: you ? 30 : 10, minHeight: 46 }}>
+      {thinking ? <span style={{ display: "inline-flex", gap: 9, padding: "10px 4px" }}>{[0, 1, 2].map((i) => <span key={i} style={{ width: 12, height: 12, borderRadius: 6, background: "#a7a3c4",
+        opacity: interpolate((age * 3 + i * 0.33) % 1, [0, 0.5, 1], [0.3, 1, 0.3]) }} />)}</span> : <Rich text={cue.line.slice(0, typed)} />}
+    </div>
+  </div>;
+};
+
+const Caption: React.FC<{ language: RemoteLanguage; offset?: number }> = ({ language, offset = 0 }) => {
+  const second = useCurrentFrame() / remoteFps + offset;
+  return <>{cues(language).map((cue) => {
+    if (second < cue.start - 0.05 || second > cue.end + 0.05) return null;
+    const fade = 0.32;
+    const opacity = Math.min(interpolate(second, [cue.start, cue.start + fade], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }), interpolate(second, [cue.end - fade, cue.end], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }));
+    const rise = interpolate(second, [cue.start, cue.start + 0.5], [12, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) });
+    return <div key={cue.start} style={{ position: "absolute", left: 120, right: 120, top: WINDOW.top + WINDOW.h + 18, height: STAGE.h - WINDOW.top - WINDOW.h - 26, display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", gap: 8, opacity, translate: `0px ${rise}px`, textAlign: "center" }}>
+      {cue.from ? <MessageCard cue={cue} language={language} age={second - cue.start} /> : <>
+        <div style={{ fontSize: language === "ko" ? 50 : 54, fontWeight: 700, color: "#ffffff", letterSpacing: -1.4, lineHeight: 1.18 }}>{cue.line}</div>
+        {cue.sub && <div style={{ fontSize: 27, color: "#a3a3b5", fontWeight: 400, letterSpacing: -0.2 }}>{cue.sub}</div>}
+      </>}
+    </div>;
+  })}</>;
+};
+
+const Closing: React.FC<{ language: RemoteLanguage; short?: boolean }> = ({ language, short = false }) => {
+  const frame = useCurrentFrame(); const copy = remoteCopy[language];
+  const inn = (from: number) => ({ opacity: interpolate(frame, [from, from + 14], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+    translate: `0px ${interpolate(frame, [from, from + 20], [14, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) })}px` });
+  return <AbsoluteFill style={{ background: "#000", alignItems: "center", justifyContent: "center", fontFamily }}>
+    <div style={{ position: "absolute", width: 900, height: 900, background: "radial-gradient(circle, #8f7dff1c, transparent 66%)" }} />
+    <CanvasImage src={staticFile("conn-icon.svg")} style={{ width: 92, height: 92, borderRadius: 22, marginBottom: 44, ...inn(4) }} />
+    <div style={{ fontSize: language === "ko" ? 82 : 88, fontWeight: 700, letterSpacing: -2.6, lineHeight: 1.14, color: "#fff", textAlign: "center", ...inn(10) }}>{copy.headline[0]}</div>
+    <div style={{ fontSize: language === "ko" ? 82 : 88, fontWeight: 700, letterSpacing: -2.6, lineHeight: 1.14, color: "#b9adff", textAlign: "center", ...inn(short ? 24 : 34) }}>{copy.headline[1]}</div>
+    <div style={{ marginTop: 46, fontSize: 30, color: "#a3a3b5", ...inn(short ? 44 : 62) }}>{copy.closing}</div>
+    <div style={{ marginTop: 14, fontSize: 32, color: "#d9d3ff", ...inn(short ? 50 : 70) }}>{repository}</div>
+    <div style={{ marginTop: 40, display: "flex", alignItems: "center", gap: 14, fontSize: 24, color: "#8c8c9f", ...inn(short ? 56 : 82) }}>
+      <span>{copy.worksWith}</span>
+      {worksWith.map((name) => <span key={name} style={{ padding: "7px 18px", borderRadius: 999, color: "#dcd9ee", background: "#ffffff0d", boxShadow: "inset 0 0 0 1px #ffffff1c" }}>{name}</span>)}
+    </div>
+    <div style={{ position: "absolute", bottom: 56, left: 160, right: 160, textAlign: "center", fontSize: 21, color: "#6f6f82", lineHeight: 1.4, ...inn(short ? 62 : 96) }}>{copy.disclosure}</div>
+  </AbsoluteFill>;
+};
+
+export const RemoteFilm: React.FC<{ language: RemoteLanguage }> = ({ language }) => {
+  const frame = useCurrentFrame(); const footageFrames = Math.round(footageSeconds * remoteFps); const replyFrames = Math.round(replySeconds * remoteFps);
+  const bodyFrames = footageFrames + replyFrames;
+  const out = interpolate(frame, [bodyFrames - 14, bodyFrames], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  return <AbsoluteFill style={{ background: "#000", fontFamily, color: "#fff" }}>
+    <Sequence name="One continuous take" durationInFrames={footageFrames}><AbsoluteFill><Recording /></AbsoluteFill></Sequence>
+    {/* The take has ended on a still screen; keep showing its last frame while the agent's reply is read. */}
+    <Sequence name="Last frame of the take, held" from={footageFrames} durationInFrames={replyFrames}>
+      <AbsoluteFill style={{ opacity: out }}><Freeze frame={footageFrames - 2}><Recording intro={false} /></Freeze></AbsoluteFill>
+    </Sequence>
+    <Sequence name="Captions and messages" durationInFrames={bodyFrames}><AbsoluteFill style={{ opacity: out }}><Caption language={language} /></AbsoluteFill></Sequence>
+    <Sequence name="Closing" from={bodyFrames} durationInFrames={Math.round(closingSeconds * remoteFps)}><Closing language={language} /></Sequence>
+  </AbsoluteFill>;
+};
+
+/** Fifteen seconds for a README or a feed: the login, the refusal and the takeover, then the line. */
+export const RemoteShort: React.FC<{ language: RemoteLanguage }> = ({ language }) => {
+  const frame = useCurrentFrame(); const d = Math.round(shortDissolve * remoteFps);
+  let from = 0;
+  const parts = shortParts.map((part, i) => { const length = Math.round((part.to - part.from) * remoteFps); const at = from; from += length; return { ...part, at, length, i }; });
+  return <AbsoluteFill style={{ background: "#000", fontFamily, color: "#fff" }}>
+    {parts.map((part) => {
+      const local = frame - part.at;
+      const opacity = Math.min(interpolate(local, [0, d], [part.i === 0 ? 1 : 0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }), interpolate(local, [part.length - d, part.length], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }));
+      return <Sequence key={part.i} name={`Moment ${part.i + 1}`} from={part.at} durationInFrames={part.length}>
+        <AbsoluteFill style={{ opacity }}><Recording offset={part.from} intro={part.i === 0} /><Caption language={language} offset={part.from} /></AbsoluteFill>
+      </Sequence>;
+    })}
+    <Sequence name="Closing" from={from} durationInFrames={Math.round(shortClosingSeconds * remoteFps)}><Closing language={language} short /></Sequence>
+  </AbsoluteFill>;
+};
+import timeline from "./timeline.json" with { type: "json" };
+
+/** Editorial copy and timing for the remote-takeover film. Times are seconds on the condensed take. */
+export type RemoteLanguage = "en" | "ko";
+export const remoteFps = 30;
+export const footageSeconds = timeline.filmSeconds;
+/** The agent's reply arrives once the screen has settled; hold that last, still picture while it is shown. */
+export const replySeconds = 4.6;
+export const closingSeconds = 6.0;
+export const remoteDuration = Math.round((footageSeconds + replySeconds + closingSeconds) * remoteFps);
+
+type Event = { t: number; event: string; name?: string; cmd?: string; label?: string; x?: number; y?: number; text?: string };
+const events = timeline.events as Event[];
+const beat = (name: string) => events.find((e) => e.event === "beat" && e.name === name)!.t;
+const card = (needle: string) => events.find((e) => e.event === "card" && e.cmd?.includes(needle))!.t;
+const clickAfter = (t: number) => events.find((e) => e.event === "click" && e.t >= t)!.t;
+
+export const moments = {
+  login: beat("login"), join: beat("join_card"), allowed: clickAfter(beat("join_card")),
+  firstCard: card("status"), rmCard: card("rm "), denied: clickAfter(card("rm ")),
+  asked: events.find((e) => e.event === "agent_prompt")!.t, takeover: beat("takeover"), continued: beat("continue"), startCard: card("start"), healthCard: card("health"),
+  healthApproved: clickAfter(card("health")), end: footageSeconds,
+};
+/** What the agent actually wrote when it finished, verbatim from the take. */
+export const agentReply = events.filter((e) => e.event === "agent_turn_done").at(-1)!.text!;
+export const clicks = events.filter((e) => e.event === "click").map((e) => ({ t: e.t, x: e.x!, y: e.y!, label: e.label! }));
+
+/** A caption, or a message passed between the human and the agent client (`from`). */
+export type Cue = { start: number; end: number; line: string; sub?: string; from?: "you" | "agent" };
+const m = moments;
+const copy = {
+  en: {
+    login: ["You log in.", "Your password never reaches your agent."],
+    ask: ["You", "The API on staging is down. Look at my Conn terminal and get it running again."],
+    join: ["It asks to join. Once.", ""],
+    picks: ["It picks up the shell you are already in.", ""],
+    review: ["On your server, every command waits for you.", ""],
+    wants: ["It wants to delete the whole cache.", ""],
+    no: ["You say no.", ""],
+    type: ["Then you just type.", "Your keystroke takes the terminal back."],
+    tell: ["You", "I cleared the stale lock myself, so keep the cache. Read the terminal and continue."],
+    reply: ["Claude Code", agentReply],
+    agentNote: "your agent, in its own app",
+    worksWith: "Works with",
+    reads: ["It reads what you did.", ""],
+    finish: ["And finishes the job.", ""],
+    headline: ["Your agent works in your terminal.", "You keep the keyboard."],
+    closing: "Conn: a terminal you share with the agent you already use.",
+    disclosure: "Real Conn, a real SSH login and a real Claude Code session in one continuous take. Prepared scenario; still moments shortened.",
+  },
+  ko: {
+    login: ["로그인은 내가 합니다.", "암호는 에이전트에게 가지 않습니다."],
+    ask: ["나", "staging의 API가 죽었어. 내 Conn 터미널을 보고 다시 살려 줘."],
+    join: ["참여해도 되는지 묻습니다. 한 번만.", ""],
+    picks: ["내가 들어와 있던 셸을 그대로 이어받습니다.", ""],
+    review: ["내 서버에서는 모든 명령이 나를 기다립니다.", ""],
+    wants: ["캐시를 통째로 지우겠다고 합니다.", ""],
+    no: ["안 됩니다.", ""],
+    type: ["그리고 그냥 직접 칩니다.", "키를 누르는 순간 터미널은 다시 내 것입니다."],
+    tell: ["나", "오래된 잠금은 내가 풀었으니 캐시는 그대로 둬. 터미널을 읽고 이어서 해."],
+    reply: ["Claude Code", "API가 :8080에서 다시 올라왔습니다. `./api.sh health`가 `{\"status\": \"ok\", \"cache\": \"warm\"}`을 돌려주고, 캐시는 그대로이며, 제어권은 반납했습니다."],
+    agentNote: "내가 쓰는 에이전트, 별도의 앱",
+    worksWith: "함께 쓰는 에이전트",
+    reads: ["내가 한 일을 읽습니다.", ""],
+    finish: ["그리고 작업을 끝냅니다.", ""],
+    headline: ["에이전트는 내 터미널에서 일하고,", "키보드는 내가 쥡니다."],
+    closing: "Conn: 지금 쓰는 에이전트와 함께 쓰는 터미널.",
+    disclosure: "실제 Conn, 실제 SSH 로그인, 실제 Claude Code 세션을 한 번에 이어서 촬영했습니다. 준비된 시나리오이며 화면이 멈춘 구간만 줄였습니다.",
+  },
+} as const;
+
+export const remoteCopy = copy;
+export function cues(language: RemoteLanguage): Cue[] {
+  const c = copy[language];
+  const say = (start: number, end: number, pair: readonly [string, string]): Cue => ({ start, end, line: pair[0], sub: pair[1] || undefined });
+  const message = (start: number, end: number, pair: readonly [string, string], from: "you" | "agent"): Cue => ({ start, end, line: pair[1], sub: pair[0], from });
+  return [
+    say(0.3, m.asked - 1.2, c.login),
+    message(m.asked - 1.2, m.asked + 2.3, c.ask, "you"),
+    say(m.asked + 2.3, m.allowed + 0.9, c.join),
+    say(m.allowed + 0.9, m.firstCard - 0.2, c.picks),
+    say(m.firstCard - 0.2, m.rmCard - 0.3, c.review),
+    say(m.rmCard - 0.3, m.denied - 0.1, c.wants),
+    say(m.denied - 0.1, m.takeover + 0.2, c.no),
+    say(m.takeover + 0.2, m.continued - 0.1, c.type),
+    message(m.continued - 0.1, m.continued + 3.6, c.tell, "you"),
+    say(m.continued + 3.6, m.healthCard - 0.2, c.reads),
+    say(m.healthCard - 0.2, m.end + 0.2, c.finish),
+    message(m.end + 0.2, m.end + replySeconds, c.reply, "agent"),
+  ];
+}
+
+/** Camera: scale and the point of the recording (0..1) kept at the centre of the window. */
+export type Shot = { t: number; scale: number; x: number; y: number };
+export const camera: Shot[] = [
+  // Open close on the login, then hold the whole window: nothing is cropped while the story unfolds.
+  { t: 0, scale: 1.5, x: 0.28, y: 0.28 },
+  { t: m.join - 1.5, scale: 1.5, x: 0.28, y: 0.28 },
+  { t: m.join + 0.1, scale: 1, x: 0.5, y: 0.5 },
+  { t: m.end, scale: 1, x: 0.5, y: 0.5 },
+];
+
+/** The 15-second edition: three moments of the same take, joined with dissolves, then the closing card. */
+export const shortParts = [
+  { from: 0.5, to: 4.9 },
+  { from: m.rmCard - 0.5, to: m.takeover + 3.1 },
+] as const;
+export const shortClosingSeconds = 3.6;
+export const shortDissolve = 0.4;
+export const shortDuration = Math.round((shortParts.reduce((sum, p) => sum + (p.to - p.from), 0) + shortClosingSeconds) * remoteFps);
+{
+ "realSeconds": 64.69,
+ "filmSeconds": 46.67,
+ "hold": 0.45,
+ "events": [
+  {
+   "t": 0.885,
+   "event": "beat",
+   "name": "login",
+   "realT": 3.171
+  },
+  {
+   "t": 0.885,
+   "event": "human_type",
+   "label": "ssh staging",
+   "realT": 3.171
+  },
+  {
+   "t": 2.726,
+   "event": "human_type",
+   "label": "(hidden password)",
+   "realT": 5.012
+  },
+  {
+   "t": 4.274,
+   "event": "logged_in",
+   "secretOnScreen": false,
+   "realT": 6.56
+  },
+  {
+   "t": 5.677,
+   "event": "agent_prompt",
+   "prompt": "The API on staging is down. Look at my Conn terminal and get it running again.",
+   "realT": 7.963
+  },
+  {
+   "t": 5.98,
+   "event": "beat",
+   "name": "join_card",
+   "realT": 8.266
+  },
+  {
+   "t": 9.379,
+   "event": "click",
+   "label": "Allow",
+   "x": 1083.7734375,
+   "y": 476.30078125,
+   "realT": 11.665
+  },
+  {
+   "t": 14.394,
+   "event": "card",
+   "cmd": "./api.sh status",
+   "intent": "Show the current status of the API service (read-only)",
+   "label": "⚠ Review command in this shell/remote environment",
+   "realT": 17.759
+  },
+  {
+   "t": 16.371,
+   "event": "click",
+   "label": "Approve",
+   "x": 908.1484375,
+   "y": 483.390625,
+   "realT": 19.76
+  },
+  {
+   "t": 19.438,
+   "event": "card",
+   "cmd": "tail -n 3 api.log",
+   "intent": "Show the last 3 lines of api.log (read-only) to find why the API stopped",
+   "label": "⚠ Review command in this shell/remote environment",
+   "realT": 27.574
+  },
+  {
+   "t": 20.73,
+   "event": "click",
+   "label": "Approve",
+   "x": 908.1484375,
+   "y": 483.390625,
+   "realT": 28.875
+  },
+  {
+   "t": 24.312,
+   "event": "card",
+   "cmd": "rm -rf cache/",
+   "intent": "Delete the entire cache/ directory, including the stale index.lock blocking startup",
+   "label": "⚠ Review command in this shell/remote environment",
+   "realT": 37.973
+  },
+  {
+   "t": 24.312,
+   "event": "beat",
+   "name": "deny",
+   "realT": 37.973
+  },
+  {
+   "t": 26.608,
+   "event": "click",
+   "label": "Deny",
+   "x": 992.828125,
+   "y": 483.390625,
+   "realT": 40.274
+  },
+  {
+   "t": 27.628,
+   "event": "beat",
+   "name": "takeover",
+   "realT": 41.806
+  },
+  {
+   "t": 27.628,
+   "event": "human_type",
+   "label": "./api.sh unlock",
+   "realT": 41.808
+  },
+  {
+   "t": 29.116,
+   "event": "agent_turn_done",
+   "text": "The `rm -rf cache/` command was denied, so I'm stopping here without retrying or trying another route.",
+   "realT": 43.341
+  },
+  {
+   "t": 30.798,
+   "event": "beat",
+   "name": "continue",
+   "realT": 45.023
+  },
+  {
+   "t": 30.798,
+   "event": "agent_prompt",
+   "prompt": "I cleared the stale lock myself, so keep the cache. Read the terminal and continue.",
+   "realT": 45.023
+  },
+  {
+   "t": 38.14,
+   "event": "card",
+   "cmd": "./api.sh start",
+   "intent": "Start the API service via api.sh (cache and lock already handled)",
+   "label": "⚠ Review command in this shell/remote environment",
+   "realT": 53.57
+  },
+  {
+   "t": 39.43,
+   "event": "click",
+   "label": "Approve",
+   "x": 908.1484375,
+   "y": 483.390625,
+   "realT": 54.871
+  },
+  {
+   "t": 42.16,
+   "event": "card",
+   "cmd": "./api.sh health",
+   "intent": "Run the API health check (read-only) to confirm the service is up",
+   "label": "⚠ Review command in this shell/remote environment",
+   "realT": 59.191
+  },
+  {
+   "t": 43.459,
+   "event": "click",
+   "label": "Approve",
+   "x": 908.1484375,
+   "y": 483.390625,
+   "realT": 60.492
+  },
+  {
+   "t": 46.665,
+   "event": "agent_turn_done",
+   "text": "The API is back up on :8080. `./api.sh health` returns `{\"status\": \"ok\", \"cache\": \"warm\"}`, the cache is intact, and I've released control.",
+   "realT": 66.082
+  },
+  {
+   "t": 46.665,
+   "event": "result",
+   "healthy": true,
+   "controller": "human",
+   "realT": 66.183
+  }
+ ]
+}import { FootageStage } from "../FootageStage";
 import type { Language } from "../copy";
 export const Timeline: React.FC<{ language: Language }> = ({ language }) => <FootageStage id="timeline" language={language} accent="#b5aaff" />;
 import { FootageStage } from "../FootageStage";
@@ -442,6 +887,7 @@ export const Request: React.FC<{ language: Language }> = ({ language }) => <Foot
 import { CanvasImage, Interactive, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { closingCopy, type Language } from "../copy";
 import { Stage } from "../Stage";
+import { repository } from "../brand";
 
 export const Closing: React.FC<{ language: Language }> = ({ language }) => {
   const frame = useCurrentFrame();
@@ -458,7 +904,7 @@ export const Closing: React.FC<{ language: Language }> = ({ language }) => {
     </Interactive.Div>
     <Interactive.Div name="Repository" style={{ position: "absolute", top: 683, left: 100, right: 100, textAlign: "center",
       fontSize: 32, color: "#beb4f7", letterSpacing: 0.5 }}>
-      github.com/eggplantiny/conn
+      {repository}
     </Interactive.Div>
     <Interactive.Div name="Recording disclosure" style={{ position: "absolute", bottom: 93, left: 100, right: 100, textAlign: "center",
       fontSize: 22, color: "#9699aa" }}>

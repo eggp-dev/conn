@@ -13,9 +13,9 @@ Conn은 지금 쓰는 AI 에이전트와 함께 쓰는 터미널입니다. 에�
 - **입력하면 바로 넘겨받습니다.** 키를 하나만 눌러도 에이전트의 다음 입력이 셸에 닿기 전에 제어권이 돌아옵니다. 잘못된 곳을 고친 뒤 "화면을 읽고 이어서 해"라고 말하면 됩니다.
 - **쓰던 에이전트, 쓰던 모델 그대로.** **Codex, Claude Code, Cursor, GitHub Copilot**과 MCP로 연결됩니다. Conn은 모델을 실행하지 않고, 추가 구독도 필요 없습니다.
 
-[![15초 미리보기. 에이전트가 엉뚱한 폴더에서 시작하자 사람이 Conn에 직접 입력해 고치고, 에이전트가 새 위치에서 이어가는 모습](docs/assets/conn-handoff-preview-ko.webp)](docs/assets/conn-handoff-ko.mp4)
+[![15초 미리보기. 사람이 SSH로 서버에 로그인하고, 에이전트가 캐시 삭제를 제안하자 거부한 뒤 직접 입력해 고치는 모습](docs/assets/conn-remote-preview-ko.webp)](docs/assets/conn-remote-ko.mp4)
 
-*15초: 에이전트가 엉뚱한 폴더에서 시작합니다. 내가 `cd`를 치고 터미널을 읽으라고 말하면 그 자리에서 이어갑니다.* [70초 전체 영상](docs/assets/conn-handoff-ko.mp4) · [English video](docs/assets/conn-handoff-en.mp4) · [촬영 설명](docs/demo.ko.md)
+*내 서버에는 내가 로그인합니다. 에이전트가 캐시를 통째로 지우겠다고 합니다. 안 된다고 하고 내가 직접 고치면, 에이전트가 나머지를 끝냅니다.* [52초 전체 영상](docs/assets/conn-remote-ko.mp4) · [English video](docs/assets/conn-remote-en.mp4) · [한 번에 이어서 찍었습니다: 촬영 기록](media/demo/RECORDING-REMOTE.md)
 
 ## 설치
 
@@ -67,6 +67,7 @@ https://github.com/user-attachments/assets/4f06180c-6a2c-4c10-99e1-7941db86470b
 
 ## 더 알아보기
 
+- [이전 영상: 에이전트가 엉뚱한 폴더에서 시작하면 내가 고칩니다](docs/demo.ko.md)
 - [협업 이야기: 같은 터미널에서의 작은 보정](docs/collaboration-story.ko.md)
 - [FAQ: 제어권·SSH·암호·기록](docs/faq.ko.md)
 - [프로필과 백엔드](docs/backends.md) · [CLI 설치](docs/getting-started.ko.md) · [외부 자동화](docs/external-automation.ko.md)

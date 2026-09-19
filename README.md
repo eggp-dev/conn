@@ -13,9 +13,9 @@ Conn is a terminal you share with the AI agent you already use. The agent picks 
 - **Type to take over.** Any keystroke takes control back before the agent's next input reaches the shell. Fix what is wrong, then tell it to read the screen and continue.
 - **Your agent, your model.** Works with **Codex, Claude Code, Cursor and GitHub Copilot** over MCP. Conn runs no model and needs no extra subscription.
 
-[![15-second preview. The agent starts in the wrong folder, the user types a correction in Conn, and the agent continues from the new location](docs/assets/conn-handoff-preview-en.webp)](docs/assets/conn-handoff-en.mp4)
+[![15-second preview. The user logs in to a server over SSH, the agent proposes deleting the cache, the user denies it and types the fix](docs/assets/conn-remote-preview-en.webp)](docs/assets/conn-remote-en.mp4)
 
-*15 seconds: the agent starts in the wrong folder. You type `cd`, tell it to read the terminal, and it carries on from there.* [Full 70 seconds](docs/assets/conn-handoff-en.mp4) · [한국어 영상](docs/assets/conn-handoff-ko.mp4) · [How it was recorded](docs/demo.md)
+*You log in to your server. Your agent asks to delete the whole cache. You say no, type the fix yourself, and it finishes the job.* [Watch the full 52 seconds](docs/assets/conn-remote-en.mp4) · [한국어 영상](docs/assets/conn-remote-ko.mp4) · [One continuous take: how it was recorded](media/demo/RECORDING-REMOTE.md)
 
 ## Install
 
@@ -67,6 +67,7 @@ Upgrade the app and restart its MCP clients together. [Changelog](CHANGELOG.md) 
 
 ## More
 
+- [Earlier film: the agent starts in the wrong folder, you correct it](docs/demo.md)
 - [The story: a small correction in a shared terminal](docs/collaboration-story.md)
 - [FAQ: control, SSH, passwords, and history](docs/faq.md)
 - [Profiles and backends](docs/backends.md) · [CLI setup](docs/getting-started.md) · [External automation](docs/external-automation.md)
