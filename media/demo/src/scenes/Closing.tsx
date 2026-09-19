@@ -1,6 +1,7 @@
 import { CanvasImage, Interactive, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { closingCopy, type Language } from "../copy";
 import { Stage } from "../Stage";
+import { repository } from "../brand";
 
 export const Closing: React.FC<{ language: Language }> = ({ language }) => {
   const frame = useCurrentFrame();
@@ -17,7 +18,7 @@ export const Closing: React.FC<{ language: Language }> = ({ language }) => {
     </Interactive.Div>
     <Interactive.Div name="Repository" style={{ position: "absolute", top: 683, left: 100, right: 100, textAlign: "center",
       fontSize: 32, color: "#beb4f7", letterSpacing: 0.5 }}>
-      github.com/eggplantiny/conn
+      {repository}
     </Interactive.Div>
     <Interactive.Div name="Recording disclosure" style={{ position: "absolute", bottom: 93, left: 100, right: 100, textAlign: "center",
       fontSize: 22, color: "#9699aa" }}>

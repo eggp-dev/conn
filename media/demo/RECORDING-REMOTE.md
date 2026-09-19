@@ -4,7 +4,7 @@ Source behind `ConnRemoteEN`, `ConnRemoteKO` and their 15-second editions. Earli
 
 ## What is real
 
-- **One continuous take.** The terminal you see is never cut: no frame in which the picture changes was removed or reordered. Only spans in which the screen did not change were shortened (0.45s while the agent was thinking, up to 3s while a card waited for the human). The take ran 65s and plays in 47s. The 15-second edition shows three parts of the same take joined with dissolves.
+- **One continuous take.** The terminal you see is never cut: no frame in which the picture changes was removed or reordered. Only spans in which the screen did not change were shortened (0.45s while the agent was thinking, up to about 3s while a card waited for the human). The take ran 65s and plays in 47s. After it ends on a still screen, the last frame is held for a few seconds while the agent's reply is shown. The 15-second edition shows three parts of the same take joined with dissolves.
 - **Real product.** Conn 0.8.1: the native Rust backend and the actual Svelte frontend through the browser test adapter, default policy, local Bash shell integration active. Because `ssh` is in the foreground, every agent command gets the generic review card, exactly as it does for a user.
 - **Real login.** `ssh staging` reaches an OpenSSH server in a disposable local container bound to `127.0.0.1`, with a synthetic password typed at the hidden prompt. The capture checks that the password never appears on screen.
 - **Real agent.** Claude Code 2.1.278, headless, one session for the whole take (so one connection and one "wants to join"), talking to Conn only through its MCP server. Its tool calls, wording and the reasons on the cards are its own.
@@ -12,6 +12,7 @@ Source behind `ConnRemoteEN`, `ConnRemoteKO` and their 15-second editions. Earli
 ## What is staged
 
 - The operator plays the human through real browser key and mouse events: types `ssh staging` and the password, clicks **Allow**, **Approve** and **Deny** on the actual cards, types `./api.sh unlock`. Click rings and the camera move are editorial overlays; product pixels are untouched.
+- The message cards under the window ("You → Claude Code", and the agent's reply at the end) are editorial graphics, not a recording of the agent client. They exist to show that the agent lives in its own app. The English text is verbatim: the prompts as sent and the reply as the agent wrote it, read from the take. The Korean film shows translations of the same messages.
 - The agent received a prepared brief listing the plan, including clearing the cache with `rm -rf cache/` when it found the stale lock, and telling it to stop when denied or when the human takes the keyboard. The wrong turn is staged so that it happens on camera.
 - `staging`, `api.sh`, the log and the lock are fixtures. `ssh` resolves the alias through a wrapper on the film shell's `PATH`.
 
@@ -31,7 +32,9 @@ npx remotion render ConnRemoteEN ../../docs/assets/conn-remote-en.mp4    # also 
 node --experimental-strip-types scripts/export-remote-captions.mjs
 ```
 
-Captions and camera follow the events recorded in `timeline.json`, so a new take needs no manual retiming. Editorial copy lives in `src/remote/edit.ts`.
+Captions, camera and the agent's reply follow the events recorded in `timeline.json`, so a new take needs no manual retiming; after a retake only the Korean translation of the reply in `src/remote/edit.ts` needs a look. Editorial copy lives there too.
+
+The repository address and the list of agent clients in the closing card come from [`src/brand.ts`](src/brand.ts). If the repository moves, change that one line and re-render; every film and poster in this project reads it from there.
 
 ## Limits
 

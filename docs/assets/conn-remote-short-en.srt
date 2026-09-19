@@ -1,22 +1,27 @@
 1
-00:00:00,000 --> 00:00:04,400
+00:00:00,000 --> 00:00:03,977
 You log in.
 Your password never reaches your agent.
 
 2
-00:00:04,600 --> 00:00:07,072
-It wants to delete the whole cache.
+00:00:03,977 --> 00:00:04,400
+The API on staging is down. Look at my Conn terminal and get it running again.
+You
 
 3
-00:00:07,072 --> 00:00:08,498
-You say no.
+00:00:04,600 --> 00:00:07,096
+It wants to delete the whole cache.
 
 4
-00:00:08,498 --> 00:00:11,398
+00:00:07,096 --> 00:00:08,416
+You say no.
+
+5
+00:00:08,416 --> 00:00:11,286
 Then you just type.
 Your keystroke takes the terminal back.
 
-5
-00:00:11,798 --> 00:00:14,998
+6
+00:00:11,716 --> 00:00:14,916
 Your agent works in your terminal. You keep the keyboard.
 Real Conn, a real SSH login and a real Claude Code session in one continuous take. Prepared scenario; still moments shortened.

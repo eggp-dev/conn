@@ -1,5 +1,6 @@
 import { CanvasImage, staticFile } from "remotion";
 import { Stage } from "./Stage";
+import { repository } from "./brand";
 
 export const Poster: React.FC = () => <Stage>
   <div style={{ position: "absolute", width: 880, height: 880, left: 900, top: 30, borderRadius: "50%",
@@ -19,5 +20,5 @@ export const Poster: React.FC = () => <Stage>
     </div>
     Watch Codex + Conn work together
   </div>
-  <div style={{ position: "absolute", left: 172, bottom: 115, fontSize: 24, color: "#717689" }}>github.com/eggplantiny/conn</div>
+  <div style={{ position: "absolute", left: 172, bottom: 115, fontSize: 24, color: "#717689" }}>{repository}</div>
 </Stage>;

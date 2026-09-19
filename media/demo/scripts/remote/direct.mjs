@@ -37,7 +37,7 @@ function startAgent() {
   p.stdout.pipe(createWriteStream(`${out}/agent.jsonl`)); p.stderr.pipe(createWriteStream(`${out}/agent-stderr.log`));
   let buf = "", turnDone = null;
   p.stdout.on("data", d => { buf += d; let i; while ((i = buf.indexOf("\n")) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 1);
-    try { const m = JSON.parse(line); if (m.type === "result") { log({ event: "agent_turn_done", text: String(m.result ?? "").slice(0, 160) }); turnDone?.(); } } catch {} } });
+    try { const m = JSON.parse(line); if (m.type === "result") { log({ event: "agent_turn_done", text: String(m.result ?? "") }); turnDone?.(); } } catch {} } });
   p.on("exit", code => { log({ event: "agent_exit", code }); turnDone?.(); });
   p.say = prompt => { log({ event: "agent_prompt", prompt }); const done = new Promise(r => (turnDone = r));
     p.stdin.write(JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text: prompt }] } }) + "\n"); return done; };
@@ -81,7 +81,7 @@ try {
   let denied = false, approvals = 0;
   const review = async () => {
     if (await b.js(`!!document.querySelector('[role=alertdialog]')`)) {
-      log({ event: "beat", name: "join_card" }); await sleep(1500);
+      log({ event: "beat", name: "join_card" }); await sleep(3400);   // long enough for a viewer to read the card
       await h.click(`document.querySelector('[role=alertdialog] .btn.primary')`, "Allow"); await sleep(500); return;
     }
     const cmd = await b.js(`document.querySelector('.hold code.raw')?.innerText ?? null`);

@@ -1,40 +1,46 @@
 WEBVTT
 
-00:00:00.300 --> 00:00:04.933
+00:00:00.300 --> 00:00:04.477
 You log in.
 Your password never reaches your agent.
 
-00:00:04.933 --> 00:00:06.933
-You, to your agent: “The API on staging is down. Look at my terminal and get it running.”
+00:00:04.477 --> 00:00:07.977
+The API on staging is down. Look at my Conn terminal and get it running again.
+You
 
-00:00:06.933 --> 00:00:08.534
+00:00:07.977 --> 00:00:10.279
 It asks to join. Once.
 
-00:00:08.534 --> 00:00:13.770
+00:00:10.279 --> 00:00:14.194
 It picks up the shell you are already in.
 
-00:00:13.770 --> 00:00:23.431
+00:00:14.194 --> 00:00:24.012
 On your server, every command waits for you.
 
-00:00:23.431 --> 00:00:25.903
+00:00:24.012 --> 00:00:26.508
 It wants to delete the whole cache.
 
-00:00:25.903 --> 00:00:27.329
+00:00:26.508 --> 00:00:27.828
 You say no.
 
-00:00:27.329 --> 00:00:30.529
+00:00:27.828 --> 00:00:30.698
 Then you just type.
 Your keystroke takes the terminal back.
 
-00:00:30.529 --> 00:00:34.029
-You, to your agent: “I cleared the lock myself. Read the terminal and continue.”
+00:00:30.698 --> 00:00:34.398
+I cleared the stale lock myself, so keep the cache. Read the terminal and continue.
+You
 
-00:00:34.029 --> 00:00:41.698
+00:00:34.398 --> 00:00:41.960
 It reads what you did.
 
-00:00:41.698 --> 00:00:46.650
+00:00:41.960 --> 00:00:46.870
 And finishes the job.
 
-00:00:47.050 --> 00:00:52.050
+00:00:46.870 --> 00:00:51.270
+The API is back up on :8080. `./api.sh health` returns `{"status": "ok", "cache": "warm"}`, the cache is intact, and I've released control.
+Claude Code
+
+00:00:47.070 --> 00:00:52.670
 Your agent works in your terminal. You keep the keyboard.
 Real Conn, a real SSH login and a real Claude Code session in one continuous take. Prepared scenario; still moments shortened.

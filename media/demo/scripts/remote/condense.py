@@ -38,7 +38,7 @@ reading = []
 for i, e in enumerate(events):
     if e["event"] == "card" or (e["event"] == "beat" and e.get("name") == "join_card"):
         click = next((c for c in events[i + 1:] if c["event"] == "click"), None)
-        if click: reading.append((e["t"], click["t"], 3.0 if "rm " in e.get("cmd", "") else 1.7 if e["event"] == "card" else 1.5))
+        if click: reading.append((e["t"], click["t"], 3.0 if "rm " in e.get("cmd", "") else 1.7 if e["event"] == "card" else 3.2))
 def hold_at(t):
     for a0, a1, h in reading:
         if a0 <= t <= a1: return h

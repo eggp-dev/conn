@@ -1,180 +1,180 @@
 {
- "realSeconds": 65.17,
- "filmSeconds": 46.65,
+ "realSeconds": 64.69,
+ "filmSeconds": 46.67,
  "hold": 0.45,
  "events": [
   {
-   "t": 0.887,
+   "t": 0.885,
    "event": "beat",
    "name": "login",
-   "realT": 3.161
+   "realT": 3.171
   },
   {
-   "t": 0.887,
+   "t": 0.885,
    "event": "human_type",
    "label": "ssh staging",
-   "realT": 3.161
+   "realT": 3.171
   },
   {
-   "t": 2.773,
+   "t": 2.726,
    "event": "human_type",
    "label": "(hidden password)",
-   "realT": 5.047
+   "realT": 5.012
   },
   {
-   "t": 4.324,
+   "t": 4.274,
    "event": "logged_in",
    "secretOnScreen": false,
-   "realT": 6.598
+   "realT": 6.56
   },
   {
-   "t": 5.728,
+   "t": 5.677,
    "event": "agent_prompt",
    "prompt": "The API on staging is down. Look at my Conn terminal and get it running again.",
-   "realT": 8.002
+   "realT": 7.963
   },
   {
-   "t": 6.033,
+   "t": 5.98,
    "event": "beat",
    "name": "join_card",
-   "realT": 8.307
+   "realT": 8.266
   },
   {
-   "t": 7.534,
+   "t": 9.379,
    "event": "click",
    "label": "Allow",
    "x": 1083.7734375,
    "y": 476.30078125,
-   "realT": 9.808
+   "realT": 11.665
   },
   {
-   "t": 13.97,
+   "t": 14.394,
    "event": "card",
    "cmd": "./api.sh status",
-   "intent": "Show the API service status (read-only)",
+   "intent": "Show the current status of the API service (read-only)",
    "label": "⚠ Review command in this shell/remote environment",
-   "realT": 18.131
+   "realT": 17.759
   },
   {
-   "t": 15.943,
+   "t": 16.371,
    "event": "click",
    "label": "Approve",
    "x": 908.1484375,
    "y": 483.390625,
-   "realT": 20.132
+   "realT": 19.76
   },
   {
-   "t": 18.927,
+   "t": 19.438,
    "event": "card",
    "cmd": "tail -n 3 api.log",
-   "intent": "Show the last 3 lines of api.log (read-only)",
+   "intent": "Show the last 3 lines of api.log (read-only) to find why the API stopped",
    "label": "⚠ Review command in this shell/remote environment",
-   "realT": 27.328
+   "realT": 27.574
   },
   {
-   "t": 20.201,
+   "t": 20.73,
    "event": "click",
    "label": "Approve",
    "x": 908.1484375,
    "y": 483.390625,
-   "realT": 28.629
+   "realT": 28.875
   },
   {
-   "t": 23.731,
+   "t": 24.312,
    "event": "card",
    "cmd": "rm -rf cache/",
-   "intent": "Delete the whole cache/ directory (including the stale index.lock) so the API can start",
+   "intent": "Delete the entire cache/ directory, including the stale index.lock blocking startup",
    "label": "⚠ Review command in this shell/remote environment",
-   "realT": 37.712
+   "realT": 37.973
   },
   {
-   "t": 23.731,
+   "t": 24.312,
    "event": "beat",
    "name": "deny",
-   "realT": 37.712
+   "realT": 37.973
   },
   {
-   "t": 26.003,
+   "t": 26.608,
    "event": "click",
    "label": "Deny",
    "x": 992.828125,
    "y": 483.390625,
-   "realT": 40.012
+   "realT": 40.274
   },
   {
-   "t": 27.129,
+   "t": 27.628,
    "event": "beat",
    "name": "takeover",
-   "realT": 41.523
+   "realT": 41.806
   },
   {
-   "t": 27.129,
+   "t": 27.628,
    "event": "human_type",
    "label": "./api.sh unlock",
-   "realT": 41.528
+   "realT": 41.808
   },
   {
-   "t": 29.302,
+   "t": 29.116,
    "event": "agent_turn_done",
-   "text": "I stopped because you denied `rm -rf cache/`, and I haven't run anything else.",
-   "realT": 43.75
+   "text": "The `rm -rf cache/` command was denied, so I'm stopping here without retrying or trying another route.",
+   "realT": 43.341
   },
   {
-   "t": 30.629,
+   "t": 30.798,
    "event": "beat",
    "name": "continue",
-   "realT": 45.077
+   "realT": 45.023
   },
   {
-   "t": 30.629,
+   "t": 30.798,
    "event": "agent_prompt",
    "prompt": "I cleared the stale lock myself, so keep the cache. Read the terminal and continue.",
-   "realT": 45.077
+   "realT": 45.023
   },
   {
-   "t": 37.206,
+   "t": 38.14,
    "event": "card",
    "cmd": "./api.sh start",
-   "intent": "Start the API service (cache is kept as-is)",
+   "intent": "Start the API service via api.sh (cache and lock already handled)",
    "label": "⚠ Review command in this shell/remote environment",
-   "realT": 52.68
+   "realT": 53.57
   },
   {
-   "t": 38.506,
+   "t": 39.43,
    "event": "click",
    "label": "Approve",
    "x": 908.1484375,
    "y": 483.390625,
-   "realT": 53.981
+   "realT": 54.871
   },
   {
-   "t": 41.898,
+   "t": 42.16,
    "event": "card",
    "cmd": "./api.sh health",
-   "intent": "Run the API health check (read-only)",
+   "intent": "Run the API health check (read-only) to confirm the service is up",
    "label": "⚠ Review command in this shell/remote environment",
-   "realT": 59.817
+   "realT": 59.191
   },
   {
-   "t": 43.196,
+   "t": 43.459,
    "event": "click",
    "label": "Approve",
    "x": 908.1484375,
    "y": 483.390625,
-   "realT": 61.118
+   "realT": 60.492
   },
   {
-   "t": 46.653,
+   "t": 46.665,
    "event": "agent_turn_done",
-   "text": "The API is back up on :8080 (pid 185), and health returns `{\"status\": \"ok\", \"cache\": \"warm\"}`, so the cache was kept. I've released control.",
-   "realT": 66.507
+   "text": "The API is back up on :8080. `./api.sh health` returns `{\"status\": \"ok\", \"cache\": \"warm\"}`, the cache is intact, and I've released control.",
+   "realT": 66.082
   },
   {
-   "t": 46.653,
+   "t": 46.665,
    "event": "result",
    "healthy": true,
    "controller": "human",
-   "realT": 66.609
+   "realT": 66.183
   }
  ]
 }
