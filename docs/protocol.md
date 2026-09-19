@@ -1,6 +1,6 @@
 # Agent socket protocol v2
 
-**v0.7.0 preview.** v2 removes public owner/frontend operations and headless
+**v0.8.0 preview.** v2 removes public owner/frontend operations and headless
 observation. v0.6.0 uses the previous contract. Update the app, CLI and
 MCP adapter together; there is no downgrade to a raw-output or Rust-screen fallback.
 
@@ -27,13 +27,24 @@ Example response (IDs and modes vary):
 {"id":1,"result":{"protocolVersion":2,"conn":3,"kind":"agent","attended":"t1","session":"t1","mode":"copilot","effectiveMode":"copilot"}}
 ```
 
+### Admission
+
+The desktop app asks its owner before a new connection participates. `hello` then returns
+`"admission":"pending"` with no session, mode or attention data. While pending, discovery
+calls (`sessions`, `list_tabs`, `affordances`, `navigation_affordances`, `status`) return
+`admission_pending` at once; other calls wait up to 25 seconds for the owner's answer, so the
+first real call succeeds right after **Allow**. A denied connection receives
+`admission_denied` for everything; the answer is final for that connection and is never
+inherited by a later connection with the same label. `tools_changed` is sent when the owner
+answers. Embedders of the core default to admitting every connection (`"admission":"granted"`).
+
 A connection binds to the currently attended shared session it may participate in at hello. When the human
 changes tabs the binding does not follow. A request can name `session` explicitly, or
 use `switch_tab`. Hello may return null session/mode fields when no shared session is
 available; the connection can still appear as a sharing candidate in the owner UI.
 
 `kind: "human"`, `kind: "frontend"`, raw output subscriptions, `input`, `take`, approvals,
-mode/settings changes, `set_attended`, frame publication and sharing are unavailable
+mode/settings changes, `set_attended` and sharing are unavailable
 on this transport. These belong to the window-bound native owner bridge. The browser
 test adapter uses that same in-process owner bridge behind its development authentication;
 it is not an agent-provided frontend identity. Never expose it publicly.
@@ -43,41 +54,40 @@ it is not an agent-provided frontend identity. Never expose it publicly.
 | Method | Parameters | Result |
 | --- | --- | --- |
 | `sessions` / `list_tabs` | — | Discovery of sessions this connection may participate in, count, bound session and attended session. Private and unselected sessions are omitted. |
-| `open_tab` | `{reason?}` | New tab and connection binding; starts unattended. Requires the host opener and the matching capability. |
-| `switch_tab` | `{tab}` number or ID | Changes this agent's binding, not the human's displayed tab. |
+| `open_tab` | `{reason?}` | New tab and connection binding; the lease and pending work in the tab being left are released. The human view stays where it is and the tab asks for attention; access follows participation, mode and control. Requires the host opener and the matching capability. |
+| `switch_tab` | `{tab}` number or ID | Changes this agent's binding, not the human's displayed tab. Leaving a tab releases the lease and cancels this connection's pending requests there: a lease belongs to its tab, and a connection holds one at a time. Because any request may name a permitted `session`, `request_control` for one session likewise gives up what the connection holds in every other session; reads by name cost nothing. A live, participating source whose owner mask omits `switch_tab` refuses the move (`masked`); a lost source never blocks recovery. Checks destination participation and navigation capability, even if the old shell closed or access was revoked. |
+| `navigation_affordances` | — | Connection-level navigation capabilities derived from permitted destinations; remains available when the bound session is unavailable. |
 | `request_attention` | `{reason?}` | Requests that the human return to the bound tab. |
 
-Discovery is not access. Per-session operations require participation, and observation
-and execution require a current presented surface. A selected agent can be denied on
-an unattended tab or while its owner surface is obscured. Entrust no longer permits
-background observation/execution. An agent-opened tab must be visited by the human before
-it can be observed; the agent cannot mark it attended itself.
+Discovery is not access. Operations require participation in the selected session.
+Window focus, minimization, occlusion, overlays and tab attendance do not grant or
+revoke access. The agent remains bound to its session when the human changes tabs.
+Control, mode, policy, approvals and lease checks still govern writes.
 
-## Presented snapshot
+## Session snapshot
 
-`snapshot` returns the actual owner-rendered terminal viewport, never independent
-scrollback, raw PTY bytes or the internal command-policy tracker. The response includes:
+`snapshot` returns the current terminal grid parsed from PTY output in the core.
+It excludes raw input, scrollback, environment and process memory. It does not track
+the owner's scroll position or include window chrome and overlays.
 
 | Field | Meaning |
 | --- | --- |
-| `surfaceId` | Owner surface identity |
-| `generation` | Surface invalidation boundary |
-| `revision` | Rendered-frame revision |
-| `outputSeq` | PTY output sequence acknowledged by that frame |
+| `surfaceId` | Stable session screen identity |
+| `generation` | Sharing boundary |
+| `revision` | Terminal text/cursor/alternate-screen revision |
+| `outputSeq` | Current PTY output sequence |
 | `size` | `{rows,cols}` |
-| `cursor` | Visible `{row,col}`, or null when outside the viewport |
-| `screen` | Displayed text rows, with concealed text excluded |
-| `alternateScreen` | Whether the active rendered buffer is the alternate screen |
-| `image` | Optional `{mimeType:"image/png",data:"base64"}` rendered image |
-| `imageUnavailable` | True when the renderer supplied text without a raster image |
-| `controller`, `processAlive` | Current collaboration/process state |
+| `cursor` | `{row,col}`, or null when hidden |
+| `screen` | Current grid rows, with ANSI conceal and explicit equal colors suppressed |
+| `alternateScreen` | Whether the alternate terminal screen is active |
+| `imageUnavailable` | True: this contract provides terminal text, not a screenshot |
+| `controller`, `processAlive` | Collaboration/process state |
 | `mode`, `effectiveMode` | Configured and current agent behavior |
 
-Publication must match the current output and generation. Missing/old owner frames
-return `surface_unavailable`; unattended observation returns `unattended`. The server
-may briefly wait for a matching render, but never substitutes hidden backing state.
-A sharing transition invalidates previous snapshots and pending response disclosure.
-See [visibility and trust limits](security.md#one-terminal-one-presented-surface).
+There is no renderer publication, heartbeat expiry or focus-dependent fallback.
+The same revision is used for completion context and stale-acceptance rejection.
+A sharing transition invalidates previous tokens and queued response disclosure.
+See [trust limits](security.md#one-terminal-one-presented-surface).
 
 ## Agent operations
 
@@ -100,6 +110,15 @@ for human acceptance and policy evaluation. Autopilot may write while holding co
 control approval is separate from command policy. Grace and pacing waits are handled by
 the adapter. Surface/participation changes cancel or suspend work instead of creating
 an invisible continuation path. A disconnected connection loses its lease and pending work.
+Transport closure is monitored while requests wait for control, Co-pilot acceptance or
+grace expiry; a pending request does not delay disconnect cleanup. Cancellation does
+not undo commands that already executed before the disconnect.
+
+A client may pipeline requests and close its write side. Requests queued before the
+close are still answered when they only read (`hello`, discovery, `snapshot`, `status`
+and state polls). Anything that writes, requests control or changes the binding is
+answered with `connection_closing` and does not run. An agent never submits a cursor
+line containing text the snapshot withholds; that ENTER returns `invalid_input`.
 
 There is no public `analyse` filesystem-inspection route or full owner status payload.
 Use the review UI for structural policy details and the current snapshot for terminal
@@ -135,12 +154,12 @@ content. Revocation cannot recall bytes already delivered to the client/model.
 
 ## Relevant errors
 
-`hello_required`, `owner_required`, `surface_unavailable`, `not_available`, `unattended`,
-`suspended`, `busy`, `not_controller`, `lease_expired`, `process_exited`, `invalid_input`,
+`hello_required`, `owner_required`, `surface_unavailable`, `not_available`,
+`busy`, `not_controller`, `lease_expired`, `process_exited`, `invalid_input`,
 `not_found`, `rate_limited`, `input_pending`, `approval_pending`, `exec_pending`, `proposal_pending`, `intent_required`,
-`masked`, `control_denied`, `wrong_mode`, `unsupported`, `io`, `parse`.
+`masked`, `control_denied`, `wrong_mode`, `unsupported`, `connection_closing`, `admission_pending`, `admission_denied`, `io`, `parse`.
 
-Private/unauthorized session access uses a generic unavailable response. A client should
+Private/unauthorized session access uses a generic unavailable response. The owner can start the app with `CONN_TRACE_REFUSALS=1` to print the cause of each such refusal to stderr (reasons and identifiers only). A client should
 not automatically bypass an unavailable surface, switch to a separate shell, or claim a
 command ran merely because it received a lease. Ask the human to restore the shared
 view and take a fresh snapshot.

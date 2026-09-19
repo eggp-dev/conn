@@ -575,7 +575,7 @@ dependencies = [
 
 [[package]]
 name = "conn-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -600,7 +600,7 @@ dependencies = [
 
 [[package]]
 name = "conn-desktop"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "base64 0.22.1",
  "cc",
@@ -622,7 +622,7 @@ dependencies = [
 
 [[package]]
 name = "conn-frontend"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "base64 0.22.1",
  "conn-core",
@@ -5235,8 +5235,6 @@ dependencies = [
 [[package]]
 name = "vt100"
 version = "0.15.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84cd863bf0db7e392ba3bd04994be3473491b31e66340672af5d11943c6274de"
 dependencies = [
  "itoa",
  "log",

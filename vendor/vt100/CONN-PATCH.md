@@ -1,0 +1,1 @@
+Based on vt100 0.15.2 (MIT). Local patch: retain SGR 8/28 conceal in cell attributes and formatted output. Conn observation suppresses concealed cells; terminal policy tracking remains separate from the visible projection. Regression coverage: crates/core/tests/screen.rs. Colon-subparameter forms of SGR 8 (`8:n`) also conceal, erring toward hiding.

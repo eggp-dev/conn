@@ -14,7 +14,7 @@
     {@const agent = tb.controller.type === "agent"}
     {@const waiting = tb.proposal?.ready ? tb.proposal : null}
     {@const c = agent ? agentColor(tb.controller.agentId) : tb.attention ? agentColor(tb.attention.agentId) : waiting ? agentColor(waiting.agentId) : "var(--muted)"}
-    <button class="tab" class:on={id === st.active} class:agent class:knock={!!tb.attention || !!tb.ctlReq || (!!waiting && id !== st.active)} class:paused={tb.paused} class:dead={!tb.processAlive && !tb.externalStarting}
+    <button class="tab" class:on={id === st.active} class:agent class:knock={!!tb.attention || !!tb.ctlReq || (!!waiting && id !== st.active)} class:dead={!tb.processAlive && !tb.externalStarting}
             style:--c={c} role="tab" aria-selected={id === st.active} onmousedown={(e) => e.preventDefault()} onclick={() => onselect(id)} title={[tb.profileName, tb.title].filter(Boolean).join(" · ")}>
       <span class="dot"></span>
       <span class="n">{i + 1}</span>
@@ -24,7 +24,6 @@
       {#if tb.approval}<span class="badge warn">{t("badge.approval")}</span>{/if}
       {#if waiting && id !== st.active}<span class="badge prop" style:--a={agentColor(waiting.agentId)} title={t("badge.proposal.title", { agent: waiting.agentId })}>{t("badge.proposal", { agent: waiting.agentId })}</span>{/if}
       {#if tb.attention}<span class="badge">{t("badge.knock", { agent: tb.attention.agentId })}</span>{/if}
-      {#if tb.paused}<span class="badge">{t("badge.paused")}</span>{/if}
       <span class="x" role="button" tabindex="-1" onclick={(e) => { e.stopPropagation(); onclose(id); }}>×</span>
     </button>
   {/each}
@@ -44,7 +43,6 @@
   .tab.agent.on { border-color: color-mix(in srgb, var(--c) 55%, var(--line)); }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c); flex: 0 0 7px; }
   .tab.knock .dot { animation: knock 1.4s ease-in-out infinite; }
-  .tab.paused .dot { box-shadow: inset 0 0 0 2px var(--bg); background: var(--warn); }
   .tab.dead .dot { background: var(--danger); }
   @keyframes knock { 0%, 100% { transform: scale(1); opacity: .6; } 50% { transform: scale(1.6); opacity: 1; } }
   .n { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 11px; }

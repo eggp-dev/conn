@@ -1,11 +1,11 @@
 # Conn product contract
 
-**Shared-surface hard cut · v0.7.0 preview.** [Architecture](architecture.md) · [한국어](PRD.ko.md)
+**Shared session screen · v0.8.0 preview.** [Architecture](architecture.md) · [한국어](PRD.ko.md)
 
 ## One shell, one shared view
 
 Conn lets a person and their agents work in the same terminal. They observe the
-same presented viewport and exchange input control. The person can correct a path,
+same current terminal screen and exchange input control. The person can correct a path,
 enter a password, stop a command, or continue alone without creating another shell.
 
 The first-use path is: install the app, open a shell, connect an agent, review its
@@ -18,7 +18,7 @@ the terminal into a configuration dashboard.
 | Concept | Owns |
 | --- | --- |
 | Session | PTY, process, execution profile, lifetime |
-| Surface | Actual rendered viewport, frame identity, freshness and visibility |
+| Surface | Current terminal grid, revision and output sequence |
 | Actor | A particular connection or native caller; its name is only a label |
 | Participation | Whether agents may join, and which connections may participate |
 | Authority | Who may submit input now; mode, lease, policy, review and grace |
@@ -28,11 +28,12 @@ the terminal into a configuration dashboard.
 ## Invariants
 
 1. **One execution substrate.** Sharing never replaces the PTY or reconnects SSH.
-2. **One observation source.** An agent snapshot uses the owner-rendered terminal
-   viewport, including the person's scroll position. No headless VT fallback.
-3. **Visible means presented by Conn.** Hidden tabs, background windows, covered
-   terminal views and expired frames are unavailable. Conn does not claim to detect
-   every overlap from another OS application.
+2. **One observation source.** Core parses PTY output into the current terminal grid.
+   Agent snapshots and completion context use this projection, with no scrollback.
+3. **Observation belongs to the shared session.** Current terminal output remains
+   available when a window is unfocused, minimized or covered, or another tab is active.
+   No raw input, scrollback or process memory is exported. Hidden input stays absent;
+   printed secrets are visible. The agent's binding never follows the human silently.
 4. **No hidden input observation.** Password input with echo disabled contributes
    no characters; masking contributes the rendered masks. Terminal conceal/hidden
    cells must not expose underlying text. Visible secrets are visible to participants.
@@ -40,8 +41,8 @@ the terminal into a configuration dashboard.
 6. **Participation is independent of control.** Sharing begins with the human in
    control. Selected agents must still obtain authority under the mode and gate.
 7. **Transitions invalidate work.** Sharing changes and takeover revoke conflicting
-   work. Unavailable surfaces pause observation and execution, while cancelling
-   completion proposals; pending human decisions can resume after a fresh frame.
+   work. Window visibility never invalidates participation. Output changes invalidate
+   stale completion proposals; explicit approvals still gate execution.
    Stale frames, handles and completion proposals cannot
    restore permission. Stopping sharing does not recall information already sent.
 8. **Origins stay honest.** External launch/input payloads are not converted into
@@ -67,7 +68,12 @@ Private/shared changes keep the process and visible terminal intact. Returning t
 private cancels participation while leaving the human's shell alive. Sharing is
 not silently restored after process/app restart.
 
-Ordinary tabs permit connected agents subject to their mode and permissions.
+A new agent connection waits until the person allows it once in the Conn window; the
+choice applies to that live connection only, and the prompt can be turned off in settings.
+Ordinary tabs permit admitted connections subject to their mode and permissions.
+Control is a revocable per-tab lease: one writer at a time, the person always preempts,
+and an agent that moves to another tab releases what it held. See the
+[control lease model](control-lease-model.ko.md).
 After an explicit participant selection, newly connected sockets do not inherit
 another connection's selection, even when their display names match.
 
@@ -86,14 +92,14 @@ be used in uncertain environments, still with a currently shared visible surface
 ## Removed paths
 
 Unattended Entrust, public `hello kind=human/frontend`, raw output subscriptions,
-owner controls over agent IPC, and headless/proxy agent observations are removed.
+owner controls over agent IPC, and renderer-authorized observation are removed.
 The native app and authenticated browser test adapter use the same harness and UI.
 The CLI remains an agent/MCP adapter and profile/local-file utility.
 
 ## Acceptance
 
 Verify actual rendered Unicode, wrapping, scroll, resizing, alternate screens,
-concealed/masked/hidden input, frame expiry and occlusion. Exercise wrong actor IDs,
+concealed/masked/hidden input, background observation and sharing revocation. Exercise wrong actor IDs,
 sharing/output races, stale completions, cancellation, private history suppression,
 external authentication followed by same-session sharing, and human correction.
 

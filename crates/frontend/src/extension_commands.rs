@@ -1,4 +1,4 @@
-//! Native mediation: extension context is built from a current presented surface,
+//! Native mediation: extension context is built from a current session terminal grid,
 //! never from model/context strings supplied by the webview or a public socket.
 use crate::{arg, engine, AppState};
 use crate::extensions::{FrameToken, VisibleContext};

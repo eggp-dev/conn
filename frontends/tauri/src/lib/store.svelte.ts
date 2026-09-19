@@ -20,7 +20,6 @@ export type TabState = {
   surfaceGeneration: number;
   outputSeq: number;
   surfaceAvailable: boolean;
-  surfacePublishedSerial: number;
   inputPending: boolean;
   externalStarting: boolean;
   externalInputAvailable: boolean;
@@ -53,17 +52,15 @@ export type TabState = {
   timeline: TimelineState;
   cursor: { x: number; y: number; w: number; h: number; row: number };
   wash: null | { x: number; y: number; color: string; out: boolean; key: number };
-  /** Set while the human is away and an agent held the conn: paused badge. */
-  paused: boolean;
 };
 
 export function newTab(id: string, n: number): TabState {
   return {
-    id, title: `Terminal ${n}`, statusReady: false, shellIntegration: { state: "unavailable" }, shared: false, externalOrigin: false, surfaceGeneration: 1, outputSeq: 0, surfaceAvailable: false, surfacePublishedSerial: 0, inputPending: false, externalStarting: false, externalInputAvailable: false, profileId: null, profileName: null, reviewRequired: false, processAlive: true, policyBlockedUntil: 0, attended: false, attention: null, openedBy: null,
+    id, title: `Terminal ${n}`, statusReady: false, shellIntegration: { state: "unavailable" }, shared: false, externalOrigin: false, surfaceGeneration: 1, outputSeq: 0, surfaceAvailable: false, inputPending: false, externalStarting: false, externalInputAvailable: false, profileId: null, profileName: null, reviewRequired: false, processAlive: true, policyBlockedUntil: 0, attended: false, attention: null, openedBy: null,
     controller: { type: "human" }, mode: "autopilot", effectiveMode: "autopilot", gate: false,
     pacing: { minWriteIntervalMs: 0, enterGraceMs: 0, leaseTtlSecs: 60, approvalTtlSecs: 300 },
     mask: null, allows: [], agents: [], typing: false, humanInputRevision: 0, proposal: null, approval: null, grace: null, ctlReq: null,
-    lastAgent: null, handback: false, timeline: newTimeline(), cursor: { x: 0, y: 0, w: 8, h: 16, row: 0 }, wash: null, paused: false,
+    lastAgent: null, handback: false, timeline: newTimeline(), cursor: { x: 0, y: 0, w: 8, h: 16, row: 0 }, wash: null,
   };
 }
 
@@ -92,6 +89,8 @@ export const st = $state({
   centerOpen: false,
   menuOpen: false,
   sharingOpen: false,
+  /** Agent connections waiting for the owner's answer. Connection-level, not per tab. */
+  admissions: [] as { connId: number; agentId: string }[],
   completionOpen: false,
   completionRequest: 0,
   settingsOpen: false,

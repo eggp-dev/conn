@@ -6,33 +6,33 @@ Conn을 설치하고 에이전트를 연결해 같은 터미널에서 번갈아 
 
 ## 1. 설치하고 세션 열기
 
-OS와 CPU에 맞는 [v0.7.0 프리뷰](https://github.com/eggplantiny/conn/releases/tag/v0.7.0)를 받으세요. 실제 서명 상태와 실행 검증 결과는 릴리스 안내에서 확인할 수 있습니다.
+OS와 CPU에 맞는 [v0.8.0 프리뷰](https://github.com/eggplantiny/conn/releases/tag/v0.8.0)를 받으세요. 실제 서명 상태와 실행 검증 결과는 릴리스 안내에서 확인할 수 있습니다.
 
 | 플랫폼 | 다운로드 | 설치 |
 |---|---|---|
-| Ubuntu x64 | [`.deb`](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.deb) | 아래 명령으로 설치한 뒤 앱 목록에서 Conn을 엽니다. |
-| Ubuntu x64 | [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.AppImage) | 실행 권한을 준 뒤 파일을 엽니다. |
-| macOS Apple Silicon | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-aarch64-apple-darwin-desktop.dmg) | DMG를 열고 Conn을 Applications로 옮긴 뒤 그곳에서 실행합니다. |
-| Windows x64 | [설치 `.exe`](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-x86_64-pc-windows-msvc-setup.exe) | 설치 파일을 실행하고 시작 메뉴에서 Conn을 엽니다. |
+| Ubuntu x64 | [`.deb`](https://github.com/eggplantiny/conn/releases/download/v0.8.0/conn-v0.8.0-x86_64-unknown-linux-gnu-desktop.deb) | 아래 명령으로 설치한 뒤 앱 목록에서 Conn을 엽니다. |
+| Ubuntu x64 | [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.8.0/conn-v0.8.0-x86_64-unknown-linux-gnu-desktop.AppImage) | 실행 권한을 준 뒤 파일을 엽니다. |
+| macOS Apple Silicon | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.8.0/conn-v0.8.0-aarch64-apple-darwin-desktop.dmg) | DMG를 열고 Conn을 Applications로 옮긴 뒤 그곳에서 실행합니다. |
+| Windows x64 | [설치 `.exe`](https://github.com/eggplantiny/conn/releases/download/v0.8.0/conn-v0.8.0-x86_64-pc-windows-msvc-setup.exe) | 설치 파일을 실행하고 시작 메뉴에서 Conn을 엽니다. |
 
 새 릴리스의 Intel Mac 배포는 잠시 중단합니다. 기존 Intel 파일은 [이전 릴리스](https://github.com/eggplantiny/conn/releases)에 유지하며 Intel Mac에 Apple Silicon 파일을 설치하지 마세요.
 
 Ubuntu에서는 다운로드한 폴더에서 실행합니다.
 
 ```sh
-sudo apt install ./conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.deb
+sudo apt install ./conn-v0.8.0-x86_64-unknown-linux-gnu-desktop.deb
 ```
 
 AppImage를 선택했다면 다음과 같이 실행합니다.
 
 ```sh
-chmod +x ./conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.AppImage
-./conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.AppImage
+chmod +x ./conn-v0.8.0-x86_64-unknown-linux-gnu-desktop.AppImage
+./conn-v0.8.0-x86_64-unknown-linux-gnu-desktop.AppImage
 ```
 
 Linux 빌드 대상은 Ubuntu 24.04·26.04 x64이며 AppImage에도 시스템 라이브러리가 필요합니다. Windows 프리뷰는 의도적으로 무서명 배포하므로 SmartScreen·알 수 없는 배포자 경고가 나올 수 있고 관리되는 PC에서는 설치가 차단될 수 있습니다. Mac 공개 파일은 릴리스의 Developer ID 서명·공증 검사를 통과해야 합니다. 각 대상의 범위는 [플랫폼 지원](platform-support.ko.md)을 참고하세요.
 
-원하면 파일과 함께 [SHA256SUMS](https://github.com/eggplantiny/conn/releases/download/v0.7.0/SHA256SUMS)를 받으세요. Linux는 `sha256sum --ignore-missing -c SHA256SUMS`, macOS는 `shasum -a 256 <파일>` 결과와 해당 줄 비교, Windows는 `Get-FileHash <파일> -Algorithm SHA256`을 사용합니다. 체크섬은 파일 손상을 확인하며 코드 서명과는 별개입니다.
+원하면 파일과 함께 [SHA256SUMS](https://github.com/eggplantiny/conn/releases/download/v0.8.0/SHA256SUMS)를 받으세요. Linux는 `sha256sum --ignore-missing -c SHA256SUMS`, macOS는 `shasum -a 256 <파일>` 결과와 해당 줄 비교, Windows는 `Get-FileHash <파일> -Algorithm SHA256`을 사용합니다. 체크섬은 파일 손상을 확인하며 코드 서명과는 별개입니다.
 
 ## 2. 터미널 설정
 
@@ -51,6 +51,7 @@ Autopilot은 정책 안에서 에이전트 실행을 허용합니다. **Co-pilot
 1. Codex / ChatGPT 로컬 작업, Claude Code, Cursor, GitHub Copilot(VS Code 또는 CLI)을 고릅니다.
 2. **설정하기**를 눌러 MCP 서버와 협업 스킬을 등록합니다.
 3. 카드의 안내대로 클라이언트를 재시작하거나 다시 연결합니다. Conn을 켜 두고 에이전트에게 현재 터미널을 읽어 달라고 요청하세요.
+4. 에이전트가 처음 연결하면 Conn에 **참여를 요청합니다** 카드가 뜹니다. **허용**을 누르면 대기 중이던 에이전트 호출이 그대로 이어집니다. 새 연결마다 한 번 묻습니다. 원하지 않으면 **설정 → 에이전트 → 새 에이전트가 참여하기 전에 묻기**를 끄세요.
 
 **설정 완료**는 파일 등록을 뜻하며 실제 접속하면 **현재 접속 중**으로 표시됩니다. 클라이언트의 신뢰 확인과 명령 승인은 별도로 유지됩니다. [클라이언트별 경로·갱신·해제·문제 해결](agent-integrations.ko.md).
 
@@ -118,10 +119,11 @@ cmd.exe에는 `cd`를 사용하세요. 사람의 제어권 회수·승인·모�
 |---|---|
 | 에이전트가 CLI를 찾지 못함 | 설정에서 연결 구성을 다시 복사하세요. 데스크톱 연결은 절대 경로를 사용하므로 `PATH` 변경이 필요하지 않습니다. |
 | 에이전트가 연결되지 않음 | Conn을 열어 두고 현재 주소를 사용하세요. 앱을 옮겼다면 설정을 다시 복사하세요. |
-| 읽지만 입력하지 못함 | Observe 모드, 도구 권한, 제어권 소유자, 해당 탭이 보이는지 확인하세요. |
+| `admission_pending` | Conn 창의 "참여를 요청합니다" 카드에서 **허용**을 누른 뒤 에이전트가 다시 시도하게 하세요. |
+| 읽지만 입력하지 못함 | Observe 모드, 도구 권한, 제어권 소유자를 확인하세요. 사람이 입력하면 제어권이 돌아오며, 에이전트는 다시 요청해야 합니다. |
 | 요청이 계속 대기함 | 제어 요청, 명령 승인, Co-pilot 제안이 있는지 확인하세요. |
-| `unattended` 또는 `suspended` | 해당 탭으로 돌아와 새 스냅샷을 확인하세요. 에이전트는 보이는 탭을 바꿀 수 없습니다. |
-| `surface_unavailable` | 터미널 창에 포커스를 두고 가리는 패널을 닫은 뒤 다시 확인하세요. |
+| 보고 있지 않은 탭에서 에이전트가 작업함 | 정상입니다. 접근은 창 포커스나 보이는 탭이 아니라 공유, 모드, 제어권을 따릅니다. 제한하려면 공유를 중단하거나 Observe 모드를 쓰세요. |
+| `surface_unavailable` | 에이전트가 마지막으로 읽은 뒤 화면이 바뀌었습니다. 새 스냅샷을 읽고 다시 시도하세요. |
 | 복합 명령이 차단됨 | `isolate_dangerous: true`이면 이동, 위험 작업, 검증을 각각 요청하세요. |
 | 명령이 아직 실행 중임 | 기다린 뒤 스냅샷을 다시 읽으세요. 입력 결과는 종료 상태가 아닙니다. |
 

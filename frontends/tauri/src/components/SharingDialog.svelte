@@ -12,15 +12,38 @@
   let loading = $state(true);
   let busy = $state(false);
   let error = $state("");
-  onMount(async () => {
+  onMount(() => {
     dialog?.focus();
-    try {
-      participants = await cmd("sharing_participants", { session });
-      selected = participants.filter(p => p.selected).map(p => p.connId);
-    } catch { error = t("sharing.loadFailed"); }
-    finally { loading = false; }
+    let disposed = false;
+    let refreshing = false;
+    let initialized = false;
+    async function refresh() {
+      if (refreshing || busy) return;
+      refreshing = true;
+      try {
+        const next = await cmd<typeof participants>("sharing_participants", { session });
+        if (disposed) return;
+        // Keep the owner's edits; never select new agents automatically. The
+        // saved selection loads once, even when the first attempt failed.
+        selected = initialized
+          ? selected.filter(id => next.some(p => p.connId === id))
+          : next.filter(p => p.selected).map(p => p.connId);
+        initialized = true;
+        participants = next;
+        error = "";
+      } catch {
+        if (!disposed) error = t("sharing.loadFailed");
+      } finally {
+        refreshing = false;
+        if (!disposed) loading = false;
+      }
+    }
+    void refresh();
+    const timer = setInterval(refresh, 1000);
+    return () => { disposed = true; clearInterval(timer); };
   });
   async function apply(shared: boolean) {
+    if (shared && selected.length === 0) return;
     busy = true; error = "";
     try {
       const status = await cmd<{inputPending?:boolean}>("set_sharing", { session, shared, connectionIds: shared ? selected : [] });
@@ -57,7 +80,7 @@
   </div>
   <footer>
     {#if cur().shared}<button class="btn ghost" disabled={busy} onclick={() => apply(false)}>{t("sharing.stop")}</button>{/if}
-    <span></span><button class="btn" disabled={busy || loading} onclick={() => apply(true)}>{t(cur().shared ? "sharing.apply" : "sharing.start")}</button>
+    <span></span><button class="btn" disabled={busy || loading || selected.length === 0} onclick={() => apply(true)}>{t(cur().shared ? "sharing.apply" : "sharing.start")}</button>
   </footer>
 </div>
 <style>

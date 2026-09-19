@@ -6,33 +6,33 @@ Install Conn, connect your agent, and take turns in the same terminal. The deskt
 
 ## 1. Install and open a session
 
-Download the [v0.7.0 preview](https://github.com/eggplantiny/conn/releases/tag/v0.7.0) for your OS and CPU. See the release notes for the exact signing and runtime verification results.
+Download the [v0.8.0 preview](https://github.com/eggplantiny/conn/releases/tag/v0.8.0) for your OS and CPU. See the release notes for the exact signing and runtime verification results.
 
 | Platform | Download | Install |
 |---|---|---|
-| Ubuntu x64 | [`.deb`](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.deb) | Run the command below, then open Conn from your applications. |
-| Ubuntu x64 | [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.AppImage) | Make the file executable, then open it. |
-| macOS Apple Silicon | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-aarch64-apple-darwin-desktop.dmg) | Open the DMG, drag Conn into Applications, then launch it there. |
-| Windows x64 | [Installer `.exe`](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-x86_64-pc-windows-msvc-setup.exe) | Run the installer, then open Conn from the Start menu. |
+| Ubuntu x64 | [`.deb`](https://github.com/eggplantiny/conn/releases/download/v0.8.0/conn-v0.8.0-x86_64-unknown-linux-gnu-desktop.deb) | Run the command below, then open Conn from your applications. |
+| Ubuntu x64 | [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.8.0/conn-v0.8.0-x86_64-unknown-linux-gnu-desktop.AppImage) | Make the file executable, then open it. |
+| macOS Apple Silicon | [`.dmg`](https://github.com/eggplantiny/conn/releases/download/v0.8.0/conn-v0.8.0-aarch64-apple-darwin-desktop.dmg) | Open the DMG, drag Conn into Applications, then launch it there. |
+| Windows x64 | [Installer `.exe`](https://github.com/eggplantiny/conn/releases/download/v0.8.0/conn-v0.8.0-x86_64-pc-windows-msvc-setup.exe) | Run the installer, then open Conn from the Start menu. |
 
 Intel Mac distribution is paused for future releases. Previously published Intel packages remain in [past releases](https://github.com/eggplantiny/conn/releases); do not install the Apple Silicon package on an Intel Mac.
 
 For Ubuntu, run the matching command in your download directory:
 
 ```sh
-sudo apt install ./conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.deb
+sudo apt install ./conn-v0.8.0-x86_64-unknown-linux-gnu-desktop.deb
 ```
 
 Or, for AppImage:
 
 ```sh
-chmod +x ./conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.AppImage
-./conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.AppImage
+chmod +x ./conn-v0.8.0-x86_64-unknown-linux-gnu-desktop.AppImage
+./conn-v0.8.0-x86_64-unknown-linux-gnu-desktop.AppImage
 ```
 
 The Linux build targets Ubuntu 24.04 and 26.04 x64; AppImage still depends on system libraries. Windows previews are intentionally unsigned, so SmartScreen or an unknown-publisher prompt may appear; managed PCs may block installation. Public Mac assets must pass the release's Developer ID signing and notarization checks. See [platform support](platform-support.md) for the limits of each target.
 
-Optional: download [SHA256SUMS](https://github.com/eggplantiny/conn/releases/download/v0.7.0/SHA256SUMS) alongside your file. On Linux, run `sha256sum --ignore-missing -c SHA256SUMS`; on macOS, compare `shasum -a 256 <file>` with its line; on Windows, use `Get-FileHash <file> -Algorithm SHA256`. Checksums detect corruption and are separate from code signing.
+Optional: download [SHA256SUMS](https://github.com/eggplantiny/conn/releases/download/v0.8.0/SHA256SUMS) alongside your file. On Linux, run `sha256sum --ignore-missing -c SHA256SUMS`; on macOS, compare `shasum -a 256 <file>` with its line; on Windows, use `Get-FileHash <file> -Algorithm SHA256`. Checksums detect corruption and are separate from code signing.
 
 ## 2. Set up your terminal
 
@@ -51,6 +51,7 @@ In **Settings → Agents → Connect your agent**:
 1. Choose Codex / ChatGPT local tasks, Claude Code, Cursor, GitHub Copilot in VS Code, or Copilot CLI.
 2. Click **Set up** to register the MCP server and collaboration skill.
 3. Restart or reconnect your client following the card's hint. Keep Conn open and ask your agent to read the current terminal.
+4. The first time an agent connects, Conn shows **wants to join**. Press **Allow**. The agent's waiting call continues by itself. Each new connection asks once; turn this off under **Settings → Agents → Ask before a new agent joins** if you prefer.
 
 **Configured** means the files are saved; **Connected now** appears while the client is attached to Conn. Client trust prompts and command approvals remain separate. [Client paths, updates, removal and troubleshooting](agent-integrations.md).
 
@@ -122,10 +123,11 @@ requires command review. These CLI changes take effect in v0.7.0. Restart the ap
 |---|---|
 | Agent cannot find the CLI | Copy the configuration from Settings again. The desktop connection uses an absolute path and needs no `PATH` change. |
 | Agent cannot connect | Keep Conn open and use its current endpoint. Copy the configuration again after moving the app. |
-| Agent reads but cannot type | Check Observe mode, tool permissions, control ownership, and whether its tab is visible. |
+| `admission_pending` | Press **Allow** on the "wants to join" card in the Conn window, then let the agent retry. |
+| Agent reads but cannot type | Check Observe mode, tool permissions and control ownership. Your typing takes control back; the agent must request it again. |
 | Request stays pending | Look for a control request, command approval, or Co-pilot proposal. |
-| `unattended` or `suspended` | Return to that tab and obtain a fresh snapshot. The agent cannot change your visible tab. |
-| `surface_unavailable` | Show and focus the terminal, close covering panels, and retry after it renders. |
+| Agent works in a tab you are not viewing | Expected: access follows sharing, mode and control, not window focus or the visible tab. Stop sharing or use Observe mode to restrict it. |
+| `surface_unavailable` | The terminal changed after the agent last read it. Take a fresh snapshot and retry. |
 | Compound command is blocked | With `isolate_dangerous: true`, submit navigation, the dangerous action, and verification separately. |
 | Command is still running | Wait and read another snapshot; a submission result is not an exit status. |
 

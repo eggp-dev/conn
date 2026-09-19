@@ -28,10 +28,12 @@ If status is `pending`, wait by polling terminal_check_approval. Do not work aro
 
 A human shares this session. Commands you did not run may appear on the screen.
 
-You only see what the human is looking at. When the human moves to another tab, snapshot and writes are refused with `unattended` / `suspended`. Ask them to come back with terminal_request_attention and wait. Hidden, covered or unavailable surfaces return `surface_unavailable`; wait for the human to return. There is no unattended observation fallback.
+A new connection must be allowed once by the human in the Conn window. Until then calls return `admission_pending`: tell the human to press Allow in Conn, then call terminal_snapshot again (it waits briefly for their answer). `admission_denied` is final for this connection; do not retry in a loop.
+
+You observe the current terminal grid of your explicitly shared session, even when its window is behind another app, minimized, or on another tab. Your binding never follows the human automatically. No raw input or scrollback is included. Hidden passwords remain absent; printed secrets are visible. Human input preempts your control. Sharing revocation and connection loss cancel pending work. Use terminal_request_attention when a human decision is needed, not to unlock background access.
 
 Modes: snapshot and terminal_list_tabs report mode and effectiveMode. In copilot mode typing creates a proposal; tell the human to press Enter to accept it. Mode can change between calls.
-Tabs: terminal_list_tabs shows the tabs and which one the human is looking at. A tab you open with terminal_open_tab is not being watched yet: you can neither see nor write there until the human comes to it — open it, then wait. terminal_switch_tab moves only your connection; it never moves the human's view.";
+Tabs: terminal_list_tabs shows the tabs and which one the human is looking at. A tab you open with terminal_open_tab leaves the human view unchanged; its sharing and control permissions apply immediately. terminal_switch_tab moves only your connection; it never moves the human's view.";
 
 struct ToolDef {
     name: &'static str,
@@ -46,7 +48,7 @@ const TOOLS: &[ToolDef] = &[
         name: "terminal_snapshot",
         affordance: "snapshot",
         method: "snapshot",
-        description: "Returns the owner-rendered visible terminal viewport, including the human scroll position. Hidden or unavailable surfaces are refused.",
+        description: "Returns the current terminal grid of your shared session, independent of window focus or active tab. No raw input, scrollback or screenshot is included.",
         schema: || json!({ "type": "object", "properties": {}, "additionalProperties": false }),
     },
     ToolDef {
@@ -88,7 +90,7 @@ const TOOLS: &[ToolDef] = &[
         name: "terminal_request_attention",
         affordance: "request_attention",
         method: "request_attention",
-        description: "Asks the human to come back to this session (tab) when they are not looking at it. While they are away you can neither see nor write (unattended / suspended). You can continue once they return.",
+        description: "Asks the human to look at this shared session, for example to review a pending decision. Background access does not depend on attention.",
         schema: || json!({ "type": "object", "properties": { "reason": { "type": "string", "description": "Why they should look, one line" } }, "additionalProperties": false }),
     },
     ToolDef {
@@ -102,7 +104,7 @@ const TOOLS: &[ToolDef] = &[
         name: "terminal_open_tab",
         affordance: "open_tab",
         method: "open_tab",
-        description: "Opens a new tab (shell) and moves your connection to it. The human is not looking at the new tab yet: snapshot and writes are refused (unattended) until they come to it. `reason` is shown on the tab. Open one only when you really need it.",
+        description: "Opens a new tab (shell) and moves your connection to it. The human view stays on its existing tab. Access depends on participation, mode and control permissions. `reason` is shown on the tab. Open one only when you really need it.",
         schema: || json!({ "type": "object", "properties": { "reason": { "type": "string", "description": "Why you need a new tab, one line (shown to the human)" } }, "additionalProperties": false }),
     },
     ToolDef {
@@ -150,7 +152,7 @@ impl Bridge {
         let client = Arc::new(Client::connect(&self.socket)?);
         let hello = client.hello("agent", &self.agent_id)?;
         if hello["protocolVersion"] != 2 {
-            return Err(ClientError::Rpc { code: "upgrade_required".into(), message: "Update the Conn app and agent adapter together; a presented-surface endpoint is required".into() });
+            return Err(ClientError::Rpc { code: "upgrade_required".into(), message: "Update the Conn app and agent adapter together; a shared-session endpoint is required".into() });
         }
         if let Some(events) = client.take_events() {
             let out = self.out.clone();
@@ -210,10 +212,19 @@ impl Bridge {
     }
 
     fn tools_list(&mut self) -> Value {
-        let allowed: Vec<String> = match self.call("affordances", json!({})) {
+        let mut allowed: Vec<String> = match self.call("affordances", json!({})) {
             Ok(v) => serde_json::from_value(v).unwrap_or_default(),
+            // Not admitted yet: keep one tool so the agent can wait for the human's answer.
+            Err(ClientError::Rpc { code, .. }) if code == "admission_pending" => vec!["snapshot".into()],
             Err(_) => vec![],
         };
+        // Session affordances can fail after closure or participant removal.
+        // Recover through explicitly authorized destinations, never by rebinding
+        // observation implicitly to whichever tab the human is watching.
+        allowed.retain(|a| a != "switch_tab");
+        if let Ok(v) = self.call("navigation_affordances", json!({})) {
+            allowed.extend(serde_json::from_value::<Vec<String>>(v).unwrap_or_default());
+        }
         let static_mode = self.tool_mode == ToolMode::Static;
         let tools: Vec<Value> = TOOLS
             .iter()
@@ -244,9 +255,10 @@ impl Bridge {
                     "wrong_mode" => " — the frontend put agents in observe mode",
                     "proposal_pending" => " — your proposal is waiting for the human to commit or reject",
                     "intent_required" => " — resend ENTER with an `intent` (one line: what this command does and changes)",
-                    "unattended" => " — the human is not looking at this session; call terminal_request_attention and wait",
-                    "surface_unavailable" => " — the owner viewport is hidden, changing or expired; wait for a fresh visible frame",
-                    "suspended" => " — the human left this session; wait for them to return, then read a fresh snapshot",
+                    "surface_unavailable" => " — the terminal revision changed; take a fresh snapshot",
+                    "admission_pending" => " — ask the human to press Allow for this connection in the Conn window, then call terminal_snapshot again",
+                    "admission_denied" => " — the human declined this connection; stop and tell them",
+                    "connection_closing" => " — the connection to Conn closed; nothing was executed",
                     _ => "",
                 };
                 tool_error(format!("{code}: {message}{hint}"))

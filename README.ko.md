@@ -12,13 +12,13 @@ AI 에이전트와 같은 셸에서 일하세요. 직접 고치고, 바뀐 화�
 
 **데스크톱 앱을 설치하세요.** Rust나 Node.js는 필요하지 않고, 에이전트 연결 도구도 포함됩니다.
 
-| 운영체제 | v0.7.0 프리뷰 |
+| 운영체제 | v0.8.0 프리뷰 |
 |---|---|
-| macOS · Apple Silicon | [Mac용 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-aarch64-apple-darwin-desktop.dmg) |
-| Windows · x64 | [설치 파일 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-x86_64-pc-windows-msvc-setup.exe) |
-| Ubuntu · x64 | [.deb 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.7.0/conn-v0.7.0-x86_64-unknown-linux-gnu-desktop.AppImage) |
+| macOS · Apple Silicon | [Mac용 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.8.0/conn-v0.8.0-aarch64-apple-darwin-desktop.dmg) |
+| Windows · x64 | [설치 파일 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.8.0/conn-v0.8.0-x86_64-pc-windows-msvc-setup.exe) |
+| Ubuntu · x64 | [.deb 다운로드](https://github.com/eggplantiny/conn/releases/download/v0.8.0/conn-v0.8.0-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.8.0/conn-v0.8.0-x86_64-unknown-linux-gnu-desktop.AppImage) |
 
-Mac 배포 파일은 서명·공증되어 있습니다. Windows 프리뷰는 무서명이며, Linux는 Ubuntu 24.04에서 빌드합니다. Intel Mac 배포는 잠시 중단했습니다. [설치·업데이트 안내](docs/getting-started.ko.md) · [전체 파일·체크섬](https://github.com/eggplantiny/conn/releases/tag/v0.7.0)
+Mac 배포 파일은 서명·공증되어 있습니다. Windows 프리뷰는 무서명이며, Linux는 Ubuntu 24.04에서 빌드합니다. Intel Mac 배포는 잠시 중단했습니다. [설치·업데이트 안내](docs/getting-started.ko.md) · [전체 파일·체크섬](https://github.com/eggplantiny/conn/releases/tag/v0.8.0)
 
 ## 조금 고쳤다고, 처음부터 다시 할 필요는 없으니까
 
@@ -62,6 +62,6 @@ Mac 배포 파일은 서명·공증되어 있습니다. Windows 프리뷰는 무
 
 ## 공유와 확장
 
-v0.7.0에서는 실행 중인 셸의 공유를 켜고 끌 수 있고, 테마와 선택형 명령 제안을 제공합니다.
+v0.8.0에서는 창이 뒤에 있어도 에이전트가 공유된 세션에서 계속 작업하고, 새 에이전트는 허용을 받아야 참여하며, 제어권은 한 번에 한 탭에만 주어집니다. v0.7.0에서는 실행 중인 셸의 공유를 켜고 끌 수 있고, 테마와 선택형 명령 제안을 제공합니다.
 앱을 업데이트한 뒤 MCP 클라이언트도 함께 재시작하세요.
 [제품 계약](docs/PRD.ko.md) · [확장 안내](docs/extensions.ko.md)

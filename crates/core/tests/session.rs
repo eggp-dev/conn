@@ -170,7 +170,6 @@ fn confirm_then_deny_from_prompt() {
     assert!(h.session.prompt_active());
     assert_eq!(h.session.check_approval(&id).unwrap().state, ApprovalState::Pending);
     assert!(h.session.affordances(Actor::Agent { conn: 1 }).contains(&Affordance::CheckApproval));
-    common::present(&mut h.session, vec!["Approval: recursive delete".into()]);
     assert!(matches!(h.session.agent_type(1, "x"), Err(SessionError::ApprovalPending(_))));
 
     // PTY output while the prompt is up is held back, then flushed
@@ -339,7 +338,7 @@ fn snapshot_matches_screen_and_audits_observe() {
     h.session.pty_output(b"dev$ kubectl get pods\r\napi-1  Running\r\ndev$ ");
     common::present(&mut h.session, vec!["dev$ kubectl get pods".into(), "api-1  Running".into(), "dev$".into()]);
     let s = h.session.snapshot(Actor::Agent { conn: 1 }).unwrap();
-    assert_eq!(s.projection.screen, vec!["dev$ kubectl get pods", "api-1  Running", "dev$"]);
+    assert_eq!(&s.projection.screen[..3], ["dev$ kubectl get pods", "api-1  Running", "dev$"]);
     assert!(s.process_alive);
     let json = serde_json::to_value(&s).unwrap();
     assert_eq!(json["controller"]["type"], "human");

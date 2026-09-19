@@ -20,7 +20,7 @@ And three switches.
 | `isolate_dangerous` | `true` | when a confirm/deny-level segment shares a line with other segments, deny instead of asking. One approval = one dangerous action |
 | `require_intent` | `true` | an agent's ENTER without a one-line intent does not run |
 
-The shared-surface version removes unattended execution. A legacy `unattended` key cannot grant observation or writes when the owner surface is unavailable.
+Access does not depend on window focus or the visible tab. A legacy `unattended` key is ignored: it neither grants nor restricts anything. Sharing, mode, control and these rules decide what an agent may do.
 
 ### The basic form
 

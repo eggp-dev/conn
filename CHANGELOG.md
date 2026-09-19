@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0 — Preview · 2026-09-19
+
+- **Breaking contract change from 0.7.0:** agents observe the current terminal grid of their shared session, parsed from PTY output in the core. Window focus, the visible tab, minimization, covering panels and renderer heartbeats no longer gate reading or writing. The `unattended` / `suspended` errors, `surface_invalidated`, `control_suspended` and `control_resumed` events, and the renderer frame publication commands are removed. Snapshots are text only: no screenshot, scrollback or owner scroll position.
+- Unchanged protections: an agent stays bound to its own session and never follows the human's view; participation, mode, policy, approvals and the control lease still apply to every read and write; human typing takes control back; stopping sharing, removing a participant, disconnecting or process exit cancels pending agent work.
+- Hidden text: ANSI conceal (including `8:n` forms) and explicit equal foreground/background colors are withheld from snapshots, and an agent cannot submit a cursor line containing withheld text. Uses a pinned vt100 0.15.2 source with a small conceal patch (`vendor/vt100`).
+- Connection lifecycle: transport loss is detected while a request waits for control, approval, Co-pilot acceptance or grace, so a terminated agent's delayed ENTER never runs. Requests pipelined before a half-close are still answered when read-only; others return `connection_closing`. After the source shell closes or access is removed, an agent can still switch explicitly to another permitted tab.
+- Connection admission: the desktop app asks once before a new agent connection participates (**Allow / Deny**, per live connection, never inherited by display name). A pending connection learns nothing; its first real call waits briefly for the answer. Can be turned off in settings. New errors: `admission_pending`, `admission_denied`.
+- Control is a per-tab revocable lease, one per connection: moving to another tab (`switch_tab`, `open_tab`) or requesting control in another session by name releases the lease and cancels that connection's pending work everywhere else. An owner mask without `switch_tab` pins an agent while its source is usable; a lost source never blocks recovery. A Grace execution scheduled in a tab nobody is watching raises an attention request.
+- Sharing dialog refreshes live connections, never auto-selects new ones, and cannot apply an empty selection.
+
+한국어: 에이전트 관찰 기준을 창에 표시된 화면에서 공유 세션의 터미널 그리드로 바꿨습니다. 창 포커스, 보이는 탭, 최소화 여부는 더 이상 접근을 막지 않습니다. 참여 권한, 모드, 정책, 승인, 제어권 회수와 취소 규칙은 그대로입니다. 숨김 글자는 스냅샷에서 빠지며, 그런 글자가 있는 줄은 에이전트가 제출할 수 없습니다. 0.7.0과 호환되지 않으므로 앱과 MCP를 함께 재시작해야 합니다.
+
 ## 0.7.0 — Preview · 2026-09-18
 
 - Make the owner-rendered viewport the only agent observation source, with current output sequencing, scroll position, concealed-cell handling and optional PNG snapshots. Hidden or stale surfaces pause agent access.

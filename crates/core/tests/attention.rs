@@ -1,4 +1,4 @@
-//! Attention: the agent sees only what the human sees.
+//! Attention is UI metadata, not an authorization boundary.
 mod common;
 
 use std::time::Duration;
@@ -6,51 +6,28 @@ use std::time::Duration;
 use common::Harness;
 use conn_core::affordance::{Actor, Affordance};
 use conn_core::ipc::Hub;
-use conn_core::session::{ServerEvent, SessionError};
+use conn_core::session::{ServerEvent};
 
 fn names(evs: &[ServerEvent]) -> Vec<String> {
     evs.iter().map(|e| serde_json::to_value(e).unwrap()["event"].as_str().unwrap().to_string()).collect()
 }
 
 #[test]
-fn leaving_hides_the_screen_and_suspends_writes() {
-    let mut h = Harness::new();
-    let fe = h.frontend("ui");
-    let agent = h.agent(1, "claude");
-    h.session.agent_request_control(1).unwrap();
-    h.session.agent_type(1, "ls").unwrap();
-
+fn switching_tabs_preserves_shared_session_and_human_input_preempts() {
+    let mut h=Harness::new();let fe=h.frontend("ui");h.agent(1,"claude");
+    h.session.agent_request_control(1).unwrap();h.session.agent_type(1,"ls").unwrap();
+    let generation=h.session.participation_generation();
     h.session.set_attended(false);
-    assert!(matches!(h.session.snapshot(Actor::Agent { conn: 1 }), Err(SessionError::Unattended)), "nobody looking → nothing to see");
-    assert!(matches!(h.session.agent_type(1, "x"), Err(SessionError::Suspended)));
-    assert!(matches!(h.session.agent_send_key_with(1, "ENTER", Some("t".into())), Err(SessionError::Suspended)));
-    assert_eq!(h.session.affordances(Actor::Agent { conn: 1 }), vec![Affordance::RequestAttention]);
-    assert!(h.session.current_lease().is_none(), "leaving revokes authority");
-    assert!(names(&agent.lock().unwrap()).contains(&"control_revoked".to_string()));
+    assert_eq!(generation,h.session.participation_generation());
+    assert!(h.session.snapshot(Actor::Agent{conn:1}).is_ok());
+    h.session.agent_type(1," -l").unwrap();
+    assert!(h.session.current_lease().is_some());
     assert!(names(&fe.lock().unwrap()).contains(&"attention_changed".to_string()));
-    assert_eq!(h.pty_str(), "ls", "nothing reached the shell while away");
-
-    // the agent may knock
-    h.session.agent_request_attention(1, Some("need you to check the result".into())).unwrap();
-    assert_eq!(h.session.status().attention_request.unwrap().reason.as_deref(), Some("need you to check the result"));
-
-    h.session.set_attended(true);
-    common::present(&mut h.session, vec!["ls".into()]);
-    assert!(h.session.snapshot(Actor::Agent { conn: 1 }).is_ok());
-    h.session.human_input(b"\x15");
-    h.session.agent_request_control(1).unwrap();
-    assert!(h.session.agent_type(1, "x").is_ok());
-    assert!(h.session.status().attention_request.is_none());
-}
-
-#[test]
-fn leaving_cannot_restore_hidden_observation_or_writes() {
-    let mut h = Harness::new(); h.agent(1,"claude");
-    h.session.agent_request_control(1).unwrap();
-    h.session.set_attended(false);
-    assert!(h.session.current_lease().is_none());
-    assert!(h.session.snapshot(Actor::Agent{conn:1}).is_err());
-    assert!(h.session.agent_type(1,"hidden").is_err());
+    h.session.agent_request_attention(1,Some("check result".into())).unwrap();
+    h.session.human_input(b"\x03");
+    assert!(h.session.current_lease().is_none());assert!(h.session.agent_type(1,"late").is_err());
+    assert_eq!(h.pty_str(),"ls -l\x03");
+    h.session.set_attended(true);assert!(h.session.status().attention_request.is_none());
 }
 
 #[test]
@@ -83,4 +60,27 @@ fn unattended_default_is_safe_even_for_the_human_cli_path() {
     h.session.human_input(b"echo human\r");
     assert_eq!(h.pty_str(), "echo human\r");
     assert!(h.session.affordances(Actor::Human).contains(&Affordance::Snapshot));
+}
+
+#[test]
+fn grace_in_a_tab_nobody_watches_knocks_for_attention() {
+    use conn_core::session::KeyResult;
+    let mut h = Harness::headless();
+    let events = h.frontend("ui");
+    h.agent(1, "a");
+    h.session.set_pacing(conn_core::Pacing { enter_grace_ms: 3000, ..Default::default() });
+    h.session.agent_request_control(1).unwrap();
+    // Watched tab: the grace countdown is already in front of the human.
+    h.session.agent_type(1, "echo watched").unwrap();
+    let KeyResult::Scheduled { exec_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
+    assert!(!names(&events.lock().unwrap()).contains(&"attention_requested".to_string()));
+    h.session.cancel_exec(&exec_id).unwrap();
+    // Unwatched tab: grace is the human's chance to object, so the tab must knock.
+    h.session.set_attended(false);
+    h.session.pty_output(b"\r\x1b[2K$ ");
+    h.session.agent_request_control(1).unwrap();
+    h.session.agent_type(1, "echo background").unwrap();
+    assert!(matches!(h.session.agent_send_key(1, "ENTER").unwrap(), KeyResult::Scheduled { .. }));
+    assert!(names(&events.lock().unwrap()).contains(&"attention_requested".to_string()));
+    assert!(h.session.status().attention_request.is_some());
 }

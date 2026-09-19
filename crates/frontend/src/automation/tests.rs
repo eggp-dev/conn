@@ -308,7 +308,12 @@ exec /bin/sh -i"#;
     let selected=Client::connect(&tmp.path().join("conn.sock")).unwrap();
     let selected_id=selected.hello("agent","selected-auth-collaborator").unwrap()["conn"].as_u64().unwrap();
     let other=Client::connect(&tmp.path().join("conn.sock")).unwrap();
-    other.hello("agent","unselected-collaborator").unwrap();
+    let other_id=other.hello("agent","unselected-collaborator").unwrap()["conn"].as_u64().unwrap();
+    // The desktop app asks first: an unanswered connection is not even a sharing candidate.
+    assert_eq!(h.invoke_in_window("main","pending_admissions",json!({})).unwrap().as_array().unwrap().len(),2);
+    assert!(h.invoke_in_window("main","set_sharing",json!({"session":id,"shared":true,"connectionIds":[selected_id]})).is_err());
+    for conn in [selected_id,other_id] { h.invoke_in_window("main","decide_admission",json!({"connId":conn,"allow":true})).unwrap(); }
+    assert!(h.invoke_in_window("main","decide_admission",json!({"connId":selected_id,"allow":false})).is_err());
     assert!(selected.call("snapshot",json!({"session":id})).is_err());
     assert!(selected.call("publish_surface",json!({"session":id})).is_err());
     assert!(selected.call("set_sharing",json!({"session":id,"shared":true})).is_err());
@@ -331,17 +336,11 @@ exec /bin/sh -i"#;
     assert_eq!(shared["externalInputAvailable"],false);
     assert!(Arc::ptr_eq(&original_session,&h.state.hub.get(&id).unwrap()));
     assert!(h.automate(caller(),"session.write",json!({"session":handle,"text":"late external write"})).is_err());
-    assert!(selected.call("snapshot",json!({"session":id})).is_err(),"sharing does not manufacture a screen");
-    // This fixture acts as the owner renderer: only these presented rows are visible
-    // to the agent, even though the native output stream includes the earlier ID prompt.
-    let visible=json!(["ID: demo-user",format!("Password (masked): {}","*".repeat(masked.len())),"AUTH TEST PASSED","external-test$ "]);
-    let status=h.invoke("status",json!({"session":id})).unwrap();
-    let frame=json!({"surfaceId":"authentication-owner","generation":status["surfaceGeneration"],"revision":1,"outputSeq":status["outputSeq"],"rows":24,"cols":80,"cursor":null,"screen":visible,"alternateScreen":false,"visible":true});
-    h.invoke_in_window("main","publish_surface",json!({"session":id,"frame":frame})).unwrap();
     let snapshot=selected.call("snapshot",json!({"session":id})).unwrap();
-    assert_eq!(snapshot["screen"],visible);
+    assert!(snapshot.to_string().contains("ID: demo-user"));
+    assert!(snapshot.to_string().contains("AUTH TEST PASSED"));
+    assert!(snapshot.to_string().contains(&"*".repeat(masked.len())));
     assert!(!snapshot.to_string().contains(hidden) && !snapshot.to_string().contains(masked));
-    assert!(!snapshot.to_string().contains("Password (hidden):"));
     assert!(other.call("snapshot",json!({"session":id})).is_err());
     // Shell-local state set before sharing proves that no replacement PTY was spawned.
     h.invoke_in_window("main","input",json!({"session":id,"data":"printf '%s\\n' \"$CONN_SHARED_MARKER\"\r"})).unwrap();
@@ -353,4 +352,64 @@ exec /bin/sh -i"#;
     h.invoke_in_window("main","set_sharing",json!({"session":id,"shared":false,"connectionIds":[]})).unwrap();
     assert!(selected.call("snapshot",json!({"session":id})).is_err());
     assert!(h.automate(caller(),"session.write",json!({"session":handle,"text":"revoked stays revoked"})).is_err());
+}
+
+/// Real OpenSSH password login driven by an external launcher, then shared with an agent.
+/// Needs the disposable loopback SSH lab (synthetic credentials only):
+/// `CONN_AUTH_FIXTURE_RUNTIME=/abs/terminal-auth-fixtures/.runtime cargo test -p conn-frontend --lib real_ssh -- --ignored`
+#[test]
+#[ignore = "requires the terminal-auth-fixtures SSH lab on 127.0.0.1:22222"]
+fn real_ssh_login_injected_by_a_launcher_stays_secret_after_sharing() {
+    use conn_core::ipc::Client;
+    let runtime=std::path::PathBuf::from(std::env::var("CONN_AUTH_FIXTURE_RUNTIME").expect("set CONN_AUTH_FIXTURE_RUNTIME"));
+    let password=std::fs::read_to_string(runtime.join("password")).unwrap();
+    let wrong="SYNTHETIC_WRONG_PASSWORD_7f3a";
+    assert!(password.starts_with("SYNTHETIC_"),"only synthetic credentials are allowed here");
+    let (tmp,h,events)=harness_with_events(true);ready(&h);enable(&h);
+    let command=format!("ssh -F /dev/null -tt -p 22222 -o StrictHostKeyChecking=yes -o UserKnownHostsFile={} -o PreferredAuthentications=password -o PubkeyAuthentication=no -o IdentityAgent=none -o NumberOfPasswordPrompts=2 fixture@127.0.0.1",runtime.join("known_hosts").display());
+    let handle=h.automate(caller(),"session.create",json!({"command":command})).unwrap().as_str().unwrap().to_owned();
+    let id=physical(&h,&handle);
+    let write=|text:&str| { let r=h.automate(caller(),"session.write",json!({"session":handle,"text":text})).unwrap(); assert_eq!(done(&h,r.as_str().unwrap())["state"],"delivered"); };
+    // An agent is connected and admitted the whole time; the private login is not its business.
+    let agent=Client::connect(&tmp.path().join("conn.sock")).unwrap();
+    let agent_id=agent.hello("agent","watching-agent").unwrap()["conn"].as_u64().unwrap();
+    h.invoke_in_window("main","decide_admission",json!({"connId":agent_id,"allow":true})).unwrap();
+    wait_for(||owner_output(&events,&id,"main").contains("password:"));
+    assert!(agent.call("snapshot",json!({"session":id})).is_err(),"a private login must be unreachable");
+    assert!(!agent.call("list_tabs",json!({})).unwrap().to_string().contains(&id));
+    write(wrong);
+    wait_for(||owner_output(&events,&id,"main").matches("password:").count()>=2);
+    write(&password);
+    wait_for(||owner_output(&events,&id,"main").contains("$ "));
+    // Evaluated by the remote shell: the local account is never `fixture`.
+    write("echo REMOTE_READY_$((6*7))_$(id -un)");
+    wait_for(||owner_output(&events,&id,"main").contains("REMOTE_READY_42_fixture"));
+    let owner=owner_output(&events,&id,"main");
+    assert!(!owner.contains(&password)&&!owner.contains(wrong),"sshd reads passwords without echo");
+    assert_unrecorded(&h,&password);assert_unrecorded(&h,wrong);
+
+    let shared=h.invoke_in_window("main","set_sharing",json!({"session":id,"shared":true,"connectionIds":[agent_id]})).unwrap();
+    assert_eq!(shared["shared"],true);assert_eq!(shared["externalInputAvailable"],false);
+    assert!(h.automate(caller(),"session.write",json!({"session":handle,"text":"late launcher write"})).is_err(),"sharing revokes the launcher for good");
+    let snapshot=agent.call("snapshot",json!({"session":id})).unwrap().to_string();
+    assert!(snapshot.contains("REMOTE_READY_42_fixture"),"the agent sees the authenticated remote shell: {snapshot}");
+    assert!(!snapshot.contains(&password)&&!snapshot.contains(wrong),"no credential in the shared grid");
+    for method in ["list_tabs","status","affordances"] {
+        let reply=agent.call(method,json!({"session":id})).map(|v|v.to_string()).unwrap_or_default();
+        assert!(!reply.contains(&password)&&!reply.contains(wrong),"{method}");
+    }
+    // Nothing typed before sharing is backfilled into saved collaboration data.
+    for entry in std::fs::read_dir(tmp.path()).unwrap().flatten() {
+        if entry.path().is_file() {
+            let data=std::fs::read(entry.path()).unwrap_or_default();
+            for secret in [password.as_bytes(),wrong.as_bytes(),b"echo REMOTE_READY".as_slice()] {
+                assert!(!data.windows(secret.len()).any(|w|w==secret),"{} retains private input",entry.path().display());
+            }
+        }
+    }
+    let audit=std::fs::read_to_string(h.state.config_dir.join("audit.jsonl")).unwrap();
+    assert!(audit.contains("sharing_started")&&!audit.contains("fixture@127.0.0.1"),"startup arguments are not backfilled");
+    h.invoke_in_window("main","set_sharing",json!({"session":id,"shared":false,"connectionIds":[]})).unwrap();
+    assert!(agent.call("snapshot",json!({"session":id})).is_err());
+    h.shutdown();
 }

@@ -5,7 +5,8 @@
   import AgentConnections from "./AgentConnections.svelte";
   import DiagnosticConnections from "./DiagnosticConnections.svelte";
   import ProfilesPane from "./ProfilesPane.svelte";
-  import { tick } from "svelte";
+  import { tick, onMount } from "svelte";
+  import { invoke } from "../lib/transport";
   import { fade } from "svelte/transition";
   import { st, cur, tab, toast, type Analysis } from "../lib/store.svelte";
   import { cmd, changeMode, type Mode } from "../lib/bridge";
@@ -43,6 +44,13 @@
     }
     if (scope === "all") { await Promise.all(sharedTabs.map((id) => cmd(name, { ...args, session: id }))); }
     else await cmd(name, args);
+  }
+  // Connection-level: applies to the whole app, not to one tab.
+  let admissionAsk = $state(true);
+  onMount(() => { void invoke<{ ask: boolean }>("admission_policy").then(p => { admissionAsk = p.ask; }).catch(() => {}); });
+  async function setAdmission(ask: boolean) {
+    try { admissionAsk = (await invoke<{ ask: boolean }>("set_admission", { ask })).ask; }
+    catch (e) { toast(String(e), "warn"); }
   }
   async function saveDefaults() {
     const c = cur();
@@ -84,7 +92,7 @@
   let showSource = $state(false);
   let testCmd = $state("");
   let verdict = $state<Analysis | null>(null);
-  type Rules = { rules: { kind: string; label: string; pattern?: string; command?: string; args?: string | null }[]; protected: string[]; opaque: string; isolateDangerous: boolean; requireIntent: boolean; unattended: string; default: string };
+  type Rules = { rules: { kind: string; label: string; pattern?: string; command?: string; args?: string | null }[]; protected: string[]; opaque: string; isolateDangerous: boolean; requireIntent: boolean; default: string };
   let rules = $state<Rules | null>(null);
   async function loadPolicy() {
     const r = await cmd<{ path: string; text: string }>("policy_read");
@@ -236,6 +244,7 @@
           {/each}
         </div>
         <label class="row"><input type="checkbox" checked={cur().gate} onchange={(e) => apply("set_control_gate", { ask: (e.target as HTMLInputElement).checked })} /> <span>{t("gate")} <em class="muted">{t("gate.desc")}</em></span></label>
+        <label class="row"><input type="checkbox" checked={admissionAsk} onchange={(e) => setAdmission((e.target as HTMLInputElement).checked)} /> <span>{t("admission.setting")} <em class="muted">{t("admission.setting.desc")}</em></span></label>
 
 <details class="advanced"><summary>{t("s.advancedPermissions")}</summary>
         <div class="presets">

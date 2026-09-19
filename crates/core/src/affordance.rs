@@ -83,20 +83,7 @@ pub fn affordances_for(actor: Actor, state: &AffordanceState<'_>) -> Vec<Afforda
             if !state.process_alive {
                 return out;
             }
-            if !state.attended {
-                // Unattended: the agent may only knock, and poll an
-                // approval it already has. It cannot even look — the human is not looking.
-                out.clear();
-                out.push(RequestAttention);
-                if state.tabs {
-                    // ... or go where the human is looking.
-                    out.push(SwitchTab);
-                }
-                if state.has_pending_approval {
-                    out.push(CheckApproval);
-                }
-                return out;
-            }
+            if !state.attended { out.push(RequestAttention); }
             match state.controller {
                 Controller::Human => out.push(RequestControl),
                 Controller::Agent(l) if l.conn == conn => {
