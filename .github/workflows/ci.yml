@@ -21,6 +21,47 @@ env:
   CARGO_PROFILE_DEV_DEBUG: '0'
   CARGO_PROFILE_TEST_DEBUG: '0'
 jobs:
+  # Documentation and UI changes do not need three native builds. Releases, manual
+  # runs, the `full-ci` label and anything this step cannot classify get everything.
+  scope:
+    name: Scope
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      rust: ${{ steps.scope.outputs.rust }}
+      desktop: ${{ steps.scope.outputs.desktop }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          RELEASE_REF: ${{ inputs.ref }}
+          FULL_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'full-ci') }}
+        run: |
+          set -euo pipefail
+          all='["ubuntu-24.04","macos-15","windows-2022"]'
+          full() { echo "Full matrix: $1"; { echo "rust=$all"; echo "desktop=$all"; } >> "$GITHUB_OUTPUT"; exit 0; }
+          # A reusable call reports its caller's event, so a release is recognized by its ref.
+          [ -z "$RELEASE_REF" ] || full "release validation"
+          [ "$EVENT" = pull_request ] || [ "$EVENT" = push ] || full "manual run"
+          [ "$FULL_LABEL" != true ] || full "full-ci label"
+          [ "$EVENT" != push ] || [ "$GITHUB_REF" = refs/heads/main ] || full "push outside main"
+          [ -f scripts/ci_scope.py ] || full "no scope script at this revision"
+          base=""
+          if [ "$EVENT" = push ] && [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ] \
+             && git fetch --quiet --depth=1 origin "$BEFORE"; then base="$BEFORE"; fi
+          # A pull request is checked out as its merge commit; its first parent is the base branch.
+          if [ -z "$base" ] && git rev-parse --quiet --verify 'HEAD^1' > /dev/null; then base='HEAD^1'; fi
+          if [ -z "$base" ] || ! git diff --name-only "$base" HEAD > "$RUNNER_TEMP/changed.txt"; then
+            python3 scripts/ci_scope.py --event "$EVENT" --unknown-diff | tee -a "$GITHUB_OUTPUT"; exit 0
+          fi
+          echo "Changed paths:"; sed 's/^/  /' "$RUNNER_TEMP/changed.txt"
+          python3 scripts/ci_scope.py --event "$EVENT" < "$RUNNER_TEMP/changed.txt" | tee -a "$GITHUB_OUTPUT"
   quality:
     name: Docs, release tooling and frontend
     runs-on: ubuntu-24.04
@@ -43,10 +84,12 @@ jobs:
         working-directory: frontends/tauri
   core:
     name: Rust (${{ matrix.os }})
+    needs: scope
+    if: needs.scope.outputs.rust != '[]'
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15, windows-2022]
+        os: ${{ fromJSON(needs.scope.outputs.rust) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -62,10 +105,12 @@ jobs:
       - run: cargo test --workspace --locked
   desktop:
     name: Desktop (${{ matrix.os }})
+    needs: scope
+    if: needs.scope.outputs.desktop != '[]'
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15, windows-2022]
+        os: ${{ fromJSON(needs.scope.outputs.desktop) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
@@ -94,12 +139,19 @@ jobs:
   required:
     name: Required checks
     if: always()
-    needs: [quality, core, desktop]
+    needs: [scope, quality, core, desktop]
     runs-on: ubuntu-24.04
     steps:
-      - name: All jobs passed
+      - name: Every job in scope passed
         env:
+          SCOPE: ${{ needs.scope.result }}
           QUALITY: ${{ needs.quality.result }}
           CORE: ${{ needs.core.result }}
           DESKTOP: ${{ needs.desktop.result }}
-        run: test "$QUALITY" = success && test "$CORE" = success && test "$DESKTOP" = success
+          RUST_RUNNERS: ${{ needs.scope.outputs.rust }}
+          DESKTOP_RUNNERS: ${{ needs.scope.outputs.desktop }}
+        run: |
+          # A job may be skipped only because the scope left it nothing to do.
+          expected() { if [ "$1" = '[]' ]; then test "$2" = skipped; else test "$2" = success; fi; }
+          test "$SCOPE" = success && test "$QUALITY" = success
+          expected "$RUST_RUNNERS" "$CORE" && expected "$DESKTOP_RUNNERS" "$DESKTOP"
