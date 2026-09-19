@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix: typing while a command approval was pending left the approval alive with your keystrokes appended to the agent's typed line, so approving afterwards could run a line that was never reviewed. Human input now denies pending approvals and clears that line before your input reaches the shell.
+
 ## 0.8.0 — Preview · 2026-09-19
 
 - **Breaking contract change from 0.7.0:** agents observe the current terminal grid of their shared session, parsed from PTY output in the core. Window focus, the visible tab, minimization, covering panels and renderer heartbeats no longer gate reading or writing. The `unattended` / `suspended` errors, `surface_invalidated`, `control_suspended` and `control_resumed` events, and the renderer frame publication commands are removed. Snapshots are text only: no screenshot, scrollback or owner scroll position.

@@ -1085,6 +1085,14 @@ impl Session {
         self.cancel_scheduled_if(|_| true, "human_input");
         // Nor does a proposal: the human is typing something else.
         self.reject_proposal_if(|_| true, "human_input");
+        // Nor does a pending approval. Its command is already typed on the line, so the
+        // human's bytes would be appended to it and a later "approve" would run a line
+        // nobody reviewed. Denying clears that line before the human's input arrives.
+        if !bytes.is_empty() {
+            for id in self.approvals.pending().into_iter().map(|a| a.id.clone()).collect::<Vec<_>>() {
+                self.finish_approval(&id, ApprovalState::Denied, "human_input");
+            }
+        }
         // 3. forward the bytes
         self.write_pty(bytes);
         if let Some(lease) = revoked {

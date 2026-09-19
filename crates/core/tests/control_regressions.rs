@@ -209,3 +209,20 @@ fn real_pty_copilot_interrupt_stops_running_shell_command() {
     wait_for(|| session.lock().screen().rows().iter().any(|r| r.trim() == "interrupt-result-42"));
     engine.terminate().unwrap();
 }
+
+#[test]
+fn human_input_denies_a_pending_approval_instead_of_editing_its_command() {
+    let mut h = Harness::headless();
+    h.agent(1, "a");
+    h.session.agent_request_control(1).unwrap();
+    h.session.agent_type(1, "sudo ls").unwrap();
+    let KeyResult::Pending { approval_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!("expected an approval") };
+    h.session.human_input(b"x");
+    // The reviewed text is gone before the human's byte lands: clear line, then "x".
+    assert_eq!(h.pty_str(), "sudo ls\x15x");
+    assert!(h.session.status().pending.is_empty(), "the approval must not outlive human input");
+    assert_eq!(h.session.check_approval(&approval_id).unwrap().state, ApprovalState::Denied);
+    // Approving late can no longer submit a line that was never reviewed.
+    assert!(h.session.resolve_approval(&approval_id, Decision::Grant, "human").is_err());
+    assert_eq!(h.pty_str(), "sudo ls\x15x", "nothing is submitted by a late approval");
+}

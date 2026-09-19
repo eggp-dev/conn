@@ -48,12 +48,14 @@ fn headless_mode_does_not_draw_the_prompt() {
     assert!(matches!(h.session.agent_send_key(1, "ENTER").unwrap(), KeyResult::Pending { .. }));
     assert!(!h.session.prompt_active());
     assert!(!h.stdout_str().contains("\x1b[?1049h"));
-    // human keystrokes are a takeover, not a prompt answer
-    h.session.human_input(b"d");
+    // Human keystrokes are a takeover, never a prompt answer: "y" must not approve.
+    // The pending command is already typed on the line, so the approval cannot stay
+    // alive either, or a later approve would submit that line plus the human's bytes.
+    h.session.human_input(b"y");
     assert!(h.session.controller().is_human());
-    assert_eq!(h.session.status().pending.len(), 1, "approval still pending; frontend decides");
-    h.session.resolve_first_pending(Decision::Deny, "frontend").unwrap();
-    assert!(h.pty_str().ends_with("\x15"));
+    assert!(h.session.status().pending.is_empty(), "the approval is denied, not answered and not left pending");
+    assert_eq!(h.pty_str(), "sudo ls\x15y", "the reviewed line is cleared before the human's byte; nothing is submitted");
+    assert!(h.session.resolve_first_pending(Decision::Grant, "frontend").is_err());
 }
 
 #[test]
