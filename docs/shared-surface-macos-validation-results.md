@@ -1,63 +1,89 @@
 # Shared-surface macOS validation results
 
-> Historical results for the pre-hardcut foreground contract. Focus/minimize denial is no longer expected. This report does not validate the new session-screen implementation; rerun the macOS acceptance checklist.
-
-The previously observed tooling blocker is resolved. Exercised functionality passes, including writes and Enter denied after focus loss and minimization **while the same agent lease remains valid**. No product release blocker was confirmed. Signed distribution, notarization, and update-artifact validation remain outside the completed development-build assessment.
+Native acceptance of the session-screen hard cut on an Apple Silicon Mac. This is a
+development-build assessment, not a release decision. Earlier foreground-denial results
+(pre-hardcut contract) are summarised at the end for history only.
 
 ## Source and scope
 
-- Baseline: `f5a3aa7381cbcf18f0f44d665f6d95e7d09c38e0` (`refactor/shared-surface`).
-- Tested revision: `9495568c720ee21875a2eeaa4f40cbed9012d13d` (`validation/macos-f5a3aa7`). The subsequent report commit changes documentation and evidence only.
-- The three validation commits are `d68cbff1327d3c4307a9c3f64fd5e7fa9cebb289`, `62db039c360f69ad5bae4e397a962d8245aa5e03`, and `9495568c720ee21875a2eeaa4f40cbed9012d13d`. They change test fixtures, tooling diagnostics, and regression coverage; product runtime code is unchanged from the baseline.
-- Actual native application, isolated worktree/config/socket/bundle, synthetic local shell and credentials. Existing installation and work were preserved.
-- This public report contains selected synthetic-test results only. Device/account identifiers, local paths, original authentication transcripts, and unrelated desktop content are excluded.
+- Tested revision: `cc380ae0cd8c0126f61530f4f81b7e78e7428fa0` (`refactor/shared-surface`),
+  2026-09-19.
+- macOS 26 (Darwin 27.0.0), arm64. Rust 1.95.0, Node 25.9. Xcode present, but
+  `xcode-select` points at Command Line Tools.
+- Ad-hoc signed debug bundle (`APPLE_SIGNING_IDENTITY=-`, `--bundles app`) with a distinct
+  identifier and product name, isolated `CONN_CONFIG_DIR` and `CONN_SOCKET`. The user's
+  release app, config and MCP setup were not touched.
+- Agents were raw-IPC clients speaking the same JSON-lines protocol as the MCP adapter.
+  Credentials were synthetic markers only. Device, account and path details are omitted.
 
-## Live-lease focus and minimization checks
-
-A persistent MCP connection obtained `lease#2` in autopilot mode. Each case was measured separately, with the window restored between cases. Public `terminal_list_tabs` responses immediately before and after the write/Enter probes established agent ownership and positive remaining lease lifetime. No ownership was injected through a test-only API.
-
-| Case | Controller before probes | Write | Enter | Controller after probes | Result |
-|---|---|---|---|---|---|
-| Native minimize button | agent, `lease#2`, 39 seconds remaining | `surface_unavailable` | `surface_unavailable` | agent, same lease, 59 seconds remaining | PASS |
-| Restore window, then activate another application; Conn window controls visibly inactive | agent, `lease#2`, 19 seconds remaining | `surface_unavailable` | `surface_unavailable` | agent, same lease, 59 seconds remaining | PASS |
-| Human Ctrl-C comparison | human | `not_controller` | `not_controller` | human at probe start | PASS |
-
-Lease lifetime refreshes during requests; the observations above are the returned values. Both hidden-state cases retained the **same** agent lease before and after rejection. These results therefore establish a visibility denial, rather than rejection because the agent had already lost control or expired.
-
-[Selected MCP evidence](validation/shared-surface-macos/lease-visibility-evidence.json) retains response IDs, controller/lease information, and exact error messages. The native UI evidence is [agent control before minimizing](validation/shared-surface-macos/minimize-before.png), [unfocused window with agent control](validation/shared-surface-macos/unfocused-agent.png), and [human-control comparison](validation/shared-surface-macos/human-control.png).
-
-A preliminary attempt did not actually deactivate Conn and was excluded from the focus-loss result. The screenshots retain the harmless command-not-found output from that setup attempt. The accepted unfocus case was taken after native window controls became inactive and both probes returned `surface_unavailable`.
-
-## Completed acceptance checks
-
-| Area | Result and scope |
-|---|---|
-| Native viewport and MCP text/PNG | PASS: Unicode, wide/combining characters, wrapping, scroll, alternate screen, conceal and equal foreground/background colors |
-| Transparent foreground | PASS: separate native WebKit renderer fixture |
-| Unavailable surfaces | PASS: inactive tabs, overlays, closed windows; live-lease focus/minimize cases documented above |
-| External AppleScript authentication and sharing | PASS: synthetic hidden/star-masked input; same SSH transport survives sharing; human initially owns control; an unselected connection with the same display name cannot access the session |
-| External writer after sharing | PASS: the original script's subsequent write is denied |
-| Control, approval, human intervention | PASS: request control, individual SSH command approval, session-wide approval unavailable, subsequent agent writes denied after human interruption |
-| Stop sharing | PASS: with and without pending input; agent access ends while the human continues on the same SSH connection |
-| Timeline | PASS: sharing boundaries present; no retroactive private input or startup-payload history |
-| Theme and keychain | PASS: apply/revert theme; synthetic key save/presence/delete; provider disabled; no plaintext setting fallback |
-| Completion | PASS within fixture scope: native WebKit insertion/cancellation and actual Rust Harness cancellation boundaries. No real provider request |
-| macOS scripting bundle check | PASS, exit 0: dictionary discovery, strict ad-hoc bundle signature verification, shipped AppleScript example compilation |
-| Distribution signing, notarization and updates | NOT VERIFIED: requires release artifacts; not a demonstrated product failure |
-
-PNG comparisons were visual, not pixel-equality assertions. The SSH fixture used a real loopback SSH transport with a synthetic command loop, not a production server. Native component fixtures are distinguished from the full application's real-provider path.
-
-## Automated results and fixes
+## Automated checks
 
 | Check | Result |
 |---|---|
-| Final workspace suite | 238 passed, 0 failed |
-| Frontend tests / build | 42 passed / build passed |
-| Tauri library | 4 passed, 1 release-artifact-dependent test ignored |
-| macOS scripting checker regression tests | 10 passed |
-| Completion cancellation boundary tests | 5 passed, included in workspace total |
-| Native WebKit renderer / completion fixtures | 10 / 14 assertions passed |
+| `cargo build --locked --workspace` with vendored `vt100` path dependency | PASS |
+| `cargo test --locked --workspace` | 255 passed, 0 failed, 1 ignored |
+| Frontend `npm test` / `npm run build` | 38 passed / build passed |
+| Tauri library tests | 4 passed, 1 release-artifact-dependent test ignored |
+| `scripts/check_macos_scripting.py --app <candidate>` | PASS (exit 0) with `DEVELOPER_DIR` set to Xcode; BLOCKED under the default Command Line Tools (`sdef` needs Xcode) |
 
-The initial workspace run had 226 passing tests and one authentication-fixture failure. The fixture waited for a shell prompt that macOS could reset; it now waits for the explicit authentication-success marker while preserving same-process and private-history assertions. The checker distinguishes unavailable Xcode tooling/license state from an application failure. Two further regressions cover atomic cancellation of ready completion proposals on sharing stop and surface invalidation.
+The new lifecycle and admission tests (`#![cfg(unix)]`) ran on macOS as part of the
+workspace total.
 
-No additional runtime fix was required by the live-lease checks. No main merge, tag, release, or deployment is part of this validation.
+## Native checks
+
+| Area | Result and evidence |
+|---|---|
+| Connection admission | PASS. A first `hello` returned `admission: pending`; discovery calls returned `admission_pending` at once; the native window showed the "wants to join" card. A `snapshot` issued before **Allow** waited and succeeded 5 s later, right after the click, and `tools_changed` was delivered. A second connection later produced a second card and was admitted independently. |
+| Hard cut: minimized window | PASS. With the agent holding `lease#1`, `snapshot`, `type` and ENTER (`echo HARDCUT_MINIMIZED_$((6*7))`) executed while the window was minimized; the agent snapshot showed the output, the lease survived, and the native view caught up on restore. |
+| Hard cut: unfocused / covered | PASS. With Finder frontmost (Conn not the active app), the same probe executed and was observed by the agent. Occlusion by another app's window was not measured separately; the contract does not claim it. |
+| Hard cut: human on another tab | PASS. Human opened tab 2 and stayed there (`attended` = tab 2); the agent bound to tab 1 executed and observed `HARDCUT_OTHER_TAB_42` in tab 1. Tab 2 stayed empty. |
+| External AppleScript login (private) | PASS. `create window with default profile command "/usr/bin/ssh …"` against a loopback SSH transport with synthetic password, hidden second prompt and star-masked third prompt. An admitted agent could not see the session: absent from `list_tabs`, and `snapshot`/`status`/`switch_tab` by its ID returned `session unavailable`. Native view: hidden input absent, masked input as stars. |
+| Sharing the same external session | PASS. Owner opened the sharing panel, which listed the live connection unselected; **Start sharing** stayed disabled with nothing selected. After selecting the agent, the agent's `snapshot` (new `generation`) showed the authenticated remote shell with stars for the masked prompt and no synthetic credential in `snapshot`, `status`, `affordances`, `list_tabs` or any file in the config directory. The launcher's late `write text` was rejected (`Session unavailable for this caller`). `Stop external input` disappeared. |
+| Unselected admitted connection | PASS. A second admitted connection could not see or address the shared external session. |
+| Agent write after human ESC in the external session | Expected. `type`/ENTER returned `input_pending` because the human's unfinished input line must be cleared first. |
+
+Native evidence was inspected as window captures during the run; no images are committed.
+
+## Findings for follow-up
+
+1. **A connection can hold leases in two sessions at once.** Bound to tab 1, the agent
+   called `request_control` without `session` (granted `lease#1` in tab 1) and then
+   `request_control` with `session` naming the shared external session (granted
+   `lease#2` there); both `status` replies showed the same agent as controller. Earlier,
+   `switch_tab` to tab 1 while holding a lease in the explicitly addressed session did
+   not release that lease; it ran to natural expiry. The core test
+   `moving_to_another_tab_releases_everything_held_in_the_source` covers only the bound
+   tab. Explicit `session` addressing bypasses the per-tab lease scoping.
+2. **Unexplained loss of access and silent app exit (first run, not reproduced).** About
+   20 s after sharing an external session with an admitted, selected connection and one
+   successful `snapshot`, every per-session call on it (`status`, `snapshot`,
+   `request_control`, `switch_tab`) returned `session unavailable` while `list_tabs`
+   kept listing it and the audit showed no sharing change. About three minutes later the
+   app process exited with no crash report and nothing on stderr; the socket was removed
+   as on a clean quit. In between, an Escape key was sent into that window, a second
+   automation window was created, and a second agent connection sent `hello`. A second
+   run repeated each of those steps in isolation with access re-checked after each, and
+   none reproduced either symptom. Worth a look at the writer-side disclosure guard and
+   the connection-loop `bound` state for explicitly addressed sessions.
+3. **One `create window` reply was lost.** The first login run's `create window … command`
+   never returned to `osascript`, although the window appeared and the SSH connection was
+   made; a later identical run and a `nohup` re-run returned normally. The external
+   automation docs already warn that a lost reply may follow a successful spawn.
+
+## Not verified here
+
+- Signed distribution, notarization and updater artifacts (release artifacts required).
+- A real OpenSSH `sshd`: this Mac has no root, so the login used a loopback paramiko
+  transport with a synthetic prompt loop, as in the earlier validation. The ignored test
+  `real_ssh_login_injected_by_a_launcher_stays_secret_after_sharing` and the
+  `macos_hidden_login.py` fixture were not available on this machine.
+- Windows.
+
+## Historical: pre-hardcut foreground contract (superseded)
+
+The earlier report on `validation/macos-f5a3aa7` (tested `9495568c…`) established
+`surface_unavailable` for minimized and unfocused windows under the old presented-surface
+contract, plus PASS results for viewport/PNG parity, AppleScript authentication and
+sharing, control and approval, stop sharing, timeline, theme/keychain and completion
+fixtures, with 238 workspace tests passing. Those focus/minimize denials are no longer
+expected and are not acceptance evidence for the hard cut.
