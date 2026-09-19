@@ -52,8 +52,8 @@ Yes, within the ordinary session's existing screen and control permissions. Conn
 
 ## Are external automation sessions shared too?
 
-External private sessions have a different purpose. They are excluded from agent discovery, snapshots and control, and do not produce Conn activity history. Taking over as a human does not turn them into shared sessions. The unreleased
-shared-surface version adds a separate owner action to select participants and share
+External private sessions have a different purpose. They are excluded from agent discovery, snapshots and control, and do not produce Conn activity history. Taking over as a human does not turn them into shared sessions. Since v0.7.0
+there is a separate owner action to select participants and share
 the same authenticated connection. Child output, shell history and other OS storage remain separate surfaces. [External automation](external-automation.md)
 
 ## How do updates work?

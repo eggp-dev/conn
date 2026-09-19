@@ -24,7 +24,7 @@ request/approval entry by ID. Uncertain attribution is labelled **Shell**.
 | Type a password into sudo/SSH or a program | No input entry | Existing screen permissions; visible output is still visible |
 | Open Vim, a REPL, nested shell, or tmux | Outer command only | Existing mode and permissions |
 | Connect with `ssh host` | The local SSH command, ending when it returns | Continues inside SSH; no remote helper is installed |
-| Use an external private session | No history and no hooks | Unavailable while private. The unreleased owner sharing action enables collaboration in the same session; human takeover alone does not |
+| Use an external private session | No history and no hooks | Unavailable while private. The owner sharing action (v0.7.0 and later) enables collaboration in the same session; human takeover alone does not |
 
 ## Startup compatibility
 

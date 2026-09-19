@@ -2,9 +2,9 @@
 
 [Reporting a vulnerability](../SECURITY.md) · [한국어 요약](#한국어-요약)
 
-**Unreleased hardcut.** This page describes the working tree's new shared-surface
-contract. The released v0.6.0 app keeps externally created sessions private for their
-whole lifetime and does not provide the sharing transition or native model extensions.
+**Since v0.8.0.** This page describes the shared-surface contract shipped in v0.8.0; the
+sharing transition and native model extensions arrived in v0.7.0. v0.6.0 keeps externally
+created sessions private for their whole lifetime and provides neither.
 
 <a id="one-terminal-one-presented-surface"></a>
 

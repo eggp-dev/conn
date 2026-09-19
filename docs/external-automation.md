@@ -2,10 +2,10 @@
 
 [한국어](external-automation.ko.md)
 
-**Unreleased hardcut: optional sharing after private external execution.** The native
+**Since v0.7.0: optional sharing after private external execution.** The native
 macOS Apple Silicon and Linux D-Bus launch/input adapters were introduced in v0.6.0.
-That release keeps external sessions private for their whole lifetime. The working tree
-adds an owner-controlled sharing transition on the same PTY; the Windows external
+That release keeps external sessions private for their whole lifetime. v0.7.0
+added an owner-controlled sharing transition on the same PTY; the Windows external
 adapter is not implemented. New sharing behavior needs native acceptance on each OS,
 separately from earlier v0.6.0 launch/input checks.
 
