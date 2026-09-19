@@ -75,8 +75,27 @@ impl From<SessionError> for RpcError {
     }
 }
 
+/// Agents get one generic refusal so they cannot probe for private sessions. The
+/// owner can ask why: `CONN_TRACE_REFUSALS=1` prints the cause to stderr. Reasons
+/// and identifiers only, never terminal content.
+fn trace_refusal(reason: &str, conn: ConnId, session: &str) {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *ENABLED.get_or_init(|| std::env::var_os("CONN_TRACE_REFUSALS").is_some_and(|v| !v.is_empty())) {
+        eprintln!("conn refusal {} conn={conn} session={session} reason={reason}", chrono::Local::now().format("%H:%M:%S%.3f"));
+    }
+}
+
 fn session_unavailable() -> RpcError {
     RpcError { code: "not_found".into(), message: "session unavailable".into() }
+}
+
+/// A connection holds a lease and pending work in one tab at a time. Requests may
+/// name any permitted `session`, so the binding alone cannot guarantee this: asking
+/// for control elsewhere, like moving, gives up whatever is held in the other tabs.
+fn leave_other_tabs(hub: &Hub, registered: &[SessionId], conn: ConnId, keep: &str) {
+    for sid in registered.iter().filter(|sid| sid.as_str() != keep) {
+        if let Some(s) = hub.get(sid) { s.lock().agent_left_tab(conn); }
+    }
 }
 
 fn connection_closing() -> RpcError {
@@ -98,8 +117,8 @@ fn bytes_param(params: &Value, key: &str) -> Result<Vec<u8>, RpcError> {
 pub fn dispatch(session: &SharedSession, conn: ConnId, method: &str, params: &Value) -> Result<Value, RpcError> {
     {
         let s = session.lock();
-        if s.is_private() { return Err(session_unavailable()); }
-        if !s.participant_allowed(conn) { return Err(session_unavailable()); }
+        if s.is_private() { trace_refusal("session is private", conn, "-"); return Err(session_unavailable()); }
+        if !s.participant_allowed(conn) { trace_refusal("connection is not a selected participant", conn, "-"); return Err(session_unavailable()); }
         if s.conn_kind(conn) != Some(ConnKind::Agent) {
             return Err(RpcError { code: "owner_required".into(), message: "public connections must identify as agents".into() });
         }
@@ -666,10 +685,18 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
     let writer = tokio::spawn(async move {
         while let Some(mut message) = out_rx.recv().await {
             if let Some((sid, generation, frame_generation)) = &message.guard {
-                let allowed = writer_hub.get(sid).is_some_and(|s| {
-                    let s = s.lock(); s.participant_allowed(conn) && s.participation_generation() == *generation && frame_generation.is_none_or(|g| s.surface_generation() == g)
-                });
-                if !allowed {
+                let refused = match writer_hub.get(sid) {
+                    None => Some("session closed before the reply was sent"),
+                    Some(s) => {
+                        let s = s.lock();
+                        if !s.participant_allowed(conn) { Some("participation ended before the reply was sent") }
+                        else if s.participation_generation() != *generation { Some("sharing changed before the reply was sent") }
+                        else if frame_generation.is_some_and(|g| s.surface_generation() != g) { Some("snapshot belongs to an earlier sharing boundary") }
+                        else { None }
+                    }
+                };
+                if let Some(reason) = refused {
+                    trace_refusal(reason, conn, sid);
                     let id = serde_json::from_str::<Value>(&message.line).ok().and_then(|v| v["id"].as_u64());
                     let Some(id) = id else { continue; };
                     message.line = serde_json::to_string(&Response { id, result: None, error: Some(session_unavailable()) }).unwrap();
@@ -835,8 +862,8 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
                             Err(e) => Err(e),
                             Ok(sid) => {
                                 let ns = hub.get_public(&sid).expect("checked");
-                                s.lock().agent_left_tab(conn);
                                 register(&sid, &ns, &identity, &mut registered);
+                                leave_other_tabs(&hub, &registered, conn, &sid);
                                 ns.lock().agent_opened_tab(conn, reason);
                                 bound = Some(sid.clone());
                                 Ok(json!({ "session": sid, "tab": hub.public_index_of(&sid, conn), "attended": false, "note": "the human is not looking at this tab yet; request_attention is queued — wait for the human to show this tab" }))
@@ -865,10 +892,10 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
                         Err(e) => Err(e.into()),
                         Ok(()) => {
                             register(&to, &ts, &identity, &mut registered);
+                            leave_other_tabs(&hub, &registered, conn, &to);
                             if let Some(from) = bound.as_ref().filter(|from| **from != to) {
                                 if let Some(source) = hub.get_public(from) {
                                     let mut source = source.lock();
-                                    source.agent_left_tab(conn);
                                     if source.participant_allowed(conn) {
                                         source.agent_switched_tab(conn, from, &to);
                                         drop(source);
@@ -896,12 +923,13 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
             match hub.resolve_public(target.as_deref()) {
                 Some((sid, s)) => {
                     register(&sid, &s, &identity, &mut registered);
+                    if req.method == "request_control" { leave_other_tabs(&hub, &registered, conn, &sid); }
                     if bound.is_none() {
                         bound = Some(sid);
                     }
                     call_with_pacing(&s, conn, &req.method, &req.params).await
                 }
-                None => Err(session_unavailable()),
+                None => { trace_refusal("no such shared session (closed, private, or never bound)", conn, target.as_deref().unwrap_or("-")); Err(session_unavailable()) }
             }
         } } => result,
         };
@@ -961,7 +989,7 @@ async fn call_with_pacing(session: &SharedSession, conn: ConnId, method: &str, p
             let id = v["requestId"].as_str().unwrap_or_default().to_string();
             loop {
                 tokio::time::sleep(Duration::from_millis(100)).await;
-                if session.lock().participation_generation() != initial_generation { return Err(session_unavailable()); }
+                if session.lock().participation_generation() != initial_generation { trace_refusal("sharing changed while the request was waiting", conn, "-"); return Err(session_unavailable()); }
                 let st = session.lock().control_request_state(&id);
                 match st {
                     Some(ControlRequestState::Pending) => continue,
@@ -980,7 +1008,7 @@ async fn call_with_pacing(session: &SharedSession, conn: ConnId, method: &str, p
             let cmd = v["cmd"].as_str().unwrap_or_default().to_string();
             loop {
                 tokio::time::sleep(Duration::from_millis(50)).await;
-                if session.lock().participation_generation() != initial_generation { return Err(session_unavailable()); }
+                if session.lock().participation_generation() != initial_generation { trace_refusal("sharing changed while the request was waiting", conn, "-"); return Err(session_unavailable()); }
                 let st = session.lock().proposal_state(&id);
                 match st {
                     Some(ProposalState::Ready) | Some(ProposalState::Drafting) => continue,
@@ -996,7 +1024,7 @@ async fn call_with_pacing(session: &SharedSession, conn: ConnId, method: &str, p
             let cmd = v["cmd"].as_str().unwrap_or_default().to_string();
             loop {
                 tokio::time::sleep(Duration::from_millis(20)).await;
-                if session.lock().participation_generation() != initial_generation { return Err(session_unavailable()); }
+                if session.lock().participation_generation() != initial_generation { trace_refusal("sharing changed while the request was waiting", conn, "-"); return Err(session_unavailable()); }
                 let state = session.lock().exec_state(&exec_id);
                 match state {
                     Some((ExecState::Scheduled, _)) => continue,

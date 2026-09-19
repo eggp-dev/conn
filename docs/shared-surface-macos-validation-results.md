@@ -70,6 +70,27 @@ Native evidence was inspected as window captures during the run; no images are c
    made; a later identical run and a `nohup` re-run returned normally. The external
    automation docs already warn that a lost reply may follow a successful spawn.
 
+### Follow-up from Linux
+
+1. **Fixed.** Reproduced on Linux with the same two calls. A connection now holds one
+   lease at a time: `request_control` in another session gives up what it holds
+   elsewhere, and `switch_tab` / `open_tab` release every other tab, not only the bound
+   one. Regression: `naming_a_session_explicitly_cannot_collect_leases_across_tabs`.
+   This needs a macOS re-check.
+2. **Not reproduced; now traceable.** Replaying the sequence on Linux (shared external
+   session, control requested in both sessions, calls every four seconds for half a
+   minute, then `switch_tab`) kept access. One detail narrows it: `list_tabs` and
+   `switch_tab` apply the same per-connection participation filter, so within a single
+   connection one cannot list a session that the other refuses. That pattern is what an
+   admitted but unselected connection sees, so a client that issued the refused calls on
+   a different connection than the listing one (for instance after a reconnect, or the
+   second agent) would produce it. This is a hypothesis, not a finding. To settle it,
+   start the app with `CONN_TRACE_REFUSALS=1`: each generic refusal is then printed to
+   stderr with its connection id and cause (private, not selected, sharing changed,
+   closed). The quiet exit with the socket removed matches an ordinary quit; with native
+   input being driven by coordinates, a stray quit or window close is the first thing to
+   rule out.
+
 ## Not verified here
 
 - Signed distribution, notarization and updater artifacts (release artifacts required).

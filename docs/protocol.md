@@ -55,7 +55,7 @@ it is not an agent-provided frontend identity. Never expose it publicly.
 | --- | --- | --- |
 | `sessions` / `list_tabs` | — | Discovery of sessions this connection may participate in, count, bound session and attended session. Private and unselected sessions are omitted. |
 | `open_tab` | `{reason?}` | New tab and connection binding; the lease and pending work in the tab being left are released. The human view stays where it is and the tab asks for attention; access follows participation, mode and control. Requires the host opener and the matching capability. |
-| `switch_tab` | `{tab}` number or ID | Changes this agent's binding, not the human's displayed tab. Leaving a tab releases the lease and cancels this connection's pending requests there: a lease belongs to its tab. A live, participating source whose owner mask omits `switch_tab` refuses the move (`masked`); a lost source never blocks recovery. Checks destination participation and navigation capability, even if the old shell closed or access was revoked. |
+| `switch_tab` | `{tab}` number or ID | Changes this agent's binding, not the human's displayed tab. Leaving a tab releases the lease and cancels this connection's pending requests there: a lease belongs to its tab, and a connection holds one at a time. Because any request may name a permitted `session`, `request_control` for one session likewise gives up what the connection holds in every other session; reads by name cost nothing. A live, participating source whose owner mask omits `switch_tab` refuses the move (`masked`); a lost source never blocks recovery. Checks destination participation and navigation capability, even if the old shell closed or access was revoked. |
 | `navigation_affordances` | — | Connection-level navigation capabilities derived from permitted destinations; remains available when the bound session is unavailable. |
 | `request_attention` | `{reason?}` | Requests that the human return to the bound tab. |
 
@@ -159,7 +159,7 @@ content. Revocation cannot recall bytes already delivered to the client/model.
 `not_found`, `rate_limited`, `input_pending`, `approval_pending`, `exec_pending`, `proposal_pending`, `intent_required`,
 `masked`, `control_denied`, `wrong_mode`, `unsupported`, `connection_closing`, `admission_pending`, `admission_denied`, `io`, `parse`.
 
-Private/unauthorized session access uses a generic unavailable response. A client should
+Private/unauthorized session access uses a generic unavailable response. The owner can start the app with `CONN_TRACE_REFUSALS=1` to print the cause of each such refusal to stderr (reasons and identifiers only). A client should
 not automatically bypass an unavailable surface, switch to a separate shell, or claim a
 command ran merely because it received a lease. Ask the human to restore the shared
 view and take a fresh snapshot.

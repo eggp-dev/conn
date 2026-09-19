@@ -142,3 +142,29 @@ fn an_owner_mask_pins_an_agent_only_while_its_source_is_usable() {
     assert_eq!(agent.call("navigation_affordances", json!({})).unwrap(), json!(["switch_tab"]));
     agent.call("switch_tab", json!({"tab":"target"})).unwrap();
 }
+
+#[test]
+fn naming_a_session_explicitly_cannot_collect_leases_across_tabs() {
+    // Found on macOS: the binding was not enough, because any request may name a session.
+    let (first, second, third) = (session(), session(), session());
+    let hub = Hub::single("first", first.clone());
+    hub.set_opener(Arc::new(|_, _| Err("unused".into())));
+    hub.add("second", second.clone());
+    hub.add("third", third.clone());
+    let (_dir, path, _guard) = serve(&hub);
+    let agent = Client::connect(&path).unwrap();
+    agent.hello("agent", "collector").unwrap();
+    let held = |s: &SharedSession| matches!(s.lock().status().controller, ControllerInfo::Agent { .. });
+    agent.call("request_control", json!({"reason":"bound tab"})).unwrap();
+    agent.call("request_control", json!({"session":"second","reason":"named tab"})).unwrap();
+    assert!(!held(&first) && held(&second), "asking for control elsewhere gives up the previous lease");
+    // Reads elsewhere are free and cost nothing.
+    agent.call("snapshot", json!({"session":"first"})).unwrap();
+    assert!(held(&second));
+    // Renewing in place keeps the lease.
+    agent.call("request_control", json!({"session":"second","reason":"renew"})).unwrap();
+    assert!(held(&second));
+    // Moving releases a lease taken by name, not only the one in the bound tab.
+    agent.call("switch_tab", json!({"tab":"third"})).unwrap();
+    assert!(!held(&first) && !held(&second) && !held(&third));
+}
