@@ -2,7 +2,7 @@
 
 English · [한국어](demo.ko.md) · [Back to Conn](../README.md)
 
-[![An actual Codex session and the shared Conn terminal](assets/conn-handoff-en-poster.webp)](assets/conn-handoff-en.mp4)
+[![15-second preview. An actual Codex session and the shared Conn terminal](assets/conn-handoff-preview-en.webp)](assets/conn-handoff-en.mp4)
 
 [70-second film](assets/conn-handoff-en.mp4) · [15-second cut](assets/conn-handoff-short-en.mp4) · [Captions](assets/conn-handoff-en.vtt) · [Try it yourself](first-collaboration.md)
 
