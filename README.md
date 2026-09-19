@@ -21,13 +21,13 @@ Conn is a terminal you share with the AI agent you already use. The agent picks 
 
 No Rust or Node.js required; the agent connector is included.
 
-| Platform | v0.8.0 preview |
+| Platform | v0.8.1 preview |
 |---|---|
-| macOS · Apple Silicon | [Download for Mac](https://github.com/eggplantiny/conn/releases/download/v0.8.0/conn-v0.8.0-aarch64-apple-darwin-desktop.dmg) |
-| Windows · x64 | [Download installer](https://github.com/eggplantiny/conn/releases/download/v0.8.0/conn-v0.8.0-x86_64-pc-windows-msvc-setup.exe) |
-| Ubuntu · x64 | [Download .deb](https://github.com/eggplantiny/conn/releases/download/v0.8.0/conn-v0.8.0-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.8.0/conn-v0.8.0-x86_64-unknown-linux-gnu-desktop.AppImage) |
+| macOS · Apple Silicon | [Download for Mac](https://github.com/eggplantiny/conn/releases/download/v0.8.1/conn-v0.8.1-aarch64-apple-darwin-desktop.dmg) |
+| Windows · x64 | [Download installer](https://github.com/eggplantiny/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-pc-windows-msvc-setup.exe) |
+| Ubuntu · x64 | [Download .deb](https://github.com/eggplantiny/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggplantiny/conn/releases/download/v0.8.1/conn-v0.8.1-x86_64-unknown-linux-gnu-desktop.AppImage) |
 
-Mac downloads are signed and notarized. Windows previews are unsigned. Linux builds use Ubuntu 24.04, and the AppImage updates in-app while the `.deb` updates by installing a new package; Intel Mac distribution is paused. [Installation and updates](docs/getting-started.md) · [All assets and checksums](https://github.com/eggplantiny/conn/releases/tag/v0.8.0)
+Mac downloads are signed and notarized. Windows previews are unsigned. Linux builds use Ubuntu 24.04, and the AppImage updates in-app while the `.deb` updates by installing a new package; Intel Mac distribution is paused. [Installation and updates](docs/getting-started.md) · [All assets and checksums](https://github.com/eggplantiny/conn/releases/tag/v0.8.1)
 
 ## First five minutes
 

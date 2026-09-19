@@ -361,6 +361,7 @@ in CI; full interactive GUI installation/collaboration checks remain pending.
 
 ## New in this release
 
+- **Fixed in 0.8.1:** typing while a command approval was showing took control back but left the approval alive, with your keystrokes appended to the agent's typed line; approving afterwards could run a line that differed from the one on the card. Your input now denies the pending approval and clears that line first. If you run 0.8.0, update.
 - **Changed from 0.7.0:** agents observe the current terminal screen of their shared session as text, parsed from its output. Window focus, the visible tab, minimizing or covering the window no longer pause reading or writing. There is no screenshot, scrollback or scroll position in a snapshot, and the `unattended` / `suspended` errors are gone.
 - Conn now asks once before a new agent connection joins (**Allow / Deny**). Until you allow it, the connection learns nothing about your sessions. The answer applies to that live connection only; you can turn the question off in Settings → Agents.
 - Control is one revocable lease per connection: your typing still takes it back at once, and an agent that moves to another tab gives up what it held in the tab it left.
@@ -372,19 +373,19 @@ After installing, restart your MCP clients. Existing files, profiles and saved a
 remain; running shell sessions close during app restart and are not migrated.
 Agents reconnecting with the same name do not inherit explicitly selected access.
 
-v0.6.0 and v0.7.0 installations can discover this preview through the signed updater. Older
+v0.6.0, v0.7.0 and v0.8.0 installations can discover this preview through the signed updater. Older
 clients need a manual install. Updates support Apple Silicon macOS, Windows x64
 and Linux AppImage; Debian packages use package-manager/manual updates. Installation
 and restart remain your choice. Full installed-app upgrade coverage on every target
 is not claimed by artifact signature checks.
 
-한국어: 0.7.0과 달라진 점입니다. 에이전트는 공유된 세션의 현재 터미널 화면을 텍스트로
+한국어: 0.8.1은 승인 카드가 떠 있을 때 사람이 입력하면 승인이 살아남아, 이후 승인 시 카드와 다른 명령이 실행될 수 있던 문제를 고칩니다. 이제 사람 입력은 대기 중인 승인을 거부하고 입력 줄을 비웁니다. 0.8.0 사용자는 업데이트하세요. 0.7.0과 달라진 점입니다. 에이전트는 공유된 세션의 현재 터미널 화면을 텍스트로
 관찰하며, 창 포커스·보이는 탭·최소화 여부는 더 이상 읽기와 쓰기를 멈추지 않습니다.
 새 에이전트 연결은 Conn 창에서 한 번 허용해야 참여하고, 허용 전에는 세션에 대해 아무것도
 알 수 없습니다(설정 → 에이전트에서 끌 수 있음). 제어권은 연결당 하나이며 사람이 입력하면
 즉시 돌아옵니다. 숨김 처리된 글자는 스냅샷에서 빠지고, 에코 없이 입력한 암호는 나타나지
 않습니다. 앱·CLI를 함께 업데이트하고 MCP 클라이언트를 재시작하세요. 파일·설정·저장 기록은
-유지하며 실행 중인 셸은 앱 재시작 시 종료됩니다. v0.6.0과 v0.7.0은 서명 업데이트를 사용할
+유지하며 실행 중인 셸은 앱 재시작 시 종료됩니다. v0.6.0·v0.7.0·v0.8.0은 서명 업데이트를 사용할
 수 있고 이전 버전은 직접 설치하세요.
 
 ## Native validation and remaining coverage
