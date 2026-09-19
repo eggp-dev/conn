@@ -80,6 +80,8 @@ For implementation details, see [Tauri's GitHub pipeline guide](https://v2.tauri
 
 Nothing to do by hand. `scripts/install.sh` always resolves the newest published release. The Homebrew tap ([eggp-dev/homebrew-tap](https://github.com/eggp-dev/homebrew-tap)) checks for a new release every six hours, rewrites the cask from that release's `SHA256SUMS`, and then installs it for real on a macOS runner (audit, install, signature, notarization and version checks, uninstall). To update it at once, run its **Follow Conn releases** workflow.
 
+The website ([conn.eggp.dev](https://conn.eggp.dev), built from `site/`) serves `scripts/install.sh` and shows the release that was newest when it was built. Publishing a release runs **Redeploy the website**, which needs the `SITE_DEPLOY_HOOK` secret; without it, redeploy from the host's dashboard. See `site/README.md`.
+
 ## The repository's old address
 
 Conn moved from `github.com/eggplantiny/conn` to `github.com/eggp-dev/conn` on 2026-09-20. Two rules follow from that, and both protect people who already installed Conn:

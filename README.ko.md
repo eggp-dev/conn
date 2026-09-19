@@ -4,7 +4,7 @@
 
 <h1 align="center">Conn</h1>
 <p align="center"><strong>에이전트는 내 터미널에서 일하고, 키보드는 내가 쥡니다.</strong></p>
-<p align="center"><a href="README.md">English</a> · 한국어</p>
+<p align="center"><a href="https://conn.eggp.dev/ko/">conn.eggp.dev</a> · <a href="https://conn.eggp.dev/ko/docs/getting-started/">문서</a> · <a href="README.md">English</a> · 한국어</p>
 
 Conn은 지금 쓰는 AI 에이전트와 함께 쓰는 터미널입니다. 에이전트는 **내가** 들어가 있는 셸에서 이어서 일합니다. 내가 접속해 둔 서버, 내가 활성화한 환경, 내가 고른 폴더 그대로입니다. 실행되는 명령은 전부 눈앞에서 보이고, 위험한 명령은 내 승인을 기다리며, 키보드를 치면 제어권이 돌아옵니다.
 
@@ -13,9 +13,9 @@ Conn은 지금 쓰는 AI 에이전트와 함께 쓰는 터미널입니다. 에�
 - **입력하면 바로 넘겨받습니다.** 키를 하나만 눌러도 에이전트의 다음 입력이 셸에 닿기 전에 제어권이 돌아옵니다. 잘못된 곳을 고친 뒤 "화면을 읽고 이어서 해"라고 말하면 됩니다.
 - **쓰던 에이전트, 쓰던 모델 그대로.** **Codex, Claude Code, Cursor, GitHub Copilot**과 MCP로 연결됩니다. Conn은 모델을 실행하지 않고, 추가 구독도 필요 없습니다.
 
-[![15초 미리보기. 사람이 SSH로 서버에 로그인하고, 에이전트가 캐시 삭제를 제안하자 거부한 뒤 직접 입력해 고치는 모습](docs/assets/conn-remote-preview-ko.webp)](docs/assets/conn-remote-ko.mp4)
+[![15초 미리보기. 사람이 SSH로 서버에 로그인하고, 에이전트가 캐시 삭제를 제안하자 거부한 뒤 직접 입력해 고치는 모습](docs/assets/conn-remote-preview-ko.webp)](https://conn.eggp.dev/ko/#film)
 
-*내 서버에는 내가 로그인합니다. 에이전트가 캐시를 통째로 지우겠다고 합니다. 안 된다고 하고 내가 직접 고치면, 에이전트가 나머지를 끝냅니다.* [52초 전체 영상](docs/assets/conn-remote-ko.mp4) · [English video](docs/assets/conn-remote-en.mp4) · [한 번에 이어서 찍었습니다: 촬영 기록](media/demo/RECORDING-REMOTE.md)
+*내 서버에는 내가 로그인합니다. 에이전트가 캐시를 통째로 지우겠다고 합니다. 안 된다고 하고 내가 직접 고치면, 에이전트가 나머지를 끝냅니다.* [전체 영상 보기](https://conn.eggp.dev/ko/#film) ([파일](docs/assets/conn-remote-ko.mp4)) · [English video](https://conn.eggp.dev/#film) · [한 번에 이어서 찍었습니다: 촬영 기록](media/demo/RECORDING-REMOTE.md)
 
 ## 설치
 
@@ -24,7 +24,7 @@ Conn은 지금 쓰는 AI 에이전트와 함께 쓰는 터미널입니다. 에�
 brew install --cask eggp-dev/tap/conn
 
 # Linux (x86_64): 내 계정에만 AppImage 설치, 체크섬 검증, sudo 불필요
-curl -fsSL https://raw.githubusercontent.com/eggp-dev/conn/main/scripts/install.sh | sh
+curl -fsSL https://conn.eggp.dev/install.sh | sh
 ```
 
 Rust나 Node.js는 필요 없습니다. 에이전트 연결 도구가 함께 들어 있습니다. 두 방법 모두 아래 다운로드와 같은 서명된 릴리스 파일을 설치하며, 이후에는 앱 안에서 업데이트됩니다. Windows는 설치 파일을 사용하세요.

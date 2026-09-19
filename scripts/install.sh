@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install the Conn desktop app with one line.
 #
-#   curl -fsSL https://raw.githubusercontent.com/eggp-dev/conn/main/scripts/install.sh | sh
+#   curl -fsSL https://conn.eggp.dev/install.sh | sh
 #
 # Linux x86_64: downloads the AppImage of the newest release, verifies it against the release's
 # SHA256SUMS, and installs it for the current user only (no sudo). The AppImage updates itself from

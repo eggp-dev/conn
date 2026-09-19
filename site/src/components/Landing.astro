@@ -91,7 +91,7 @@ const social = new URL(`/media/conn-remote-${lang}-social.webp`, origin).href;
         </div>
       </section>
 
-      <section class="film" aria-label={t.filmCaption}>
+      <section class="film" id="film" aria-label={t.filmCaption}>
         <div class="stage">
           <video autoplay muted loop playsinline controls preload="metadata" poster={`/media/conn-remote-${lang}-poster.webp`}>
             <source src={`/media/conn-remote-${lang}.mp4`} type="video/mp4" />

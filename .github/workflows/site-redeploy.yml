@@ -1,0 +1,27 @@
+name: Redeploy the website
+
+# The site shows the release that was newest when it was built. Publishing a release is not a push,
+# so the host does not rebuild by itself; this asks it to. Without the secret the job does nothing.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  redeploy:
+    if: github.repository == 'eggp-dev/conn'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Ask the host to rebuild conn.eggp.dev
+        env:
+          HOOK: ${{ secrets.SITE_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "SITE_DEPLOY_HOOK is not set; redeploy the site by hand." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          curl -fsS -X POST -o /dev/null "$HOOK"
+          echo "Requested a rebuild of conn.eggp.dev." >> "$GITHUB_STEP_SUMMARY"
