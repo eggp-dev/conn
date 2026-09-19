@@ -10,7 +10,7 @@ Conn을 설치하고 에이전트를 연결해 같은 터미널에서 번갈아 
 
 ```sh
 brew install --cask eggp-dev/tap/conn                                                        # macOS, Apple Silicon
-curl -fsSL https://raw.githubusercontent.com/eggp-dev/conn/main/scripts/install.sh | sh     # Linux x86_64
+curl -fsSL https://conn.eggp.dev/install.sh | sh     # Linux x86_64
 ```
 
 cask는 서명·공증된 DMG를 설치하며 릴리스와 함께 공개된 SHA-256으로 확인합니다. Linux 스크립트는 AppImage를 내려받아 릴리스의 `SHA256SUMS`와 대조한 뒤 내 계정에만 설치합니다(`~/.local/bin`, 앱 메뉴 항목, sudo 불필요). 체크섬이 맞지 않으면 설치하지 않습니다. `CONN_VERSION=v0.8.2`로 버전을 고정할 수 있습니다. AppImage는 FUSE 2가 필요합니다. Ubuntu 24.04 이상에서는 `sudo apt install libfuse2t64`를 실행하세요. 두 방법 모두 이후에는 앱 안에서 업데이트됩니다. 셸에 넘기기 전에 스크립트를 읽어 보셔도 좋습니다: [`scripts/install.sh`](../scripts/install.sh).

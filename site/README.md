@@ -35,5 +35,7 @@ which sidebar group, is decided in `src/site.config.mjs`; the repository address
 
 Vercel project with **Root Directory** `site` and "Include files outside the Root Directory in the
 Build Step" enabled (the build reads `../docs`, `../scripts` and `../frontends/tauri/package.json`).
-`vercel.json` holds the rest. The site shows the release that was newest when it was built, so
-redeploy after publishing a release (a deploy hook called from the release workflow can do this).
+`vercel.json` holds the rest. The site shows the release that was newest when it was built.
+`.github/workflows/site-redeploy.yml` asks the host to rebuild when a release is published; it needs a
+Vercel deploy hook (Project → Settings → Git → Deploy Hooks, branch `main`) saved as the repository
+secret `SITE_DEPLOY_HOOK`. Without it the workflow does nothing and the site is redeployed by hand.

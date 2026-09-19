@@ -4,7 +4,7 @@
 
 <h1 align="center">Conn</h1>
 <p align="center"><strong>Your agent works in your terminal. You keep the keyboard.</strong></p>
-<p align="center">English · <a href="README.ko.md">한국어</a></p>
+<p align="center"><a href="https://conn.eggp.dev">conn.eggp.dev</a> · <a href="https://conn.eggp.dev/docs/getting-started/">Docs</a> · English · <a href="README.ko.md">한국어</a></p>
 
 Conn is a terminal you share with the AI agent you already use. The agent picks up the shell **you** are in: the server you logged into, the environment you activated, the directory you chose. You watch every command as it runs, approve the risky ones, and take over by typing.
 
@@ -13,9 +13,9 @@ Conn is a terminal you share with the AI agent you already use. The agent picks 
 - **Type to take over.** Any keystroke takes control back before the agent's next input reaches the shell. Fix what is wrong, then tell it to read the screen and continue.
 - **Your agent, your model.** Works with **Codex, Claude Code, Cursor and GitHub Copilot** over MCP. Conn runs no model and needs no extra subscription.
 
-[![15-second preview. The user logs in to a server over SSH, the agent proposes deleting the cache, the user denies it and types the fix](docs/assets/conn-remote-preview-en.webp)](docs/assets/conn-remote-en.mp4)
+[![15-second preview. The user logs in to a server over SSH, the agent proposes deleting the cache, the user denies it and types the fix](docs/assets/conn-remote-preview-en.webp)](https://conn.eggp.dev/#film)
 
-*You log in to your server. Your agent asks to delete the whole cache. You say no, type the fix yourself, and it finishes the job.* [Watch the full 52 seconds](docs/assets/conn-remote-en.mp4) · [한국어 영상](docs/assets/conn-remote-ko.mp4) · [One continuous take: how it was recorded](media/demo/RECORDING-REMOTE.md)
+*You log in to your server. Your agent asks to delete the whole cache. You say no, type the fix yourself, and it finishes the job.* [Watch the full film](https://conn.eggp.dev/#film) ([file](docs/assets/conn-remote-en.mp4)) · [한국어 영상](https://conn.eggp.dev/ko/#film) · [One continuous take: how it was recorded](media/demo/RECORDING-REMOTE.md)
 
 ## Install
 
@@ -24,7 +24,7 @@ Conn is a terminal you share with the AI agent you already use. The agent picks 
 brew install --cask eggp-dev/tap/conn
 
 # Linux (x86_64): AppImage for your user, checksum verified, no sudo
-curl -fsSL https://raw.githubusercontent.com/eggp-dev/conn/main/scripts/install.sh | sh
+curl -fsSL https://conn.eggp.dev/install.sh | sh
 ```
 
 No Rust or Node.js required; the agent connector is included. Both install the same signed release files as the downloads below, and the app updates itself afterwards. Windows: use the installer.

@@ -10,7 +10,7 @@ One line, if you prefer:
 
 ```sh
 brew install --cask eggp-dev/tap/conn                                                        # macOS, Apple Silicon
-curl -fsSL https://raw.githubusercontent.com/eggp-dev/conn/main/scripts/install.sh | sh     # Linux x86_64
+curl -fsSL https://conn.eggp.dev/install.sh | sh     # Linux x86_64
 ```
 
 The cask installs the signed and notarized DMG and checks it against the SHA-256 published with the release. The Linux script downloads the AppImage, verifies it against the release's `SHA256SUMS`, and installs it for your user only (`~/.local/bin`, an app-menu entry, no sudo); it refuses to install on a checksum mismatch. `CONN_VERSION=v0.8.2` pins a release. AppImages need FUSE 2: on Ubuntu 24.04 and newer, `sudo apt install libfuse2t64`. Both keep updating from inside the app. Read the script before piping it to a shell if you like: [`scripts/install.sh`](../scripts/install.sh).

@@ -80,6 +80,8 @@ CI 빌드 통과만으로 모든 설치·조작이 검증되지는 않습니다.
 
 손으로 할 일은 없습니다. `scripts/install.sh`는 항상 가장 최근에 공개된 릴리스를 찾습니다. Homebrew tap([eggp-dev/homebrew-tap](https://github.com/eggp-dev/homebrew-tap))은 6시간마다 새 릴리스를 확인해 그 릴리스의 `SHA256SUMS`로 cask를 다시 쓰고, macOS 러너에서 실제로 설치해 봅니다(audit, 설치, 서명·공증·버전 확인, 제거). 바로 반영하려면 tap의 **Follow Conn releases** 워크플로를 실행하세요.
 
+웹사이트([conn.eggp.dev](https://conn.eggp.dev), `site/`에서 빌드)는 `scripts/install.sh`를 제공하고, 빌드 시점의 최신 릴리스를 보여 줍니다. 릴리스를 공개하면 **Redeploy the website** 워크플로가 실행되며 `SITE_DEPLOY_HOOK` 시크릿이 필요합니다. 없으면 호스팅 대시보드에서 직접 재배포하세요. `site/README.md`를 참고하세요.
+
 ## 저장소의 옛 주소
 
 Conn은 2026-09-20에 `github.com/eggplantiny/conn`에서 `github.com/eggp-dev/conn`으로 옮겼습니다. 이미 설치한 사람들을 위해 두 가지 규칙을 지킵니다.
