@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { cues, footageSeconds, closingSeconds, remoteCopy, shortParts, shortClosingSeconds } from "../src/remote/edit.ts";
+import { cues, footageSeconds, replySeconds, closingSeconds, remoteCopy, shortParts, shortClosingSeconds } from "../src/remote/edit.ts";
 
 // Captions for the remote-takeover film and its 15-second edition, from the same cues the film renders.
 const assets = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../docs/assets");
@@ -14,10 +14,12 @@ const write = (name, list) => {
 };
 for (const language of ["en", "ko"]) {
   const copy = remoteCopy[language];
-  const text = (cue) => (cue.quote ? `${cue.sub}: ${cue.line}` : cue.sub ? `${cue.line}\n${cue.sub}` : cue.line);
+  // A message between the human and the agent reads "Speaker: words"; a caption keeps its second line.
+  const text = (cue) => (cue.from ? `${cue.sub}: ${cue.line.replaceAll("`", "")}` : cue.sub ? `${cue.line}\n${cue.sub}` : cue.line);
   const closing = (at, length) => ({ start: at + 0.4, end: at + length, text: `${copy.headline.join(" ")}\n${copy.disclosure}` });
   const main = cues(language).map((cue) => ({ start: cue.start, end: cue.end, text: text(cue) }));
-  write(`conn-remote-${language}`, [...main, closing(footageSeconds, closingSeconds)]);
+  // The closing card starts after the held last frame on which the agent's reply is shown.
+  write(`conn-remote-${language}`, [...main, closing(footageSeconds + replySeconds, closingSeconds)]);
   // The short edition plays parts of the same take back to back; move each cue onto that clock.
   let at = 0; const short = [];
   for (const part of shortParts) {

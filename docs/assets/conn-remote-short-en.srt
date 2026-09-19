@@ -5,8 +5,7 @@ Your password never reaches your agent.
 
 2
 00:00:03,977 --> 00:00:04,400
-The API on staging is down. Look at my Conn terminal and get it running again.
-You
+You: The API on staging is down. Look at my Conn terminal and get it running again.
 
 3
 00:00:04,600 --> 00:00:07,096

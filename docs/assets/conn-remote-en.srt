@@ -5,8 +5,7 @@ Your password never reaches your agent.
 
 2
 00:00:04,477 --> 00:00:07,977
-The API on staging is down. Look at my Conn terminal and get it running again.
-You
+You: The API on staging is down. Look at my Conn terminal and get it running again.
 
 3
 00:00:07,977 --> 00:00:10,279
@@ -35,8 +34,7 @@ Your keystroke takes the terminal back.
 
 9
 00:00:30,698 --> 00:00:34,398
-I cleared the stale lock myself, so keep the cache. Read the terminal and continue.
-You
+You: I cleared the stale lock myself, so keep the cache. Read the terminal and continue.
 
 10
 00:00:34,398 --> 00:00:41,960
@@ -48,10 +46,9 @@ And finishes the job.
 
 12
 00:00:46,870 --> 00:00:51,270
-The API is back up on :8080. `./api.sh health` returns `{"status": "ok", "cache": "warm"}`, the cache is intact, and I've released control.
-Claude Code
+Claude Code: The API is back up on :8080. ./api.sh health returns {"status": "ok", "cache": "warm"}, the cache is intact, and I've released control.
 
 13
-00:00:47,070 --> 00:00:52,670
+00:00:51,670 --> 00:00:57,270
 Your agent works in your terminal. You keep the keyboard.
 Real Conn, a real SSH login and a real Claude Code session in one continuous take. Prepared scenario; still moments shortened.
