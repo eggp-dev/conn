@@ -18,6 +18,7 @@ class CiScopeTests(unittest.TestCase):
 
     def test_the_install_script_is_checked_by_the_light_job_only(self):
         self.assertEqual(ci_scope.scope("pull_request", ["scripts/install.sh", "README.md"]), {"rust": [], "desktop": []})
+        self.assertEqual(ci_scope.scope("push", ["site/src/components/Landing.astro", "site/package-lock.json"]), {"rust": [], "desktop": []})
         self.assertEqual(ci_scope.scope("pull_request", ["scripts/release.py"])["rust"], ALL)
 
     def test_markdown_compiled_into_binaries_is_not_documentation(self):
