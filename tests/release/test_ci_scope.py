@@ -16,6 +16,10 @@ class CiScopeTests(unittest.TestCase):
         for event in ("pull_request", "push"):
             self.assertEqual(ci_scope.scope(event, ["README.md", "docs/faq.ko.md", "docs/assets/demo.webp", "media/demo/README.md"]), {"rust": [], "desktop": []})
 
+    def test_the_install_script_is_checked_by_the_light_job_only(self):
+        self.assertEqual(ci_scope.scope("pull_request", ["scripts/install.sh", "README.md"]), {"rust": [], "desktop": []})
+        self.assertEqual(ci_scope.scope("pull_request", ["scripts/release.py"])["rust"], ALL)
+
     def test_markdown_compiled_into_binaries_is_not_documentation(self):
         self.assertEqual(ci_scope.classify("plugin/skills/conn/SKILL.md"), "native")
         self.assertEqual(ci_scope.scope("pull_request", ["plugin/skills/conn/SKILL.md"])["rust"], ALL)

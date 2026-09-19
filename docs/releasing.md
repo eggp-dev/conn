@@ -4,7 +4,7 @@ English · [한국어](releasing.ko.md) · [User installation](getting-started.m
 
 ## Repository and CI
 
-`eggplantiny/conn` uses `main` as its integration branch. Keep Actions tokens read-only by default, enable private vulnerability reporting, and require **Required checks** and resolved conversations for changes to `main`. The [versioned ruleset](../.github/main-ruleset.json) provides PR/CI requirements and an explicit owner recovery bypass. Update an existing ruleset rather than creating duplicates.
+`eggp-dev/conn` uses `main` as its integration branch. Keep Actions tokens read-only by default, enable private vulnerability reporting, and require **Required checks** and resolved conversations for changes to `main`. The [versioned ruleset](../.github/main-ruleset.json) provides PR/CI requirements and an explicit owner recovery bypass. Update an existing ruleset rather than creating duplicates.
 
 CI checks version consistency, repository hygiene, relative documentation links, release tooling, frontend tests and the Svelte build. Rust tests and native desktop debug builds cover Linux, macOS Apple Silicon and Windows. Release packaging uses the same three targets; Intel Mac distribution is paused after v0.4.1. The macOS debug build is bundled and signed ad-hoc in PR CI, then checked with `plutil` and `sdef`; `osacompile` compiles the external automation examples against that exact app without running it. This catches missing scripting resources and dictionary syntax without release credentials. These checks do not replace installer or interactive desktop testing.
 
@@ -18,7 +18,7 @@ Actions are pinned by commit SHA. Pull requests receive no signing secrets. Only
 2. Add a user-facing [CHANGELOG](../CHANGELOG.md) entry and check the exact release version:
 
    ```sh
-   python3 scripts/release.py check --tag v0.8.1
+   python3 scripts/release.py check --tag v0.8.2
    python3 scripts/check_repo.py
    python3 -m unittest discover -s tests/release -v
    cargo test --workspace --locked
@@ -32,8 +32,8 @@ Actions are pinned by commit SHA. Pull requests receive no signing secrets. Only
 4. Create and push the version tag deliberately:
 
    ```sh
-   git tag -a v0.8.1 -m "Conn v0.8.1 preview"
-   git push origin v0.8.1
+   git tag -a v0.8.2 -m "Conn v0.8.2 preview"
+   git push origin v0.8.2
    ```
 
 Tagging and publishing are maintainer release actions. Do not move a published tag.
@@ -75,6 +75,19 @@ Review the downloaded draft artifacts, not a different local build.
 A green CI build alone is not a claim that every installer or interaction passed. Release notes must say which platform checks ran and what remains untested. Preserve secrets in Actions; never attach certificates, credentials or detailed private logs.
 
 For implementation details, see [Tauri's GitHub pipeline guide](https://v2.tauri.app/distribute/pipelines/github/) and the repository's [signing contract](macos-signing.md).
+
+## One-line installs after a release
+
+Nothing to do by hand. `scripts/install.sh` always resolves the newest published release. The Homebrew tap ([eggp-dev/homebrew-tap](https://github.com/eggp-dev/homebrew-tap)) checks for a new release every six hours, rewrites the cask from that release's `SHA256SUMS`, and then installs it for real on a macOS runner (audit, install, signature, notarization and version checks, uninstall). To update it at once, run its **Follow Conn releases** workflow.
+
+## The repository's old address
+
+Conn moved from `github.com/eggplantiny/conn` to `github.com/eggp-dev/conn` on 2026-09-20. Two rules follow from that, and both protect people who already installed Conn:
+
+- **Update manifests keep the old address.** Conn 0.6.0 to 0.8.1 only install an update whose download address starts with the address they were built with. `UPDATER_REPOSITORY` in `scripts/release.py` therefore stays on the old address, a release test pins it, and builds from 0.8.2 on trust both addresses. Do not change it in a search and replace.
+- **Never create or fork a repository named `eggplantiny/conn`.** GitHub redirects the old address only while that name is unused. Reusing it would stop updates for every older installation.
+
+If the repository ever moves again, change `REPOSITORY` and `REPOSITORY_SLUG` in `scripts/release.py`, the `github.repository` conditions in the release and signing workflows (signing refuses to run anywhere else), `RELEASES` in the updater sources (add the previous address to the trusted list rather than replacing it), `REPO` in `scripts/install.sh`, the tap's cask and `CONN_REPO`, `media/demo/src/brand.ts` (then re-render the films), and the install lines in the READMEs.
 
 ## Failed release or rollback
 

@@ -4,7 +4,7 @@
 
 ## 저장소와 CI
 
-`eggplantiny/conn`의 통합 브랜치는 `main`입니다. Actions 토큰은 기본 읽기 전용으로 유지하고 비공개 보안 제보를 켜며 `main` 변경에 **Required checks**와 대화 해결을 요구합니다. [버전 관리되는 규칙](../.github/main-ruleset.json)은 PR·CI 요건과 소유자의 명시적인 복구 우회 권한을 제공합니다. 기존 규칙이 있으면 중복 생성하지 말고 수정하세요.
+`eggp-dev/conn`의 통합 브랜치는 `main`입니다. Actions 토큰은 기본 읽기 전용으로 유지하고 비공개 보안 제보를 켜며 `main` 변경에 **Required checks**와 대화 해결을 요구합니다. [버전 관리되는 규칙](../.github/main-ruleset.json)은 PR·CI 요건과 소유자의 명시적인 복구 우회 권한을 제공합니다. 기존 규칙이 있으면 중복 생성하지 말고 수정하세요.
 
 CI는 버전 일치, 공개 파일 검사, 문서 상대 링크, 릴리스 도구, 프런트엔드 테스트와 Svelte 빌드를 확인합니다. Linux·macOS Apple Silicon·Windows에서 Rust 테스트와 네이티브 데스크톱 디버그 빌드를 실행합니다. 릴리스 패키징도 이 세 대상을 사용하며 v0.6.0 이후 Intel Mac 배포는 잠시 중단합니다. macOS 디버그 빌드는 PR CI에서 ad-hoc 서명한 앱으로 묶어 `plutil`·`sdef`로 확인하고, `osacompile`로 해당 앱의 사전을 사용해 외부 자동화 예제를 컴파일합니다. 스크립트는 실행하지 않고 릴리스 자격 증명도 사용하지 않습니다. 이 검사는 설치 프로그램이나 데스크톱 실제 조작 검증을 대신하지 않습니다.
 
@@ -18,7 +18,7 @@ Actions는 커밋 SHA로 고정합니다. PR에는 서명 secrets를 제공하�
 2. 사용자 관점의 [CHANGELOG](../CHANGELOG.md) 항목을 적고 정확한 릴리스 버전으로 확인합니다.
 
    ```sh
-   python3 scripts/release.py check --tag v0.8.1
+   python3 scripts/release.py check --tag v0.8.2
    python3 scripts/check_repo.py
    python3 -m unittest discover -s tests/release -v
    cargo test --workspace --locked
@@ -32,8 +32,8 @@ Actions는 커밋 SHA로 고정합니다. PR에는 서명 secrets를 제공하�
 4. 의도적으로 버전 태그를 생성하고 푸시합니다.
 
    ```sh
-   git tag -a v0.8.1 -m "Conn v0.8.1 preview"
-   git push origin v0.8.1
+   git tag -a v0.8.2 -m "Conn v0.8.2 preview"
+   git push origin v0.8.2
    ```
 
 태그 생성과 공개는 관리자의 릴리스 작업입니다. 공개된 태그를 옮기지 마세요.
@@ -75,6 +75,19 @@ Actions는 커밋 SHA로 고정합니다. PR에는 서명 secrets를 제공하�
 CI 빌드 통과만으로 모든 설치·조작이 검증되지는 않습니다. 실제로 수행한 플랫폼 검사와 미검증 항목을 릴리스 안내에 적으세요. 비밀 정보는 Actions에 보관하며 인증서·자격 증명·상세 비공개 로그를 첨부하지 않습니다.
 
 구현 참고: [Tauri GitHub 파이프라인](https://v2.tauri.app/distribute/pipelines/github/), 저장소의 [서명 기준](macos-signing.ko.md).
+
+## 릴리스 후 한 줄 설치
+
+손으로 할 일은 없습니다. `scripts/install.sh`는 항상 가장 최근에 공개된 릴리스를 찾습니다. Homebrew tap([eggp-dev/homebrew-tap](https://github.com/eggp-dev/homebrew-tap))은 6시간마다 새 릴리스를 확인해 그 릴리스의 `SHA256SUMS`로 cask를 다시 쓰고, macOS 러너에서 실제로 설치해 봅니다(audit, 설치, 서명·공증·버전 확인, 제거). 바로 반영하려면 tap의 **Follow Conn releases** 워크플로를 실행하세요.
+
+## 저장소의 옛 주소
+
+Conn은 2026-09-20에 `github.com/eggplantiny/conn`에서 `github.com/eggp-dev/conn`으로 옮겼습니다. 이미 설치한 사람들을 위해 두 가지 규칙을 지킵니다.
+
+- **업데이트 매니페스트는 옛 주소를 유지합니다.** Conn 0.6.0~0.8.1은 다운로드 주소가 자신이 빌드될 때의 주소로 시작하는 업데이트만 설치합니다. 그래서 `scripts/release.py`의 `UPDATER_REPOSITORY`는 옛 주소로 두고, 릴리스 테스트가 이를 고정하며, 0.8.2부터는 두 주소를 모두 신뢰합니다. 일괄 치환으로 바꾸지 마세요.
+- **`eggplantiny/conn`이라는 이름의 저장소를 다시 만들거나 포크하지 마세요.** GitHub는 그 이름이 비어 있는 동안에만 옛 주소를 넘겨 줍니다. 이름을 다시 쓰면 이전 설치본의 업데이트가 모두 멈춥니다.
+
+저장소를 또 옮기게 되면 `scripts/release.py`의 `REPOSITORY`와 `REPOSITORY_SLUG`, 릴리스·서명 워크플로의 `github.repository` 조건(다른 곳에서는 서명이 거부됩니다), 업데이터 소스의 `RELEASES`(이전 주소를 지우지 말고 신뢰 목록에 추가), `scripts/install.sh`의 `REPO`, tap의 cask와 `CONN_REPO`, `media/demo/src/brand.ts`(이후 영상 재렌더링), README의 설치 명령을 바꾸세요.
 
 ## 실패와 복구
 

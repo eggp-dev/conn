@@ -4,13 +4,13 @@ exclude = ["vendor/vt100"]
 members = ["crates/core", "crates/cli", "crates/frontend", "crates/browser-harness"]
 
 [workspace.package]
-version = "0.8.1"
+version = "0.8.2"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/eggplantiny/conn"
+repository = "https://github.com/eggp-dev/conn"
 
 [workspace.dependencies]
-conn-core = { path = "crates/core", version = "0.8.1" }
+conn-core = { path = "crates/core", version = "0.8.2" }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "time", "macros", "signal"] }
 portable-pty = "0.8"
 vt100 = { path = "vendor/vt100", version = "0.15.2" }

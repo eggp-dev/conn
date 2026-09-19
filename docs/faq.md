@@ -64,4 +64,4 @@ In-app installation supports Apple Silicon macOS, Windows x64 and Linux AppImage
 
 ## How can I help?
 
-Try the first collaboration and tell us where you got stuck or when you wanted to intervene. Include the Conn version, OS, shell and client, plus a small public example. Review screenshots and request details before sharing; a full terminal dump is rarely needed. [Report a problem](https://github.com/eggplantiny/conn/issues/new/choose) · [Contribute](../CONTRIBUTING.md)
+Try the first collaboration and tell us where you got stuck or when you wanted to intervene. Include the Conn version, OS, shell and client, plus a small public example. Review screenshots and request details before sharing; a full terminal dump is rarely needed. [Report a problem](https://github.com/eggp-dev/conn/issues/new/choose) · [Contribute](../CONTRIBUTING.md)

@@ -1,10 +1,10 @@
 [package]
 name = "conn-desktop"
-version = "0.8.1"
+version = "0.8.2"
 edition = "2021"
 description = "A shared terminal for humans and AI agents."
-repository = "https://github.com/eggplantiny/conn"
-homepage = "https://github.com/eggplantiny/conn"
+repository = "https://github.com/eggp-dev/conn"
+homepage = "https://github.com/eggp-dev/conn"
 license = "MIT"
 
 # Standalone: not a member of the repo workspace so `cargo test` at the root stays light.

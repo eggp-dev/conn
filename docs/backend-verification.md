@@ -7,7 +7,7 @@ Results below are dated evidence, not a blanket compatibility claim.
 ## Public CI baseline — 2026-09-16
 
 At commit `c1d78531a5025881922c05d77ab56cabe7124747`,
-[GitHub Actions run 35023575383](https://github.com/eggplantiny/conn/actions/runs/35023575383)
+[GitHub Actions run 35023575383](https://github.com/eggp-dev/conn/actions/runs/35023575383)
 reported:
 
 | Check | Result |
@@ -26,7 +26,7 @@ Conn now duplicates the Windows child handle and checks the native return value
 directly. It remembers a successful asynchronous termination request and accepts
 an already-exited child while preserving real errors. The
 native regression remains enabled and also checks repeated termination. Follow
-the [current CI runs](https://github.com/eggplantiny/conn/actions/workflows/ci.yml)
+the [current CI runs](https://github.com/eggp-dev/conn/actions/workflows/ci.yml)
 for verification of later revisions.
 
 Local release preparation also passed 112 Rust tests, 17 frontend tests and 23

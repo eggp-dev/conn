@@ -77,6 +77,10 @@ jobs:
           python-version: '3.12'
       - run: python scripts/release.py check
       - run: python scripts/check_repo.py
+      - name: The one-line installer parses under a POSIX shell and refuses a bad version
+        run: |
+          sh -n scripts/install.sh
+          ! CONN_VERSION="latest" sh scripts/install.sh > /dev/null 2>&1
       - run: python -m unittest discover -s tests/release -v
       - run: npm test
         working-directory: frontends/tauri

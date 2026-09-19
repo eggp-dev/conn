@@ -19,7 +19,7 @@ For a larger feature or a new backend, open an issue describing the user's workf
 Install rustup, **Node.js 24**, and the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for native desktop work. Rust is pinned by `rust-toolchain.toml`. CI also uses Python 3.12 for release tooling.
 
 ```sh
-git clone https://github.com/eggplantiny/conn.git
+git clone https://github.com/eggp-dev/conn.git
 cd conn
 ```
 

@@ -4,7 +4,7 @@
   "description": "Bilingual Conn collaboration screencast edit",
   "repository": {
     "type": "git",
-    "url": "https://github.com/eggplantiny/conn.git",
+    "url": "https://github.com/eggp-dev/conn.git",
     "directory": "media/demo"
   },
   "license": "MIT",

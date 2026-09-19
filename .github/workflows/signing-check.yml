@@ -5,7 +5,7 @@ permissions:
   contents: read
 jobs:
   check:
-    if: github.repository == 'eggplantiny/conn' && github.ref == 'refs/heads/main'
+    if: github.repository == 'eggp-dev/conn' && github.ref == 'refs/heads/main'
     runs-on: macos-15
     timeout-minutes: 10
     steps:
