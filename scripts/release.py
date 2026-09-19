@@ -361,33 +361,39 @@ in CI; full interactive GUI installation/collaboration checks remain pending.
 
 ## New in this release
 
-- Agents observe the owner's actual terminal viewport, including scroll position, masks and PNG snapshots. Hidden or stale surfaces pause observation and execution.
-- Start or stop sharing the same running shell/SSH connection with selected agents. The human keeps control until granting it; stopping sharing keeps the shell alive.
-- Add themes and opt-in OpenAI command suggestions backed by OS credential storage. Suggestions insert only after acceptance; execution remains separate.
-- Record sharing boundaries without retroactively saving private input. Retire headless/proxy startup, unattended Entrust and public owner-control commands.
+- **Changed from 0.7.0:** agents observe the current terminal screen of their shared session as text, parsed from its output. Window focus, the visible tab, minimizing or covering the window no longer pause reading or writing. There is no screenshot, scrollback or scroll position in a snapshot, and the `unattended` / `suspended` errors are gone.
+- Conn now asks once before a new agent connection joins (**Allow / Deny**). Until you allow it, the connection learns nothing about your sessions. The answer applies to that live connection only; you can turn the question off in Settings → Agents.
+- Control is one revocable lease per connection: your typing still takes it back at once, and an agent that moves to another tab gives up what it held in the tab it left.
+- Text hidden with ANSI conceal or equal foreground/background colors stays out of snapshots, and an agent cannot submit a line that contains it. Passwords typed without echo never appear; secrets a program prints remain visible to participants.
+- A terminated agent's delayed command never runs, and an agent whose shell closed can move to another permitted tab.
 
 **Upgrade together:** protocol v2 requires the matching app and CLI/MCP adapter.
 After installing, restart your MCP clients. Existing files, profiles and saved activity
 remain; running shell sessions close during app restart and are not migrated.
 Agents reconnecting with the same name do not inherit explicitly selected access.
 
-v0.6.0 installations can discover this preview through the signed updater. Older
+v0.6.0 and v0.7.0 installations can discover this preview through the signed updater. Older
 clients need a manual install. Updates support Apple Silicon macOS, Windows x64
 and Linux AppImage; Debian packages use package-manager/manual updates. Installation
 and restart remain your choice. Full installed-app upgrade coverage on every target
 is not claimed by artifact signature checks.
 
-한국어: 사람이 실제 보는 화면을 에이전트와 공유하고, 같은 셸·SSH 연결에서 공유를
-켜고 끌 수 있습니다. 테마와 선택형 OpenAI 명령 제안을 추가했습니다. 자동완성은
-기본 비활성이며 수락해도 텍스트만 삽입합니다. 앱·CLI를 함께 업데이트하고 MCP
-클라이언트를 재시작하세요. 파일·설정·저장 기록은 유지하며 실행 중인 셸은 앱 재시작
-시 종료됩니다. v0.6.0은 서명 업데이트를 사용할 수 있고 이전 버전은 직접 설치하세요.
+한국어: 0.7.0과 달라진 점입니다. 에이전트는 공유된 세션의 현재 터미널 화면을 텍스트로
+관찰하며, 창 포커스·보이는 탭·최소화 여부는 더 이상 읽기와 쓰기를 멈추지 않습니다.
+새 에이전트 연결은 Conn 창에서 한 번 허용해야 참여하고, 허용 전에는 세션에 대해 아무것도
+알 수 없습니다(설정 → 에이전트에서 끌 수 있음). 제어권은 연결당 하나이며 사람이 입력하면
+즉시 돌아옵니다. 숨김 처리된 글자는 스냅샷에서 빠지고, 에코 없이 입력한 암호는 나타나지
+않습니다. 앱·CLI를 함께 업데이트하고 MCP 클라이언트를 재시작하세요. 파일·설정·저장 기록은
+유지하며 실행 중인 셸은 앱 재시작 시 종료됩니다. v0.6.0과 v0.7.0은 서명 업데이트를 사용할
+수 있고 이전 버전은 직접 설치하세요.
 
 ## Native validation and remaining coverage
 
-The actual Apple Silicon development app passed visible text/PNG, hidden/masked
-synthetic authentication, AppleScript launch, same-SSH sharing, human takeover,
-Keychain save/delete and live-lease focus/minimization guards. See the
+The actual Apple Silicon development app passed the join prompt, reading and writing
+while minimized, unfocused or on another tab, hidden/masked synthetic authentication,
+AppleScript launch, same-SSH sharing, late external writes being refused and the
+one-lease-per-connection rule. A Linux run against a real OpenSSH server found no
+credential in snapshots, replies or saved data after sharing. See the
 [macOS acceptance report]({REPOSITORY}/blob/{tag}/docs/shared-surface-macos-validation-results.md).
 Native WebKit completion fixtures passed; a real OpenAI request remains unverified.
 The real-user provider path stays opt-in. Development-app checks are separate from
