@@ -3,14 +3,23 @@
 </p>
 
 <h1 align="center">Conn</h1>
-<p align="center"><strong>Keep your agent. Share your terminal.</strong></p>
+<p align="center"><strong>Your agent works in your terminal. You keep the keyboard.</strong></p>
 <p align="center">English · <a href="README.ko.md">한국어</a></p>
 
-Work in the same shell as your AI agent. Step in, make a correction, and ask it to continue from what you changed.
+Conn is a terminal you share with the AI agent you already use. The agent picks up the shell **you** are in: the server you logged into, the environment you activated, the directory you chose. You watch every command as it runs, approve the risky ones, and take over by typing.
 
-## Download
+- **It starts where you are.** Open the SSH session, container or virtualenv yourself, then let the agent continue in that live shell. A password typed at a hidden prompt never reaches it.
+- **Nothing runs behind your back.** Every command the agent submits carries a one-line reason. By default `rm`, `sudo`, `git push --force`, `kubectl delete` and file overwrites wait for your approval, and one approval covers one action. Inside an SSH session, or any program Conn cannot inspect, **every** agent command waits for your review.
+- **Type to take over.** Any keystroke takes control back before the agent's next input reaches the shell. Fix what is wrong, then tell it to read the screen and continue.
+- **Your agent, your model.** Works with **Codex, Claude Code, Cursor and GitHub Copilot** over MCP. Conn runs no model and needs no extra subscription.
 
-**Install the desktop app.** No Rust or Node.js required; the agent connector is included.
+[![15-second preview. The agent starts in the wrong folder, the user types a correction in Conn, and the agent continues from the new location](docs/assets/conn-handoff-preview-en.webp)](docs/assets/conn-handoff-en.mp4)
+
+*15 seconds: the agent starts in the wrong folder. You type `cd`, tell it to read the terminal, and it carries on from there.* [Full 70 seconds](docs/assets/conn-handoff-en.mp4) · [한국어 영상](docs/assets/conn-handoff-ko.mp4) · [How it was recorded](docs/demo.md)
+
+## Install
+
+No Rust or Node.js required; the agent connector is included.
 
 | Platform | v0.8.0 preview |
 |---|---|
@@ -20,33 +29,27 @@ Work in the same shell as your AI agent. Step in, make a correction, and ask it 
 
 Mac downloads are signed and notarized. Windows previews are unsigned. Linux builds use Ubuntu 24.04, and the AppImage updates in-app while the `.deb` updates by installing a new package; Intel Mac distribution is paused. [Installation and updates](docs/getting-started.md) · [All assets and checksums](https://github.com/eggplantiny/conn/releases/tag/v0.8.0)
 
-## A small correction, without starting over
+## First five minutes
 
-[![15-second preview. Codex and Conn: the user changes the working directory, then the agent continues from the new location](docs/assets/conn-handoff-preview-en.webp)](docs/assets/conn-handoff-en.mp4)
+1. **Open Conn** and pick your shell under **Settings → Profiles**.
+2. **Connect your agent.** In **Settings → Agents**, choose your client and press **Set up**, then restart the client. The first time it connects, Conn shows **wants to join**: press **Allow**. [Connection guide](docs/agent-integrations.md)
+3. **Work in the terminal as usual**, then ask your agent: *"Look at my Conn terminal and continue from there."*
+4. **Interrupt it once.** Type while it holds control and watch it hand the keyboard back. The [first collaboration](docs/first-collaboration.md) walks through this with a disposable folder; no server needed.
 
-The agent prepares work in one folder. You want it somewhere else. Type in Conn to take control, change the directory, then tell your agent:
+For Codex, use the desktop app, CLI or IDE extension with a local task. The conversation stays in your agent client; the terminal is the workspace you share.
 
-> I changed the directory. Read the terminal and continue from here.
+## You stay in charge
 
-It reads the changed screen and resumes in the corrected location. The conversation stays in your agent client; the terminal is the workspace you share.
+| | |
+|---|---|
+| **Three modes** | **Observe**: the agent only reads. **Co-pilot**: it proposes a line and you press Enter. **Autopilot**: it runs commands and the policy asks when it matters. |
+| **Approvals** | Deny and confirm rules in a plain YAML policy. A dangerous command chained to others is refused and must be sent alone. On a remote host or inside another program, each command is reviewed one at a time. |
+| **Ask before joining** | A new agent connection learns nothing about your sessions until you press Allow. |
+| **One tab at a time** | An agent holds control in a single tab, stays in the session it was given, and never follows your view. |
+| **A record of what happened** | The timeline keeps commands, handoffs, approvals and refusals together, with the agent's stated reasons. |
+| **Private sessions** | Sessions started by an external launcher stay invisible to agents until you share them. |
 
-15-second preview · [Watch the full 70 seconds](docs/assets/conn-handoff-en.mp4) · [한국어 영상](docs/assets/conn-handoff-ko.mp4) · [Recording details](docs/demo.md)
-
-*Real Codex + Conn; a prepared recreation of a collaboration session. The user role is automated, and waiting time is edited.*
-
-## Try it yourself
-
-1. **Open Conn.** Choose your shell under **Settings → Profiles**.
-2. **Connect your agent.** In **Settings → Agents**, select your client and choose **Set up**. Restart the client and keep Conn open. The first time it connects, Conn shows **wants to join**: press **Allow**. [Connection guide](docs/agent-integrations.md)
-3. **Make one correction together.** Follow the [first collaboration](docs/first-collaboration.md): a disposable local folder, one file, and a handoff. No SSH server required.
-
-The setup supports **Codex, Claude Code, Cursor, and GitHub Copilot**. For Codex, use the desktop app, CLI, or IDE extension with a local task. Conn connects through MCP or CLI and does not run a model. Your existing client and model account still apply. This is not a ChatGPT app integration; web/cloud tasks cannot use this local connection.
-
-## When you step in
-
-Typing takes control back before further agent input reaches the shell. It **does not stop an already running process**; normal terminal controls still apply. Ask the agent to read the current screen before continuing.
-
-The timeline brings commands and collaboration decisions together, including denied requests and their original details. Local Bash/Zsh integration records executed shell commands, not raw typing or input inside applications.
+Typing **does not stop a process that is already running**; normal terminal controls such as Ctrl-C still apply. Conn is **not an operating-system sandbox**: commands run with your account's permissions. Agents connect over a local socket, and Conn opens no network port. [Trust model](docs/security.md) · [Policy](docs/policy.md)
 
 ## Another session: you add a test, the agent fixes it
 
@@ -66,9 +69,9 @@ Upgrade the app and restart its MCP clients together. [Changelog](CHANGELOG.md) 
 
 - [The story: a small correction in a shared terminal](docs/collaboration-story.md)
 - [FAQ: control, SSH, passwords, and history](docs/faq.md)
-- [Profiles and backends](docs/backends.md) · [CLI setup](docs/getting-started.md)
-- [Contribute](CONTRIBUTING.md) · [Report a problem](https://github.com/eggplantiny/conn/issues/new/choose)
+- [Profiles and backends](docs/backends.md) · [CLI setup](docs/getting-started.md) · [External automation](docs/external-automation.md)
+- [Contribute](CONTRIBUTING.md) · [Report a problem](https://github.com/eggplantiny/conn/issues/new/choose) · [Report a security issue](SECURITY.md)
 
-**Preview · MIT licensed.** Commands use your account's permissions; Conn is not an OS sandbox. [Trust model](docs/security.md) · [Report a security issue](SECURITY.md)
+**Preview · MIT licensed.**
 
-Useful for your workflow? **Star Conn** to help others discover it. We'd especially like to hear when you wanted to take the keyboard back.
+If you have ever wanted to grab the keyboard back from an agent, **star Conn** so others can find it, and tell us about that moment in an issue.
