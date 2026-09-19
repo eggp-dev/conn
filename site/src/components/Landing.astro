@@ -1,0 +1,265 @@
+---
+import { Image } from "astro:assets";
+import "@fontsource-variable/noto-sans-kr";
+import "../styles/landing.css";
+import mark from "../assets/conn-mark.svg";
+import join from "../assets/stills/join.webp";
+import deny from "../assets/stills/deny.webp";
+import takeover from "../assets/stills/takeover.webp";
+import release from "../generated/release.json";
+import { copy, type Lang } from "../i18n/landing";
+import { origin, repository } from "../site.config.mjs";
+import InstallCommand from "./InstallCommand.astro";
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const t = copy[lang];
+const stills = { join, deny, takeover };
+const github = `https://github.com/${repository}`;
+const tag = `v${release.version}`;
+const asset = (suffix: string) => `${github}/releases/download/${tag}/conn-${tag}-${suffix}`;
+const downloads = {
+  dmg: asset("aarch64-apple-darwin-desktop.dmg"),
+  deb: asset("x86_64-unknown-linux-gnu-desktop.deb"),
+  exe: asset("x86_64-pc-windows-msvc-setup.exe"),
+};
+const commands = {
+  mac: "brew install --cask eggp-dev/tap/conn",
+  linux: `curl -fsSL ${origin}/install.sh | sh`,
+};
+const clients = ["Claude Code", "Codex", "Cursor", "GitHub Copilot"];
+const canonical = new URL(lang === "ko" ? "/ko/" : "/", origin).href;
+const social = new URL(`/media/conn-remote-${lang}-social.webp`, origin).href;
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#000000" />
+    <title>{t.title}</title>
+    <meta name="description" content={t.description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="alternate" hreflang="en" href={new URL("/", origin).href} />
+    <link rel="alternate" hreflang="ko" href={new URL("/ko/", origin).href} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={t.headline.join(" ")} />
+    <meta property="og:description" content={t.description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={social} />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <header class="nav">
+      <a class="brand" href={lang === "ko" ? "/ko/" : "/"}>
+        <img src={mark.src} alt="" width="26" height="26" />
+        <span>Conn</span>
+        <span class="pill">{tag} · {t.preview}</span>
+      </a>
+      <nav aria-label="Main">
+        <a href={lang === "ko" ? "/ko/docs/getting-started/" : "/docs/getting-started/"}>{t.nav.docs}</a>
+        <a href="#install">{t.nav.install}</a>
+        <a class="wide" href={`${github}/releases`}>{t.nav.releases}</a>
+        <a class="wide" href={t.nav.otherHref} hreflang={lang === "ko" ? "en" : "ko"}>{t.nav.other}</a>
+        <a class="star small" href={github} data-star>
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
+          <span>GitHub</span><b data-star-count hidden></b>
+        </a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <h1>
+          <span>{t.headline[0]}</span>
+          <span class="accent">{t.headline[1]}</span>
+        </h1>
+        <p class="sub">{t.sub}</p>
+        <InstallCommand commands={commands} labels={t.os} copyLabel={t.copy} copiedLabel={t.copied} windowsHref={downloads.exe} windowsHint={t.windowsHint} id="hero" />
+        <div class="cta">
+          <a class="star" href={github} data-star>
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
+            <span>{t.star}</span><b data-star-count hidden></b>
+          </a>
+          <a class="ghost" href={lang === "ko" ? "/ko/docs/getting-started/" : "/docs/getting-started/"}>{t.readDocs} →</a>
+        </div>
+      </section>
+
+      <section class="film" aria-label={t.filmCaption}>
+        <div class="stage">
+          <video autoplay muted loop playsinline controls preload="metadata" poster={`/media/conn-remote-${lang}-poster.webp`}>
+            <source src={`/media/conn-remote-${lang}.mp4`} type="video/mp4" />
+            <track kind="captions" src={`/media/conn-remote-${lang}.vtt`} srclang={lang} label={lang === "ko" ? "한국어" : "English"} />
+          </video>
+        </div>
+        <p class="caption">{t.filmCaption}</p>
+        <p class="fine">
+          {t.filmDisclosure}
+          <a href={`${github}/blob/main/media/demo/RECORDING-REMOTE.md`}>{t.filmHow} →</a>
+        </p>
+      </section>
+
+      <section class="promises">
+        <h2>{t.promisesTitle}</h2>
+        {
+          t.promises.map((promise, index) => (
+            <article class="promise">
+              <div class="words">
+                <span class="count">0{index + 1}</span>
+                <h3>{promise.title}</h3>
+                <p>{promise.body}</p>
+              </div>
+              <figure>
+                <Image src={stills[promise.key]} alt="" widths={[800, 1400, 2400]} sizes="(max-width: 1200px) 100vw, 1120px" loading="lazy" />
+              </figure>
+            </article>
+          ))
+        }
+      </section>
+
+      <section class="more">
+        <h2>{t.moreTitle}</h2>
+        <div class="grid">
+          {
+            t.more.map((item) => (
+              <div class="cell">
+                <h3>{item.title}</h3>
+                <p>{item.body}</p>
+              </div>
+            ))
+          }
+        </div>
+      </section>
+
+      <section class="how">
+        <h2>{t.howTitle}</h2>
+        <ol>
+          {
+            t.how.map((item) => (
+              <li>
+                <span class="count">{item.step}</span>
+                <h3>{item.title}</h3>
+                <p>{item.body}</p>
+              </li>
+            ))
+          }
+        </ol>
+        <div class="wire" aria-hidden="true">
+          <span>{clients[0]} · {clients[1]} · {clients[2]} · {clients[3]}</span>
+          <i>MCP</i>
+          <span class="core">Conn</span>
+          <i>PTY</i>
+          <span>zsh · bash · ssh</span>
+        </div>
+        <p class="works">
+          <span>{t.worksWith}</span>
+          {clients.map((client) => <b>{client}</b>)}
+        </p>
+      </section>
+
+      <section class="install" id="install">
+        <h2>{t.installTitle}</h2>
+        <p class="lead">{t.installLead}</p>
+        <div class="rows">
+          <div class="row">
+            <div><h3>{t.installRows.mac.name}</h3><p>{t.installRows.mac.detail}</p></div>
+            <div class="do"><code>{commands.mac}</code><button type="button" data-copy={commands.mac} data-copied={t.copied}>{t.copy}</button></div>
+            <a href={downloads.dmg}>{t.installRows.mac.alt}</a>
+          </div>
+          <div class="row">
+            <div><h3>{t.installRows.linux.name}</h3><p>{t.installRows.linux.detail}</p></div>
+            <div class="do"><code>{commands.linux}</code><button type="button" data-copy={commands.linux} data-copied={t.copied}>{t.copy}</button></div>
+            <a href={downloads.deb}>{t.installRows.linux.alt}</a>
+          </div>
+          <div class="row">
+            <div><h3>{t.installRows.windows.name}</h3><p>{t.installRows.windows.detail}</p></div>
+            <div class="do"><a class="download" href={downloads.exe}>{t.installRows.windows.alt} · {tag}</a></div>
+            <span></span>
+          </div>
+        </div>
+        <p class="fine"><a href={`${github}/releases/tag/${tag}`}>{t.allDownloads} →</a></p>
+      </section>
+
+      <section class="docs">
+        <h2>{t.docsTitle}</h2>
+        <div class="cards">
+          {
+            t.docsCards.map((card) => (
+              <a class="card" href={card.href}>
+                <h3>{card.title}</h3>
+                <p>{card.body}</p>
+              </a>
+            ))
+          }
+        </div>
+        <div class="limits">
+          <h3>{t.limitsTitle}</h3>
+          <p>{t.limits}</p>
+        </div>
+      </section>
+
+      <section class="closing">
+        <img src={mark.src} alt="" width="72" height="72" />
+        <h2>
+          <span>{t.closing[0]}</span>
+          <span class="accent">{t.closing[1]}</span>
+        </h2>
+        <InstallCommand commands={commands} labels={t.os} copyLabel={t.copy} copiedLabel={t.copied} windowsHref={downloads.exe} windowsHint={t.windowsHint} id="closing" />
+        <div class="cta">
+          <a class="star" href={github} data-star>
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
+            <span>{t.star}</span><b data-star-count hidden></b>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>Conn · {t.footer.license}</span>
+      <a href={github}>{t.footer.source}</a>
+      <a href={`${github}/blob/main/CHANGELOG.md`}>{t.footer.changelog}</a>
+      <a href={`${github}/security/advisories/new`}>{t.footer.security}</a>
+      <a href={t.nav.otherHref}>{t.nav.other}</a>
+    </footer>
+
+    <script is:inline define:vars={{ repository }}>
+      // Star count: shown once GitHub answers and the number says something (50+); the button works without it.
+      fetch(`https://api.github.com/repos/${repository}`, { headers: { accept: "application/vnd.github+json" } })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data) => {
+          if (!data || typeof data.stargazers_count !== "number" || data.stargazers_count < 50) return;
+          const text = data.stargazers_count >= 1000 ? `${(data.stargazers_count / 1000).toFixed(1)}k` : String(data.stargazers_count);
+          for (const node of document.querySelectorAll("[data-star-count]")) {
+            node.textContent = text;
+            node.hidden = false;
+          }
+        })
+        .catch(() => {});
+
+      // Visitors who asked for less motion get the poster and the controls, not a playing film.
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        for (const film of document.querySelectorAll("video[autoplay]")) {
+          film.removeAttribute("autoplay");
+          film.pause();
+        }
+      }
+
+      for (const button of document.querySelectorAll("[data-copy]")) {
+        button.addEventListener("click", async () => {
+          const label = button.textContent;
+          try {
+            await navigator.clipboard.writeText(button.dataset.copy);
+            button.textContent = button.dataset.copied;
+            setTimeout(() => (button.textContent = label), 1600);
+          } catch {}
+        });
+      }
+    </script>
+  </body>
+</html>

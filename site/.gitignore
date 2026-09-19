@@ -1,0 +1,7 @@
+# Written by scripts/sync.mjs from ../docs, ../docs/assets and ../scripts on every dev and build
+/src/content/docs/
+/src/generated/
+/public/media/
+/public/install.sh
+.astro/
+.vercel/

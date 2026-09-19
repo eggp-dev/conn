@@ -79,8 +79,8 @@ IDs come from `profiles list`; they need not match the examples. Use
 `--profiles-file PATH` for an isolated config. The app and CLI normally share
 `~/.conn/profiles.json` (`%USERPROFILE%\.conn\profiles.json` on Windows).
 
-Open the profile from the desktop app after configuring it. The unreleased shared-surface
-version removes CLI terminal/headless startup: agents observe the terminal grid of
+Open the profile from the desktop app after configuring it. Since v0.7.0 there is no CLI
+terminal/headless startup: agents observe the terminal grid of
 a session shared from the desktop app. External launch commands use the [native automation adapter](external-automation.md).
 
 ### File format

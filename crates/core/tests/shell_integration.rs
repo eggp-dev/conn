@@ -287,7 +287,9 @@ fn completion_prompt_confirmation_clears_before_async_execution_hooks() {
     assert!(session.lock().completion_prompt_ready());
     {
         let mut s=session.lock();
-        s.human_input(b"sleep 0.15\r");
+        // Long enough that a slow runner still observes the command running below;
+        // 0.15s let it finish between the start hook and the assertion on macOS CI.
+        s.human_input(b"sleep 1\r");
         // Holding Session prevents the reader from processing the queued start
         // hook. Enter itself must close the automatic completion window.
         assert!(!s.completion_prompt_ready());

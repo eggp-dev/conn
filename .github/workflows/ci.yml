@@ -86,6 +86,9 @@ jobs:
         working-directory: frontends/tauri
       - run: npm run build
         working-directory: frontends/tauri
+      - name: The website builds, including the pages it generates from docs/
+        run: npm ci && npm run build
+        working-directory: site
   core:
     name: Rust (${{ matrix.os }})
     needs: scope

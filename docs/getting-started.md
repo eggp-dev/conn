@@ -102,7 +102,7 @@ The open-C icon shows human control, pending requests, agent control and executi
 
 Denied, blocked, cancelled, expired and executed are separate outcomes. **Executed** means input reached the shell, not that the command succeeded. The timeline does not save terminal output or scrollback.
 
-## CLI and MCP (shared-surface development version)
+## CLI and MCP
 
 Open the **Conn desktop app** first. The CLI connects an agent to that visible
 session; it no longer launches a terminal proxy or a headless collaboration shell.
@@ -157,7 +157,7 @@ npm ci
 npm run tauri dev
 ```
 
-The shared-surface development version requires a visible Conn frontend. For browser testing with the same native backend, see [browser testing](browser-testing.md).
+Agents need a running Conn frontend. For browser testing with the same native backend, see [browser testing](browser-testing.md).
 
 Next: [backends](backends.md), [policy](policy.md), [trust model](security.md), or [contributing](../CONTRIBUTING.md).
 

@@ -17,7 +17,8 @@ LINUX = "ubuntu-24.04"
 ALL = [LINUX, "macos-15", "windows-2022"]
 
 # Read by people only. `plugin/**/*.md` is compiled into the binaries and is NOT documentation here.
-DOCS_PREFIXES = ("docs/", "media/", ".github/ISSUE_TEMPLATE/")
+# `site/` is the website (conn.eggp.dev); the always-on job builds it.
+DOCS_PREFIXES = ("docs/", "media/", "site/", ".github/ISSUE_TEMPLATE/")
 DOCS_ROOT_FILES = ("LICENSE", "NOTICE")
 # Shipped to users but not part of any build; the always-on job checks it (`sh -n`).
 LIGHT_FILES = ("scripts/install.sh",)

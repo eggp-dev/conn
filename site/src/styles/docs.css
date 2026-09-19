@@ -1,0 +1,21 @@
+/* Starlight, tuned to the landing page: near-black surface, the same violet, the same typeface. */
+@import "@fontsource-variable/noto-sans-kr";
+
+:root {
+  --sl-font: "Noto Sans KR Variable", "Noto Sans KR", system-ui, sans-serif;
+}
+/* Custom CSS is unlayered and beats Starlight's own light theme, so the dark values must not match it. */
+:root:not([data-theme="light"]) {
+  --sl-color-accent-low: #1f1a45;
+  --sl-color-accent: #8575ff;
+  --sl-color-accent-high: #d9d5ff;
+  --sl-color-black: #050508;
+  --sl-color-gray-6: #0e0e15;
+  --sl-color-gray-5: #1d1d28;
+}
+:root[data-theme="light"] {
+  --sl-color-accent-low: #e2deff;
+  --sl-color-accent: #5b47e0;
+  --sl-color-accent-high: #2a1f7a;
+}
+.sl-markdown-content { word-break: keep-all; overflow-wrap: anywhere; }

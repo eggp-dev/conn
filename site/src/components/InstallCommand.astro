@@ -1,0 +1,42 @@
+---
+interface Props {
+  id: string;
+  commands: { mac: string; linux: string };
+  labels: { mac: string; linux: string; windows: string };
+  copyLabel: string;
+  copiedLabel: string;
+  windowsHref: string;
+  windowsHint: string;
+}
+
+const { id, commands, labels, copyLabel, copiedLabel, windowsHref, windowsHint } = Astro.props;
+---
+
+<div class="installer" data-installer>
+  <div class="tabs" role="tablist">
+    {
+      (["mac", "linux", "windows"] as const).map((os) => (
+        <button type="button" role="tab" id={`${id}-${os}`} data-os={os} aria-selected={os === "mac" ? "true" : "false"}>
+          {labels[os]}
+        </button>
+      ))
+    }
+  </div>
+  <div class="line" data-panel="mac"><span class="prompt">$</span><code>{commands.mac}</code><button type="button" data-copy={commands.mac} data-copied={copiedLabel}>{copyLabel}</button></div>
+  <div class="line" data-panel="linux" hidden><span class="prompt">$</span><code>{commands.linux}</code><button type="button" data-copy={commands.linux} data-copied={copiedLabel}>{copyLabel}</button></div>
+  <div class="line" data-panel="windows" hidden><a href={windowsHref}>{windowsHint} ↓</a></div>
+</div>
+
+<script>
+  // Start on the visitor's own system; the tabs still show the others.
+  const platform = navigator.userAgent;
+  const detected = /Windows/i.test(platform) ? "windows" : /Linux|X11/i.test(platform) && !/Android/i.test(platform) ? "linux" : "mac";
+  for (const installer of document.querySelectorAll<HTMLElement>("[data-installer]")) {
+    const select = (os: string) => {
+      for (const tab of installer.querySelectorAll<HTMLElement>("[data-os]")) tab.setAttribute("aria-selected", String(tab.dataset.os === os));
+      for (const panel of installer.querySelectorAll<HTMLElement>("[data-panel]")) panel.hidden = panel.dataset.panel !== os;
+    };
+    for (const tab of installer.querySelectorAll<HTMLElement>("[data-os]")) tab.addEventListener("click", () => select(tab.dataset.os!));
+    select(detected);
+  }
+</script>
