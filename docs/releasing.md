@@ -15,7 +15,7 @@ Actions are pinned by commit SHA. Pull requests receive no signing secrets. Only
 ## Prepare the version
 
 1. Align the workspace version, `conn-core` dependency, desktop Cargo version, Tauri config, frontend package/lock, plugin manifests and marketplace. Refresh both Cargo lockfiles.
-2. Add a user-facing [CHANGELOG](../CHANGELOG.md) entry and check the exact release version:
+2. Add a user-facing [CHANGELOG](../CHANGELOG.md) section headed `## X.Y.Z — Preview · YYYY-MM-DD`. The release notes quote that section as written under "New in this release" (the bullets and the `한국어:` paragraph), so write it for the people who install Conn. `check` fails until the section exists; an `## Unreleased` heading does not count and is never published. The rest of the notes is the fixed text in `scripts/release_notes.md`, which holds for every release; nothing in `release.py` is edited for a release. Then check the exact release version:
 
    ```sh
    python3 scripts/release.py check --tag v0.8.2
@@ -56,7 +56,7 @@ The release stages are:
 
 1. Build the matching CLI and desktop package on each native runner.
 2. On Mac, sign and notarize the app, embedded CLI, standalone CLI and DMG as described in [macOS signing](macos-signing.md). Generate the Apple Silicon report, including acceptance and final asset hashes.
-3. `release.py package` normalizes filenames. `finalize` requires all installers, updater archives/signatures and the valid Apple Silicon report before writing `SHA256SUMS` and bilingual notes.
+3. `release.py package` normalizes filenames. `finalize` requires all installers, updater archives/signatures and the valid Apple Silicon report before writing `SHA256SUMS` and the bilingual notes: `scripts/release_notes.md` filled with this version's asset names and changelog section.
 4. After the exact commit's CI and all build/signing jobs pass, `draft` uploads **14 assets**: seven binaries/installers, one macOS updater archive, three updater signatures, `latest.json`, one signing report and `SHA256SUMS`. It creates or updates an unpublished prerelease and refuses to modify a public release.
 
 Re-running can repair an incomplete draft. No workflow publishes automatically. Actions retains temporary build artifacts for seven days; uploaded release assets persist. The CLI archives contain the license and installation notes. The updater manifest is release-scoped and discovered via GitHub release metadata, including the explicit preview channel.
@@ -72,7 +72,7 @@ Review the downloaded draft artifacts, not a different local build.
 - Keep the intentional Windows unsigned notice. Mac assets need successful Developer ID and notarization evidence. Do not tell users to disable system protection.
 - Review the bilingual release notes and download links, replace the pending changelog date with the publication date, and publish the reviewed prerelease explicitly. Then open the public version page and each linked asset to confirm availability.
 
-A green CI build alone is not a claim that every installer or interaction passed. Release notes must say which platform checks ran and what remains untested. Preserve secrets in Actions; never attach certificates, credentials or detailed private logs.
+A green CI build alone is not a claim that every installer or interaction passed. Release notes must say which platform checks ran and what remains untested; that text lives in `scripts/release_notes.md`, so change it there when the validated coverage changes. Preserve secrets in Actions; never attach certificates, credentials or detailed private logs.
 
 For implementation details, see [Tauri's GitHub pipeline guide](https://v2.tauri.app/distribute/pipelines/github/) and the repository's [signing contract](macos-signing.md).
 

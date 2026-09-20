@@ -25,6 +25,7 @@ import uuid
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
+NOTES_TEMPLATE = Path(__file__).resolve().with_name("release_notes.md")
 REPOSITORY = "https://github.com/eggp-dev/conn"
 REPOSITORY_SLUG = "eggp-dev/conn"
 # Do not "fix" this one. Conn 0.6.0 to 0.8.1 only install an update whose download address starts
@@ -63,6 +64,27 @@ def validate_version(version: str) -> str:
     return version
 
 
+def changelog_section(root: Path, version: str) -> str:
+    """The entry under `## {version}` in CHANGELOG.md, as written. Release notes quote it."""
+    path = root / "CHANGELOG.md"
+    if not path.is_file():
+        raise ReleaseError("CHANGELOG.md not found; release notes are generated from it")
+    lines = path.read_text(encoding="utf-8").splitlines()
+    headings = [index for index, line in enumerate(lines) if line.startswith("## ")]
+    # `## Unreleased` and other versions never match; only the exact version does.
+    found = [index for index in headings if re.fullmatch(rf"## {re.escape(version)}(\s.*)?", lines[index])]
+    if not found:
+        raise ReleaseError(f"CHANGELOG.md has no '## {version}' section; add the user-facing entry for this release "
+                           f"(for example '## {version} — Preview · YYYY-MM-DD'). Release notes are generated from it.")
+    if len(found) > 1:
+        raise ReleaseError(f"CHANGELOG.md has more than one '## {version}' section")
+    end = next((index for index in headings if index > found[0]), len(lines))
+    body = "\n".join(lines[found[0] + 1:end]).strip()
+    if not body:
+        raise ReleaseError(f"CHANGELOG.md section '## {version}' is empty")
+    return body
+
+
 def check(root: Path = ROOT, tag: str | None = None) -> str:
     """All independently published Conn components must share one version."""
     cargo = read_toml(root / "Cargo.toml")
@@ -96,6 +118,7 @@ def check(root: Path = ROOT, tag: str | None = None) -> str:
     mismatches = [f"{name}: {actual!r}" for name, actual in declarations.items() if actual != version]
     if mismatches:
         raise ReleaseError(f"Version must be {version} everywhere:\n" + "\n".join(mismatches))
+    changelog_section(root, version)
     return version
 
 
@@ -319,6 +342,31 @@ def smoke(target: str, artifacts: Path, root: Path = ROOT):
             raise ReleaseError("Standalone packaged CLI did not report the release version")
 
 
+def release_notes(root: Path, version: str, tag: str, sha: str | None = None, template: Path = NOTES_TEMPLATE) -> str:
+    """Fill the static template; what changed comes from the changelog, never from this script."""
+    changes = changelog_section(root, version)
+    # A path that works inside the repository would be a dead link on the release page.
+    changes = re.sub(r"\]\((?![#/]|[A-Za-z][A-Za-z0-9+.-]*:)([^)\s]+)\)", rf"]({REPOSITORY}/blob/{tag}/\1)", changes)
+    names = {target: asset_names(version, target) for target in TARGETS}
+    mac, windows, linux = names["aarch64-apple-darwin"], names["x86_64-pc-windows-msvc"], names["x86_64-unknown-linux-gnu"]
+    values = {
+        "tag": tag, "version": version, "repository": REPOSITORY, "changes": changes,
+        "source_commit": f"\nSource commit: `{sha.lower()}`\n" if sha else "",
+        "mac_cli": mac[0], "mac_dmg": mac[1], "windows_cli": windows[0], "windows_setup": windows[1],
+        "linux_cli": linux[0], "linux_deb": linux[1], "linux_appimage": linux[2],
+    }
+    text = re.sub(r"\A<!--.*?-->\s*", "", template.read_text(encoding="utf-8"), flags=re.DOTALL)
+    if "{changes}" not in text:
+        raise ReleaseError(f"{template.name} must contain {{changes}}")
+
+    def fill(match):
+        if match[1] not in values:
+            raise ReleaseError(f"{template.name}: unknown placeholder {match[0]}")
+        return values[match[1]]
+    # One pass over the template only: braces inside the changelog text are left alone.
+    return re.sub(r"\{([a-z_]+)\}", fill, text)
+
+
 def finalize(artifacts: Path, tag: str, sha: str | None = None, root: Path = ROOT) -> list[Path]:
     version = check(root, tag)
     if sha is not None and re.fullmatch(r"[0-9a-fA-F]{40}", sha) is None:
@@ -344,128 +392,7 @@ def finalize(artifacts: Path, tag: str, sha: str | None = None, root: Path = ROO
         if (artifacts / output_name).is_symlink():
             raise ReleaseError(f"Refusing to overwrite a symlink: {output_name}")
     (artifacts / "SHA256SUMS").write_text(checksums, encoding="utf-8", newline="\n")
-    source = f"\nSource commit: `{sha.lower()}`\n" if sha else ""
-    notes = f"""# Conn {tag}
-
-**Preview / prerelease.** Conn gives a human and an agent one shared shell with
-visible control handoff, command approval, and a combined collaboration timeline.
-These binaries are built by CI; a green build is not a claim of full manual
-validation on every operating system.
-{source}
-## Download the desktop app
-
-| Your computer | Download |
-|---|---|
-| Mac — Apple Silicon (M1 or newer) | [Conn for Apple Silicon]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'aarch64-apple-darwin')[1]}) |
-| Windows — x64 | [Windows installer]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-pc-windows-msvc')[1]}) |
-| Ubuntu — x64 | [Ubuntu .deb]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-unknown-linux-gnu')[1]}) · [Linux AppImage]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-unknown-linux-gnu')[2]}) |
-
-Installers include the app and its Conn CLI sidecar; Rust and Node.js are not
-required to use these binaries. Windows preview installers are unsigned, so a
-SmartScreen or unknown-publisher prompt may appear. Native CLI startup is checked
-in CI; full interactive GUI installation/collaboration checks remain pending.
-
-## New in this release
-
-- **New in 0.8.2:** Conn's repository moved to `github.com/eggp-dev/conn`. This build looks for updates there and trusts both the new and the previous address; older installations keep updating through the previous one. Install with one line: `brew install --cask eggp-dev/tap/conn` on macOS, or `curl -fsSL https://conn.eggp.dev/install.sh | sh` on Linux.
-- **Fixed in 0.8.1:** typing while a command approval was showing took control back but left the approval alive, with your keystrokes appended to the agent's typed line; approving afterwards could run a line that differed from the one on the card. Your input now denies the pending approval and clears that line first. If you run 0.8.0, update.
-- **Changed from 0.7.0:** agents observe the current terminal screen of their shared session as text, parsed from its output. Window focus, the visible tab, minimizing or covering the window no longer pause reading or writing. There is no screenshot, scrollback or scroll position in a snapshot, and the `unattended` / `suspended` errors are gone.
-- Conn now asks once before a new agent connection joins (**Allow / Deny**). Until you allow it, the connection learns nothing about your sessions. The answer applies to that live connection only; you can turn the question off in Settings → Agents.
-- Control is one revocable lease per connection: your typing still takes it back at once, and an agent that moves to another tab gives up what it held in the tab it left.
-- Text hidden with ANSI conceal or equal foreground/background colors stays out of snapshots, and an agent cannot submit a line that contains it. Passwords typed without echo never appear; secrets a program prints remain visible to participants.
-- A terminated agent's delayed command never runs, and an agent whose shell closed can move to another permitted tab.
-
-**Upgrade together:** protocol v2 requires the matching app and CLI/MCP adapter.
-After installing, restart your MCP clients. Existing files, profiles and saved activity
-remain; running shell sessions close during app restart and are not migrated.
-Agents reconnecting with the same name do not inherit explicitly selected access.
-
-v0.6.0 to v0.8.1 installations can discover this preview through the signed updater. Older
-clients need a manual install. Updates support Apple Silicon macOS, Windows x64
-and Linux AppImage; Debian packages use package-manager/manual updates. Installation
-and restart remain your choice. Full installed-app upgrade coverage on every target
-is not claimed by artifact signature checks.
-
-한국어: 0.8.2부터 저장소가 `github.com/eggp-dev/conn`으로 옮겨졌습니다. 이 버전은 새 주소에서 업데이트를 찾고 새 주소와 이전 주소를 모두 신뢰하며, 기존 설치본은 이전 주소로 계속 업데이트됩니다. macOS는 `brew install --cask eggp-dev/tap/conn` 한 줄로 설치할 수 있습니다. 0.8.1은 승인 카드가 떠 있을 때 사람이 입력하면 승인이 살아남아, 이후 승인 시 카드와 다른 명령이 실행될 수 있던 문제를 고칩니다. 이제 사람 입력은 대기 중인 승인을 거부하고 입력 줄을 비웁니다. 0.8.0 사용자는 업데이트하세요. 0.7.0과 달라진 점입니다. 에이전트는 공유된 세션의 현재 터미널 화면을 텍스트로
-관찰하며, 창 포커스·보이는 탭·최소화 여부는 더 이상 읽기와 쓰기를 멈추지 않습니다.
-새 에이전트 연결은 Conn 창에서 한 번 허용해야 참여하고, 허용 전에는 세션에 대해 아무것도
-알 수 없습니다(설정 → 에이전트에서 끌 수 있음). 제어권은 연결당 하나이며 사람이 입력하면
-즉시 돌아옵니다. 숨김 처리된 글자는 스냅샷에서 빠지고, 에코 없이 입력한 암호는 나타나지
-않습니다. 앱·CLI를 함께 업데이트하고 MCP 클라이언트를 재시작하세요. 파일·설정·저장 기록은
-유지하며 실행 중인 셸은 앱 재시작 시 종료됩니다. v0.6.0~v0.8.1은 서명 업데이트를 사용할
-수 있고 이전 버전은 직접 설치하세요.
-
-## Native validation and remaining coverage
-
-The actual Apple Silicon development app passed the join prompt, reading and writing
-while minimized, unfocused or on another tab, hidden/masked synthetic authentication,
-AppleScript launch, same-SSH sharing, late external writes being refused and the
-one-lease-per-connection rule. A Linux run against a real OpenSSH server found no
-credential in snapshots, replies or saved data after sharing. See the
-[macOS acceptance report]({REPOSITORY}/blob/{tag}/docs/shared-surface-macos-validation-results.md).
-Native WebKit completion fixtures passed; a real OpenAI request remains unverified.
-The real-user provider path stays opt-in. Development-app checks are separate from
-this release's CI signing/notarization and updater artifact-signature verification.
-Windows interactive GUI and full installed-app upgrades remain unverified.
-
-AppleScript is disabled by default. Enable it for selected local profiles in Settings
-and consult the [automation guide]({REPOSITORY}/blob/{tag}/docs/external-automation.md).
-
-## Getting started
-
-- [English guide]({REPOSITORY}/blob/{tag}/docs/getting-started.md)
-- [한국어 사용법]({REPOSITORY}/blob/{tag}/docs/getting-started.ko.md)
-- [What changed]({REPOSITORY}/blob/{tag}/CHANGELOG.md)
-
-For a separate MCP connector, download the matching CLI for
-[Apple Silicon]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'aarch64-apple-darwin')[0]}),
-[Windows x64]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-pc-windows-msvc')[0]}) or
-[Linux x64]({REPOSITORY}/releases/download/{tag}/{asset_names(version, 'x86_64-unknown-linux-gnu')[0]}).
-Linux x64 assets are built on Ubuntu 24.04 and target
-Ubuntu 24.04/26.04; runtime coverage of these exact assets is separate from CI.
-Windows targets x64 and is intentionally unsigned for this preview; a certificate
-is not a release prerequisite. SmartScreen or unknown-publisher prompts may appear.
-macOS apps, their embedded CLI sidecars, and standalone CLIs are Developer ID
-signed with hardened runtime and secure timestamps. Apple notarization is
-Accepted for the final DMGs and standalone CLI submissions; app and DMG tickets
-are stapled and verified. Apple does not support stapling a standalone CLI or
-its archive, so its notarization ticket is retrieved online when needed.
-The Apple Silicon `-signing.json` asset records native runner checks and final asset hashes;
-it is evidence of this build, not an independent cryptographic attestation.
-Intel Mac packages are paused for new releases; previously published assets remain available.
-Native interactive installation and collaboration coverage remains limited for this preview.
-See the [platform policy]({REPOSITORY}/blob/{tag}/docs/platform-support.md).
-Follow the installation guide for platform trust prompts; never disable system
-protection globally.
-
-## Verify the download
-
-Download `SHA256SUMS` with your selected asset. On Linux, run
-`sha256sum --ignore-missing -c SHA256SUMS` from that directory. On macOS, compare
-`shasum -a 256 <asset>` to the matching line; on Windows use
-`Get-FileHash <asset> -Algorithm SHA256`. SHA-256 detects download corruption;
-the checksum file is not a code-signing signature.
-
-## Before giving an agent control
-
-Commands use your account's permissions. Conn's policy and approval UI are not
-an operating-system sandbox. An “executed” record means input reached the shell,
-not that the command completed successfully. Start with a disposable project.
-Read the [security model]({REPOSITORY}/blob/{tag}/docs/security.md) and
-[report security issues privately]({REPOSITORY}/security/advisories/new).
-
-한국어: AppleScript는 기본적으로 꺼져 있습니다. 실제 Mac 개발 앱의 인증·공유·제어 전환을 검증했으며 배포 파일 서명·공증과는 구분합니다. Windows GUI와 모든 플랫폼의 실제 설치 상태 업그레이드, 실제 OpenAI 호출은 추가 검증 대상입니다.
-이 릴리스는 프리뷰입니다. 명령은 사용자 계정 권한으로 실행되며, 승인 기능은
-운영체제 샌드박스가 아닙니다. 실행 기록은 입력 전달을 뜻하며 명령의 성공을 보장하지
-않습니다. macOS 앱·내장 CLI·별도 CLI는 Developer ID로 서명하며 hardened runtime과
-보안 타임스탬프를 검증합니다. DMG와 별도 CLI의 Apple 공증이 승인되었고 앱·DMG에는
-티켓을 첨부했습니다. 별도 CLI와 아카이브에는 티켓을 첨부할 수 없어 필요 시 온라인으로
-조회합니다. Apple Silicon 서명 보고서는 해당 빌드의 검증 기록이며 독립적인 암호학적 증명은 아닙니다.
-새 릴리스의 Intel Mac 배포는 중단하며 기존 공개 파일은 유지합니다.
-Windows 프리뷰는 무서명으로 배포하며 인증서가 필수 조건은 아닙니다. Linux는
-Ubuntu 24.04 빌드를 24.04·26.04 대상으로 제공합니다. CI에서 각 운영체제의 별도 CLI
-시작을 확인하며, 네이티브 GUI 설치·협업의 전체 대화형 검증은 아직 완료되지 않았습니다.
-"""
+    notes = release_notes(root, version, tag, sha)
     (artifacts / "release-notes.md").write_text(notes, encoding="utf-8", newline="\n")
     return paths + [artifacts / "SHA256SUMS"]
 

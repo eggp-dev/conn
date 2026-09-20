@@ -3,6 +3,7 @@ import importlib.util
 import base64
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 import shutil
@@ -25,6 +26,25 @@ VERSION_FILES = [
     ".claude-plugin/marketplace.json",
 ]
 
+# A made-up changelog: the tests pin where notes come from, not what any real release said.
+CHANGELOG = """# Changelog
+
+## Unreleased
+
+- Unreleased work that must never reach release notes.
+
+## {version} — Preview · 2026-01-02
+
+- First fixture change with `code {{braces}}` kept as written.
+- Second fixture change, see [the protocol](docs/protocol.md) and [the site](https://example.com/).
+
+한국어: 픽스처 변경 사항입니다.
+
+## 0.0.1 — Preview · 2026-01-01
+
+- Older fixture change that belongs to another release.
+"""
+
 
 class ReleaseTests(unittest.TestCase):
     def setUp(self):
@@ -37,6 +57,8 @@ class ReleaseTests(unittest.TestCase):
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / name, destination)
         (self.root / "LICENSE").write_text("MIT License\n", encoding="utf-8")
+        declared = release.read_toml(self.root / "Cargo.toml")["workspace"]["package"]["version"]
+        (self.root / "CHANGELOG.md").write_text(CHANGELOG.format(version=declared), encoding="utf-8")
         self.version = release.check(self.root)
         self.tag = "v" + self.version
         self.out = Path(self.temporary.name) / "assets"
@@ -219,13 +241,6 @@ class ReleaseTests(unittest.TestCase):
         for line in manifest.splitlines():
             digest, filename = line.split("  ")
             self.assertEqual(digest, release.sha256(self.out / filename))
-        notes = (self.out / "release-notes.md").read_text()
-        self.assertIn("Preview / prerelease", notes)
-        self.assertIn("getting-started.ko.md", notes)
-        self.assertIn("Developer ID", notes)
-        self.assertNotIn("x86_64-apple-darwin", notes)
-        self.assertIn("Intel Mac packages are paused", notes)
-        self.assertNotIn("currently ad-hoc", notes)
         self.assertNotIn("release-notes.md", manifest)
         (self.out / "private.txt").write_text("do not publish")
         with self.assertRaises(release.ReleaseError):
@@ -234,6 +249,74 @@ class ReleaseTests(unittest.TestCase):
         next(self.out.glob("*.dmg")).unlink()
         with self.assertRaises(release.ReleaseError):
             release.finalize(self.out, self.tag, self.sha, self.root)
+
+    def test_notes_are_the_template_filled_with_this_release(self):
+        self.complete_assets()
+        notes = (self.out / "release-notes.md").read_text(encoding="utf-8")
+        self.assertTrue(notes.startswith(f"# Conn {self.tag}\n"))
+        self.assertIn(f"Source commit: `{self.sha}`", notes)
+        for target in release.TARGETS:
+            for name in release.asset_names(self.version, target):
+                self.assertIn(f"({release.REPOSITORY}/releases/download/{self.tag}/{name})", notes)
+        self.assertNotIn("x86_64-apple-darwin", notes)
+        self.assertIn(f"{release.REPOSITORY}/blob/{self.tag}/CHANGELOG.md", notes)
+        # Nothing of the template's own machinery is published.
+        self.assertNotIn("<!--", notes)
+        self.assertEqual(re.findall(r"\{[a-z_]+\}", notes.replace("{braces}", "")), [])
+        self.assertNotIn("Source commit", release.release_notes(self.root, self.version, self.tag))
+
+    def test_notes_quote_only_this_version_of_the_changelog(self):
+        notes = release.release_notes(self.root, self.version, self.tag, self.sha)
+        self.assertIn("- First fixture change with `code {braces}` kept as written.", notes)
+        self.assertIn("한국어: 픽스처 변경 사항입니다.", notes)
+        self.assertNotIn("Unreleased", notes)
+        self.assertNotIn("Older fixture change", notes)
+        self.assertNotIn(f"## {self.version}", notes)
+        # Repository paths would be dead links on the release page; other links stay as written.
+        self.assertIn(f"[the protocol]({release.REPOSITORY}/blob/{self.tag}/docs/protocol.md)", notes)
+        self.assertIn("[the site](https://example.com/)", notes)
+        self.assertEqual(notes.count("First fixture change"), 1)
+
+    def test_changelog_must_have_a_section_for_the_version(self):
+        path = self.root / "CHANGELOG.md"
+        original = path.read_text(encoding="utf-8")
+        heading = f"## {self.version} — Preview · 2026-01-02"
+        self.assertEqual(release.check(self.root, self.tag), self.version)  # `## Unreleased` on top is fine
+        broken = [
+            ("has no", original.replace(heading, "## 99.0.0 — Preview")),
+            ("has no", original.replace(heading, f"## {self.version}1 — a longer number is another version")),
+            ("has no", original.replace(heading, "## Unreleased")),
+            ("more than one", original + f"\n## {self.version}\n\n- Again.\n"),
+            ("is empty", original.replace("- First fixture", "## 0.0.2\n\n- First fixture")),
+        ]
+        for message, text in broken:
+            with self.subTest(message=message):
+                path.write_text(text, encoding="utf-8")
+                with self.assertRaisesRegex(release.ReleaseError, f"CHANGELOG.md.*{message}"):
+                    release.check(self.root, self.tag)
+        path.unlink()
+        with self.assertRaisesRegex(release.ReleaseError, "CHANGELOG.md not found"):
+            release.check(self.root)
+
+    def test_template_mistakes_fail_instead_of_being_published(self):
+        template = Path(self.temporary.name) / "notes.md"
+        template.write_text("<!-- maintainer comment -->\n# {tag}\n{changes}\n{typo}\n", encoding="utf-8")
+        with self.assertRaisesRegex(release.ReleaseError, r"unknown placeholder \{typo\}"):
+            release.release_notes(self.root, self.version, self.tag, template=template)
+        template.write_text("# {tag}\n", encoding="utf-8")
+        with self.assertRaisesRegex(release.ReleaseError, "changes"):
+            release.release_notes(self.root, self.version, self.tag, template=template)
+        template.write_text("<!-- maintainer comment -->\n# {tag}\n{changes}\n", encoding="utf-8")
+        notes = release.release_notes(self.root, self.version, self.tag, template=template)
+        self.assertTrue(notes.startswith(f"# {self.tag}\n- First fixture change"))
+
+    def test_template_links_into_the_repository_exist(self):
+        template = release.NOTES_TEMPLATE.read_text(encoding="utf-8")
+        paths = re.findall(r"\{repository\}/blob/\{tag\}/([^)\s]+)", template)
+        self.assertGreater(len(paths), 3)
+        for path in paths:
+            with self.subTest(path=path):
+                self.assertTrue((ROOT / path).is_file())
 
     def test_finalize_rejects_invalid_commit_identity(self):
         self.complete_assets()

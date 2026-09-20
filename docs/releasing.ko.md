@@ -15,7 +15,7 @@ Actions는 커밋 SHA로 고정합니다. PR에는 서명 secrets를 제공하�
 ## 버전 준비
 
 1. 워크스페이스, `conn-core` 의존성, 데스크톱 Cargo, Tauri 설정, 프런트엔드 package/lock, 플러그인 manifest, marketplace 버전을 맞추고 두 Cargo lockfile을 갱신합니다.
-2. 사용자 관점의 [CHANGELOG](../CHANGELOG.md) 항목을 적고 정확한 릴리스 버전으로 확인합니다.
+2. 사용자 관점의 [CHANGELOG](../CHANGELOG.md)에 `## X.Y.Z — Preview · YYYY-MM-DD` 제목의 섹션을 추가합니다. 릴리스 안내의 "New in this release"는 이 섹션(목록과 `한국어:` 문단)을 그대로 옮기므로 Conn을 설치하는 사람을 위해 적으세요. 섹션이 없으면 `check`가 실패하며, `## Unreleased` 제목은 인정하지 않고 공개하지도 않습니다. 안내의 나머지는 모든 릴리스에 공통인 `scripts/release_notes.md`의 고정 문구이며, 릴리스 때문에 `release.py`를 고칠 일은 없습니다. 그런 다음 정확한 릴리스 버전으로 확인합니다.
 
    ```sh
    python3 scripts/release.py check --tag v0.8.2
@@ -56,7 +56,7 @@ Actions는 커밋 SHA로 고정합니다. PR에는 서명 secrets를 제공하�
 
 1. 각 네이티브 러너에서 같은 버전의 CLI와 데스크톱 패키지를 빌드합니다.
 2. Mac에서는 [서명 안내](macos-signing.ko.md)에 따라 앱, 내장 CLI, 독립 CLI, DMG의 서명·공증을 수행합니다. Apple Silicon의 승인 결과와 최종 파일 해시가 담긴 보고서를 만듭니다.
-3. `release.py package`가 파일명을 정리합니다. `finalize`는 설치 파일·업데이트 파일·서명과 유효한 Apple Silicon 보고서를 모두 확인한 뒤 `SHA256SUMS`와 영·한 안내를 만듭니다.
+3. `release.py package`가 파일명을 정리합니다. `finalize`는 설치 파일·업데이트 파일·서명과 유효한 Apple Silicon 보고서를 모두 확인한 뒤 `SHA256SUMS`와 영·한 안내를 만듭니다. 안내는 `scripts/release_notes.md`에 이 버전의 파일 이름과 변경 이력 섹션을 채운 것입니다.
 4. 해당 커밋의 CI와 모든 빌드·서명 작업이 통과하면 `draft`가 **14개 자산**을 업로드합니다. 바이너리·설치 파일 7개, Mac 업데이트 아카이브, 업데이트 서명 3개, `latest.json`, 서명 보고서, `SHA256SUMS`입니다. 미공개 프리릴리스를 생성하거나 갱신하며 이미 공개한 릴리스는 수정하지 않습니다.
 
 재실행으로 미완성 초안을 보완할 수 있습니다. 자동 공개는 하지 않습니다. Actions 임시 산출물은 7일간 보관하며 업로드한 릴리스 파일은 유지됩니다. CLI 압축 파일에는 라이선스와 설치 안내가 들어갑니다. 플랫폼별 서명 업데이트 메타데이터도 같은 릴리스에 게시합니다.
@@ -72,7 +72,7 @@ Actions는 커밋 SHA로 고정합니다. PR에는 서명 secrets를 제공하�
 - Windows 무서명 안내를 유지합니다. Mac 파일에는 성공한 Developer ID·공증 근거가 필요합니다. 시스템 보호 기능을 끄도록 안내하지 않습니다.
 - 영·한 릴리스 안내와 다운로드 링크를 검토하고 변경 이력의 미정 날짜를 공개일로 바꾼 뒤 검토한 프리릴리스를 명시적으로 공개합니다. 공개된 버전 페이지와 연결한 각 파일을 열어 접근 가능한지 확인합니다.
 
-CI 빌드 통과만으로 모든 설치·조작이 검증되지는 않습니다. 실제로 수행한 플랫폼 검사와 미검증 항목을 릴리스 안내에 적으세요. 비밀 정보는 Actions에 보관하며 인증서·자격 증명·상세 비공개 로그를 첨부하지 않습니다.
+CI 빌드 통과만으로 모든 설치·조작이 검증되지는 않습니다. 실제로 수행한 플랫폼 검사와 미검증 항목을 릴리스 안내에 적으세요. 이 문구는 `scripts/release_notes.md`에 있으므로 검증 범위가 바뀌면 그 파일을 고칩니다. 비밀 정보는 Actions에 보관하며 인증서·자격 증명·상세 비공개 로그를 첨부하지 않습니다.
 
 구현 참고: [Tauri GitHub 파이프라인](https://v2.tauri.app/distribute/pipelines/github/), 저장소의 [서명 기준](macos-signing.ko.md).
 
