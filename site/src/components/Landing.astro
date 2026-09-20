@@ -7,8 +7,10 @@ import join from "../assets/stills/join.webp";
 import deny from "../assets/stills/deny.webp";
 import takeover from "../assets/stills/takeover.webp";
 import release from "../generated/release.json";
+import film from "../generated/film.json";
 import { copy, type Lang } from "../i18n/landing";
-import { origin, repository } from "../site.config.mjs";
+import { headHtml, jsonLd, socialImage } from "../seo.mjs";
+import { filmPublished, origin, repository } from "../site.config.mjs";
 import InstallCommand from "./InstallCommand.astro";
 import Story from "./Story.astro";
 
@@ -33,7 +35,40 @@ const commands = {
 };
 const clients = ["Claude Code", "Codex", "Cursor", "GitHub Copilot"];
 const canonical = new URL(lang === "ko" ? "/ko/" : "/", origin).href;
-const social = new URL(`/media/conn-remote-${lang}-social.webp`, origin).href;
+const social = socialImage(lang);
+const home = new URL("/", origin).href;
+// What search engines can show beyond a blue link: the app (free, three platforms), the site, the film.
+const structured = [
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "Conn",
+    description: t.description,
+    url: canonical,
+    image: social.url,
+    applicationCategory: "DeveloperApplication",
+    operatingSystem: "macOS, Windows, Linux",
+    softwareVersion: release.version,
+    downloadUrl: `${github}/releases/tag/${tag}`,
+    license: "https://opensource.org/license/mit",
+    isAccessibleForFree: true,
+    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    inLanguage: ["en", "ko"],
+    sameAs: [github],
+  },
+  { "@context": "https://schema.org", "@type": "WebSite", name: "Conn", url: home, inLanguage: lang },
+  {
+    "@context": "https://schema.org",
+    "@type": "VideoObject",
+    name: t.headline.join(" "),
+    description: `${t.filmCaption} ${t.filmDisclosure}`,
+    thumbnailUrl: [social.url],
+    contentUrl: new URL(`/media/conn-remote-${lang}.mp4`, origin).href,
+    uploadDate: filmPublished,
+    duration: `PT${film[lang].seconds}S`,
+    inLanguage: lang,
+  },
+];
 ---
 
 <!doctype html>
@@ -48,13 +83,27 @@ const social = new URL(`/media/conn-remote-${lang}-social.webp`, origin).href;
     <link rel="canonical" href={canonical} />
     <link rel="alternate" hreflang="en" href={new URL("/", origin).href} />
     <link rel="alternate" hreflang="ko" href={new URL("/ko/", origin).href} />
+    <link rel="alternate" hreflang="x-default" href={home} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-video-preview:-1" />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Conn" />
+    <meta property="og:locale" content={lang === "ko" ? "ko_KR" : "en_US"} />
+    <meta property="og:locale:alternate" content={lang === "ko" ? "en_US" : "ko_KR"} />
     <meta property="og:title" content={t.headline.join(" ")} />
     <meta property="og:description" content={t.description} />
     <meta property="og:url" content={canonical} />
-    <meta property="og:image" content={social} />
+    <meta property="og:image" content={social.url} />
+    <meta property="og:image:width" content={String(social.width)} />
+    <meta property="og:image:height" content={String(social.height)} />
+    <meta property="og:image:alt" content={t.filmCaption} />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={t.headline.join(" ")} />
+    <meta name="twitter:description" content={t.description} />
+    <meta name="twitter:image" content={social.url} />
+    {structured.map((data) => <script type="application/ld+json" set:html={jsonLd(data)} />)}
+    <Fragment set:html={headHtml()} />
   </head>
   <body>
     <header class="nav">
@@ -229,6 +278,7 @@ const social = new URL(`/media/conn-remote-${lang}-social.webp`, origin).href;
       <a href={`${github}/blob/main/CHANGELOG.md`}>{t.footer.changelog}</a>
       <a href={`${github}/security/advisories/new`}>{t.footer.security}</a>
       <a href={t.nav.otherHref}>{t.nav.other}</a>
+      <span>{t.footer.analytics}</span>
     </footer>
 
     <script is:inline define:vars={{ repository }}>

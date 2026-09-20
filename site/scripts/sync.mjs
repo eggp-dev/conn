@@ -3,7 +3,8 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { docs, repository } from "../src/site.config.mjs";
+import sharp from "sharp";
+import { descriptions, docs, origin, repository } from "../src/site.config.mjs";
 
 const site = join(dirname(fileURLToPath(import.meta.url)), "..");
 const repo = join(site, "..");
@@ -27,8 +28,16 @@ function rewrite(target, locale) {
   return `${blob}/${resolved}${anchor}`;
 }
 
+/** What a search result shows under the title. Written by hand in site.config.mjs: a page without one fails the build. */
+function describe(name, locale) {
+  const text = descriptions[name]?.[locale];
+  if (!text) throw new Error(`site.config.mjs has no ${locale} description for docs/${name}`);
+  if (text.length > 160) throw new Error(`the ${locale} description for docs/${name} is ${text.length} characters; search results cut it at about 160`);
+  return text;
+}
+
 /** Title from the first heading; the language/back-link line under it belongs to GitHub, not the site. */
-function page(source, locale) {
+function page(source, locale, name) {
   const lines = source.split("\n");
   const at = lines.findIndex((line) => line.startsWith("# "));
   if (at < 0) throw new Error("a published doc needs a first-level heading");
@@ -40,7 +49,7 @@ function page(source, locale) {
     .join("\n")
     .replace(/(\]\()([^)\s]+)(\))/g, (_, open, target, close) => open + rewrite(target, locale) + close)
     .replace(/\b(src|href|poster)="([^"]+)"/g, (_, attr, target) => `${attr}="${rewrite(target, locale)}"`);
-  return `---\ntitle: ${JSON.stringify(title)}\neditUrl: false\n---\n${body}`;
+  return `---\ntitle: ${JSON.stringify(title)}\ndescription: ${JSON.stringify(describe(name, locale))}\neditUrl: false\n---\n${body}`;
 }
 
 const out = join(site, "src", "content", "docs");
@@ -52,7 +61,7 @@ for (const name of published) {
     if (!existsSync(from)) continue;
     const to = join(out, locale === "ko" ? "ko" : "", "docs", `${name.toLowerCase()}.md`);
     mkdirSync(dirname(to), { recursive: true });
-    writeFileSync(to, page(readFileSync(from, "utf8"), locale));
+    writeFileSync(to, page(readFileSync(from, "utf8"), locale, name));
     pages += 1;
   }
 }
@@ -64,7 +73,23 @@ for (const lang of ["en", "ko"]) {
   for (const suffix of [".mp4", ".vtt", "-poster.webp", "-social.webp"]) {
     copyFileSync(join(repo, "docs", "assets", `conn-remote-${lang}${suffix}`), join(media, `conn-remote-${lang}${suffix}`));
   }
+  // Link previews: several crawlers skip WebP, so the social card is also published as JPEG.
+  await sharp(join(media, `conn-remote-${lang}-social.webp`)).jpeg({ quality: 86, mozjpeg: true }).toFile(join(media, `conn-remote-${lang}-social.jpg`));
 }
+
+/** Seconds of an MP4, from its movie header, for the video markup on the landing pages. */
+function seconds(file) {
+  const bytes = readFileSync(file);
+  const at = bytes.indexOf("mvhd", 0, "latin1");
+  if (at < 0) throw new Error(`${file} has no movie header`);
+  const wide = bytes[at + 4] === 1;
+  const timescale = bytes.readUInt32BE(at + (wide ? 24 : 16));
+  const duration = wide ? Number(bytes.readBigUInt64BE(at + 28)) : bytes.readUInt32BE(at + 20);
+  return Math.round(duration / timescale);
+}
+const film = Object.fromEntries(["en", "ko"].map((lang) => [lang, { seconds: seconds(join(media, `conn-remote-${lang}.mp4`)) }]));
+
+writeFileSync(join(site, "public", "robots.txt"), `User-agent: *\nAllow: /\n\nSitemap: ${origin}/sitemap-index.xml\n`);
 
 // `curl -fsSL https://conn.eggp.dev/install.sh | sh` serves the repository's own script.
 copyFileSync(join(repo, "scripts", "install.sh"), join(site, "public", "install.sh"));
@@ -87,5 +112,6 @@ try {
 }
 mkdirSync(join(site, "src", "generated"), { recursive: true });
 writeFileSync(join(site, "src", "generated", "release.json"), `${JSON.stringify({ version }, null, 2)}\n`);
+writeFileSync(join(site, "src", "generated", "film.json"), `${JSON.stringify(film, null, 2)}\n`);
 
 console.log(`sync: ${pages} docs pages, films copied, release v${version}`);
