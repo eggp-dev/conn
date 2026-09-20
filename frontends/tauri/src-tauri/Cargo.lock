@@ -577,7 +577,6 @@ dependencies = [
 name = "conn-core"
 version = "0.8.2"
 dependencies = [
- "base64 0.22.1",
  "chrono",
  "dirs 5.0.1",
  "globset",

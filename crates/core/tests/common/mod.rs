@@ -33,10 +33,15 @@ pub fn present(session: &mut Session, screen: Vec<String>) {
     session.pty_output(format!("\x1b[2J\x1b[H{}",screen.join("\r\n")).as_bytes());
 }
 
+/// Capture rendered output through the sink the native renderer installs.
+pub fn frame_sink(buf: &Buf) -> conn_core::session::OutputFrameSink {
+    let buf = buf.clone();
+    Box::new(move |frame| buf.lock().unwrap().extend_from_slice(&frame.data))
+}
+
 pub struct Harness {
     pub session: Session,
     pub pty: Buf,
-    pub stdout: Buf,
     pub audit: Arc<Mutex<Vec<Event>>>,
 }
 
@@ -53,7 +58,6 @@ impl Harness {
 
     pub fn with(policy_yaml: &str, lease_ttl: Duration, approval_ttl: Duration) -> Self {
         let pty: Buf = Default::default();
-        let stdout: Buf = Default::default();
         let (audit, store) = Audit::memory();
         let session = Session::new(SessionConfig {
             rows: 24,
@@ -61,7 +65,6 @@ impl Harness {
             audit,
             policy: PolicyStore::from_policy(Policy::parse(policy_yaml).unwrap()),
             pty_writer: Box::new(SharedBuf(pty.clone())),
-            output: Some(Box::new(SharedBuf(stdout.clone()))),
             master: None,
             pacing: Pacing {
                 lease_ttl_secs: 0,
@@ -73,12 +76,12 @@ impl Harness {
         let mut session = session;
         session.set_ttls(lease_ttl, approval_ttl);
         present(&mut session, vec![]);
-        Self { session, pty, stdout, audit: store }
+        Self { session, pty, audit: store }
     }
 
     pub fn frontend(&mut self, name: &str) -> Arc<Mutex<Vec<ServerEvent>>> {
         let events = Arc::new(Mutex::new(Vec::new()));
-        self.session.subscribe(name, Box::new(VecSink(events.clone())), false);
+        self.session.subscribe(name, Box::new(VecSink(events.clone())));
         events
     }
 
@@ -93,9 +96,6 @@ impl Harness {
     }
     pub fn pty_str(&self) -> String {
         String::from_utf8_lossy(&self.pty_bytes()).to_string()
-    }
-    pub fn stdout_str(&self) -> String {
-        String::from_utf8_lossy(&self.stdout.lock().unwrap()).to_string()
     }
     pub fn clear_pty(&self) {
         self.pty.lock().unwrap().clear();

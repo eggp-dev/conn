@@ -33,7 +33,7 @@ fn frontend_receives_lifecycle_events() {
     for expected in ["control_granted", "agent_input", "approval_requested", "approval_resolved", "agent_exec", "control_revoked", "screen_changed"] {
         assert!(n.contains(&expected.to_string()), "missing {expected} in {n:?}");
     }
-    assert!(!n.contains(&"output".to_string()), "no output streaming unless requested");
+    assert!(!n.contains(&"output".to_string()), "raw output is never an event");
     let req = evs.iter().find_map(|e| match e { ServerEvent::ApprovalRequested { request } => Some(request.clone()), _ => None }).unwrap();
     assert_eq!(req.cmd, "kubectl delete pod x");
     assert_eq!(req.label, "delete resource");
@@ -54,18 +54,6 @@ fn human_input_denies_a_pending_approval_and_clears_the_typed_line() {
     assert!(h.session.status().pending.is_empty(), "the approval is denied, not answered and not left pending");
     assert_eq!(h.pty_str(), "sudo ls\x15y", "the reviewed line is cleared before the human's byte; nothing is submitted");
     assert!(h.session.resolve_first_pending(Decision::Grant, "frontend").is_err());
-}
-
-#[test]
-fn output_streaming_to_subscribers() {
-    let mut h = Harness::new();
-    let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-    h.session.subscribe("ui", Box::new(common::VecSink(events.clone())), true);
-    h.session.pty_output(b"hello");
-    let evs = events.lock().unwrap();
-    let data = evs.iter().find_map(|e| match e { ServerEvent::Output { data, .. } => Some(data.clone()), _ => None }).unwrap();
-    use base64::Engine as _;
-    assert_eq!(base64::engine::general_purpose::STANDARD.decode(data).unwrap(), b"hello");
 }
 
 #[test]

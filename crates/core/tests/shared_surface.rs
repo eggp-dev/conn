@@ -104,7 +104,7 @@ fn persistent_private_clients_refresh_tools_on_selection_removal_and_stop() {
 #[test]
 fn untrusted_frontend_registration_and_owner_dispatch_are_rejected() {
     let mut h=Harness::new(); h.agent(1,"a");
-    h.session.register_frontend(99,"spoof",Box::new(common::VecSink(Default::default())),true);
+    h.session.register_frontend(99,"spoof",Box::new(common::VecSink(Default::default())));
     assert_ne!(h.session.conn_kind(99),Some(ConnKind::Frontend));
     let s=Arc::new(parking_lot::Mutex::new(h.session));
     for method in ["input","resize","set_shared","publish_surface","set_mode","approve","decide_control","set_attended"] {
@@ -229,7 +229,7 @@ fn external_origin_can_share_without_restoring_external_writer_or_startup_histor
     let output:common::Buf=Default::default();let (audit,log)=Audit::memory();
     let mut s=Session::new_external_private(SessionConfig{
         rows:24,cols:80,audit,policy:PolicyStore::from_policy(Policy::allow_all()),pty_writer:Box::new(common::SharedBuf(output.clone())),
-        output:None,master:None,pacing:Pacing::default(),shell_pid:None,
+        master:None,pacing:Pacing::default(),shell_pid:None,
     });
     s.write_external(b"SYNTHETIC_TEST_PASSWORD").unwrap();
     let generation=s.surface_generation();

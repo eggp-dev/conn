@@ -144,8 +144,8 @@ credential channel.
 Native frontend events are not a public event feed. Agents receive relevant changes
 such as `tools_changed`, `mode_changed`, attention changes, their control revocation,
 approval resolution and proposal/execution results. Events are session-tagged. Raw
-`output`, owner approval cards, other actors' original request payloads and owner settings
-are not made available by setting an agent's `streamOutput` flag.
+PTY output is never an event, and owner approval cards, other actors' original request
+payloads and owner settings are not made available by setting an agent's `streamOutput` flag.
 
 Queued agent events and successful responses carry a participation generation check.
 Snapshots additionally carry the surface generation. Before writing to the transport,

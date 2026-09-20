@@ -63,7 +63,7 @@ fn audit_files_are_owner_only_and_symlink_targets_are_not_opened() {
 #[test]
 fn real_hidden_password_input_in_an_ordinary_tab_is_not_audited() {
     use conn_core::{Engine, EngineConfig, backend::Profile, policy::{Policy, PolicyStore}};
-    use common::{Buf, SharedBuf};
+    use common::Buf;
     use std::time::{Duration, Instant};
     let (audit, events)=Audit::memory();
     let output: Buf=Default::default();
@@ -72,7 +72,7 @@ fn real_hidden_password_input_in_an_ordinary_tab_is_not_audited() {
     let engine=Engine::spawn(EngineConfig {
         profile:Some(profile),audit:Some(audit),
         policy:Some(PolicyStore::from_policy(Policy::parse("default: deny\n").unwrap())),
-        output:Some(Box::new(SharedBuf(output.clone()))),..Default::default()
+        output_frame:Some(common::frame_sink(&output)),..Default::default()
     }).unwrap();
     let deadline=Instant::now()+Duration::from_secs(5);
     while !String::from_utf8_lossy(&output.lock().unwrap()).contains("READY") {

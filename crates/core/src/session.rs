@@ -61,8 +61,6 @@ pub enum ServerEvent {
     ShellCommandFinished { #[serde(rename = "commandId")] command_id: String, #[serde(rename = "exitCode")] exit_code: Option<i32>, #[serde(rename = "durationMs")] duration_ms: u64 },
     /// The visible screen changed (coalesced by the tick).
     ScreenChanged { revision: u64 },
-    /// Owner-only raw PTY output, base64. Never sent on public agent sockets.
-    Output { data: String, #[serde(rename = "outputSeq")] output_seq: u64 },
     SharingChanged { shared: bool, generation: u64 },
     ProcessExited { #[serde(rename = "exitCode")] exit_code: Option<u32> },
     PacingChanged { pacing: Pacing },
@@ -183,7 +181,6 @@ struct ConnInfo {
     kind: ConnKind,
     name: String,
     sink: Box<dyn EventSink>,
-    stream_output: bool,
     last_activity: Instant,
 }
 
@@ -417,8 +414,6 @@ pub struct SessionConfig {
     pub audit: Audit,
     pub policy: PolicyStore,
     pub pty_writer: Box<dyn Write + Send>,
-    /// Where PTY output goes for the human. `None` when frontends stream it over IPC.
-    pub output: Option<Box<dyn Write + Send>>,
     pub master: Option<Box<dyn MasterPty + Send>>,
     pub pacing: Pacing,
     /// Pid of the shell, used to read its cwd (`lsof -d cwd`) when analysing a command.
@@ -459,7 +454,6 @@ pub struct Session {
     shell_agent_input: bool,
     audit: Audit,
     pty: Box<dyn Write + Send>,
-    output: Option<Box<dyn Write + Send>>,
     output_frame_sink: Option<OutputFrameSink>,
     master: Option<Box<dyn MasterPty + Send>>,
     pacing: Pacing,
@@ -555,7 +549,6 @@ impl Session {
             shell_agent_input: false,
             audit: cfg.audit,
             pty: cfg.pty_writer,
-            output: cfg.output,
             output_frame_sink: None,
             master: cfg.master,
             pacing: cfg.pacing,
@@ -926,10 +919,6 @@ impl Session {
         if let Some(sink) = &self.output_frame_sink {
             sink(&OutputFrame { data: bytes.to_vec(), output_seq: self.output_seq, generation: self.surface_generation });
         }
-        if let Some(out) = &mut self.output {
-            let _ = out.write_all(bytes);
-            let _ = out.flush();
-        }
     }
 
     fn notify(&self, conn: ConnId, ev: ServerEvent) {
@@ -978,23 +967,23 @@ impl Session {
 
     pub fn register_conn(&mut self, conn: ConnId, kind: ConnKind, name: &str, sink: Box<dyn EventSink>) {
         if self.is_private() { return; }
-        self.conns.insert(conn, ConnInfo { kind, name: name.to_string(), sink, stream_output: false, last_activity: Instant::now() });
+        self.conns.insert(conn, ConnInfo { kind, name: name.to_string(), sink, last_activity: Instant::now() });
         if kind == ConnKind::Agent {
             self.audit.record(name, "connect", json!({ "conn": conn }));
         }
     }
 
-    /// Register a frontend. `stream_output` = also send raw PTY output as `Output` events.
-    pub fn register_frontend(&mut self, conn: ConnId, name: &str, sink: Box<dyn EventSink>, stream_output: bool) {
+    /// Register a frontend.
+    pub fn register_frontend(&mut self, conn: ConnId, name: &str, sink: Box<dyn EventSink>) {
         if conn < LOCAL_CONN_BASE { return; }
-        self.conns.insert(conn, ConnInfo { kind: ConnKind::Frontend, name: name.to_string(), sink, stream_output, last_activity: Instant::now() });
+        self.conns.insert(conn, ConnInfo { kind: ConnKind::Frontend, name: name.to_string(), sink, last_activity: Instant::now() });
     }
 
     /// Subscribe an in-process frontend (embedders). Returns a handle id for `unsubscribe`.
-    pub fn subscribe(&mut self, name: &str, sink: Box<dyn EventSink>, stream_output: bool) -> ConnId {
+    pub fn subscribe(&mut self, name: &str, sink: Box<dyn EventSink>) -> ConnId {
         let id = self.next_local_conn;
         self.next_local_conn += 1;
-        self.register_frontend(id, name, sink, stream_output);
+        self.register_frontend(id, name, sink);
         id
     }
 
@@ -1116,15 +1105,6 @@ impl Session {
             self.screen_dirty = true;
         }
         self.write_output(bytes);
-        if self.conns.values().any(|c| c.stream_output) {
-            use base64::Engine as _;
-            let data = base64::engine::general_purpose::STANDARD.encode(bytes);
-            for c in self.conns.values() {
-                if c.stream_output {
-                    c.sink.send_scoped(ServerEvent::Output { data: data.clone(), output_seq: self.output_seq }, self.participation_generation);
-                }
-            }
-        }
     }
 
     pub fn resize(&mut self, rows: u16, cols: u16) {

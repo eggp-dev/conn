@@ -293,20 +293,16 @@ fn spawn_tab_with(app: &AppHandle, state: &AppState, window: &str, mut rows: u16
     let sid = id.clone();
     engine.subscribe(
         "frontend",
-        Box::new(move |ev: ServerEvent| match ev {
-            ServerEvent::Output { .. } => {}, // Raw output uses the early writer above.
-            other => {
-                let mut v = serde_json::to_value(&other).unwrap_or(Value::Null);
-                if matches!(v["event"].as_str(), Some("control_granted" | "control_revoked" | "mode_changed" | "sharing_changed" | "process_exited")) {
-                    if let Some(state) = handle.state.upgrade() { state.extensions.cancel(&sid); }
-                }
-                if let Some(o) = v.as_object_mut() {
-                    o.insert("session".into(), Value::String(sid.clone()));
-                }
-                let _ = handle.emit("ss:event", v);
+        Box::new(move |ev: ServerEvent| {
+            let mut v = serde_json::to_value(&ev).unwrap_or(Value::Null);
+            if matches!(v["event"].as_str(), Some("control_granted" | "control_revoked" | "mode_changed" | "sharing_changed" | "process_exited")) {
+                if let Some(state) = handle.state.upgrade() { state.extensions.cancel(&sid); }
             }
+            if let Some(o) = v.as_object_mut() {
+                o.insert("session".into(), Value::String(sid.clone()));
+            }
+            let _ = handle.emit("ss:event", v);
         }),
-        false,
     );
     if !external_private { apply_defaults(&state.defaults.lock(), engine.as_ref()); }
     state.hub.add(&id, engine.session());

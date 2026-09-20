@@ -4,11 +4,11 @@
 //! ```no_run
 //! use conn_core::{Engine, EngineConfig};
 //! let engine = Engine::spawn(EngineConfig::default()).unwrap();
-//! engine.subscribe("ui", Box::new(|ev| println!("{ev:?}")), true);
+//! engine.subscribe("ui", Box::new(|ev| println!("{ev:?}")));
 //! engine.write_input(b"ls\r");
 //! ```
 
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
@@ -52,8 +52,6 @@ pub struct EngineConfig {
     pub policy: Option<PolicyStore>,
     pub audit: Option<Audit>,
     pub pacing: Pacing,
-    /// Where PTY output goes for the human. `None` = only streamed to subscribers.
-    pub output: Option<Box<dyn Write + Send>>,
     /// Native renderer delivery with sequencing; installed before reader startup.
     pub output_frame: Option<crate::session::OutputFrameSink>,
     /// How often the session tick runs (lease/approval expiry, grace timers, screen events).
@@ -75,7 +73,6 @@ impl Default for EngineConfig {
             policy: None,
             audit: None,
             pacing: Pacing::default(),
-            output: None,
             output_frame: None,
             tick: Duration::from_millis(50),
         }
@@ -206,7 +203,6 @@ impl Engine {
             audit,
             policy,
             pty_writer,
-            output: cfg.output,
             master: Some(pair.master),
             pacing: cfg.pacing,
             shell_pid: pid,
@@ -327,8 +323,8 @@ impl Engine {
     }
 
     /// Register an in-process frontend. Returns an id for `unsubscribe`.
-    pub fn subscribe(&self, name: &str, sink: Box<dyn EventSink>, stream_output: bool) -> ConnId {
-        self.session.lock().subscribe(name, sink, stream_output)
+    pub fn subscribe(&self, name: &str, sink: Box<dyn EventSink>) -> ConnId {
+        self.session.lock().subscribe(name, sink)
     }
 
     pub fn unsubscribe(&self, id: ConnId) {
