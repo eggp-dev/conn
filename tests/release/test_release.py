@@ -147,6 +147,8 @@ class ReleaseTests(unittest.TestCase):
         })
         with self.assertRaises(release.ReleaseError):
             release.asset_names(self.version, "x86_64-apple-darwin")
+        # One table serves the manifest and updater_artifacts.py; it must cover every packaged target.
+        self.assertEqual(set(release.PLATFORMS), set(release.TARGETS))
 
     def test_missing_platform_build_is_not_a_successful_package(self):
         with self.assertRaises(release.ReleaseError):

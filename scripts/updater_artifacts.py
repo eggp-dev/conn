@@ -10,8 +10,6 @@ import tarfile
 import tempfile
 import release
 
-PLATFORMS = {"aarch64-apple-darwin": "darwin-aarch64", "x86_64-unknown-linux-gnu": "linux-x86_64", "x86_64-pc-windows-msvc": "windows-x86_64"}
-
 
 def config(out: Path):
     public = os.environ.get("TAURI_SIGNING_PUBLIC_KEY", "").strip()
@@ -68,7 +66,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="action", required=True)
     c = sub.add_parser("config"); c.add_argument("--out", type=Path, required=True)
-    a = sub.add_parser("package"); a.add_argument("--target", choices=PLATFORMS, required=True); a.add_argument("--out", type=Path, required=True)
+    a = sub.add_parser("package"); a.add_argument("--target", choices=release.PLATFORMS, required=True); a.add_argument("--out", type=Path, required=True)
     args = p.parse_args()
     try:
         config(args.out) if args.action == "config" else package(args.target, args.out)

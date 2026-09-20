@@ -37,6 +37,8 @@ TARGETS = {
     "aarch64-apple-darwin": (".dmg",),
     "x86_64-pc-windows-msvc": (".exe",),
 }
+# Rust target -> Tauri updater platform key. updater_artifacts.py reads this table too.
+PLATFORMS = {"aarch64-apple-darwin": "darwin-aarch64", "x86_64-unknown-linux-gnu": "linux-x86_64", "x86_64-pc-windows-msvc": "windows-x86_64"}
 SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?")
 
 
@@ -144,9 +146,8 @@ def release_names(version: str) -> list[str]:
 
 
 def updater_manifest(artifacts: Path, version: str):
-    platforms = {"aarch64-apple-darwin": "darwin-aarch64", "x86_64-unknown-linux-gnu": "linux-x86_64", "x86_64-pc-windows-msvc": "windows-x86_64"}
     entries = {}
-    for target, platform in platforms.items():
+    for target, platform in PLATFORMS.items():
         name = update_asset(version, target)
         regular_file(artifacts / name, artifacts)
         signature = signature_text(regular_file(artifacts / (name + ".sig"), artifacts))
