@@ -11,7 +11,7 @@
   import { st, cur, tab, toast, type Analysis } from "../lib/store.svelte";
   import { cmd, changeMode, type Mode } from "../lib/bridge";
   import { THEMES, agentColor } from "../lib/themes";
-  import { t, fmtMs, i18n, setLang, LANGS } from "../lib/i18n.svelte";
+  import { t, i18n, setLang, LANGS } from "../lib/i18n.svelte";
   let { onclose }: { onclose: () => void } = $props();
   const NAV = ["profiles", "agents", "automation", "policy", "pacing", "appearance", "extensions", "diagnostics"] as const;
 

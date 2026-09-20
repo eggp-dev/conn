@@ -20,7 +20,7 @@
   import Timeline from "./components/Timeline.svelte";
   import Toasts from "./components/Toasts.svelte";
   import HandoffWash from "./components/HandoffWash.svelte";
-  import { newTimeline, recordTimeline, savedTimelines } from "./lib/timeline";
+  import { recordTimeline, savedTimelines } from "./lib/timeline";
   import { invoke, listen } from "./lib/transport";
   import { cmd, changeMode, onEvent, onTabOpened, onAdmission, log, type Pacing } from "./lib/bridge";
   import { st, cur, tab, tabIndex, newTab, toast, announce, type TabState } from "./lib/store.svelte";
@@ -57,11 +57,8 @@
   async function syncStatus(id: string) {
     const t = tab(id); if (!t) return;
     const s = await invoke<any>("status", { session: id });
-    t.shellIntegration = s.shellIntegration ?? { state: "unavailable" };
     t.shared = s.shared === true;
     t.externalOrigin = s.externalOrigin === true;
-    t.surfaceGeneration = s.surfaceGeneration ?? 1;
-    t.outputSeq = s.outputSeq ?? 0;
     t.surfaceAvailable = s.surfaceAvailable === true;
     t.inputPending = s.inputPending === true;
     t.externalStarting = s.externalStarting === true;
@@ -112,7 +109,6 @@
     addTab(id);
     await syncStatus(id);
     await select(id);
-    st.booted = true;
     } catch(e) { toast(String(e), "danger"); }
   }
   async function closeTab(id: string) {
@@ -120,8 +116,6 @@
     const idx = st.order.indexOf(id);
     await invoke("close_tab", { session: id });
     st.order = st.order.filter((x) => x !== id);
-    const closed = tab(id);
-    if (closed && !!closed.shared && closed.timeline.items.length) st.pastTimelines[id] = closed.timeline;
     delete st.tabs[id];
     delete terms[id];
     if (st.active === id) { const next = st.order[Math.max(0, idx - 1)]; st.active = next; await invoke("attend", { session: next }); terms[next]?.refit(); focusTerm(); }
@@ -262,7 +256,6 @@
       if (ev.event === "sharing_changed") {
         recordTimeline(t.timeline, ev);
         t.shared = ev.shared === true;
-        t.surfaceGeneration = ev.generation ?? t.surfaceGeneration;
         t.surfaceAvailable = false;
         t.approval = null; t.ctlReq = null; t.proposal = null; t.grace = null; t.handback = false;
         setController(t, "human");
@@ -354,8 +347,6 @@
 
           if (String(ev.policy).startsWith("deny")) { t.policyBlockedUntil = performance.now() + 2400; toast(tr("policy.blocked", { cmd: ev.cmd }) + sfx, "danger"); }
           break;
-        case "shell_integration_changed": t.shellIntegration = ev.status; break;
-        case "human_exec": t.title = ev.cmd.length > 24 ? ev.cmd.slice(0, 24) + "…" : ev.cmd; break;
         case "process_exited": t.processAlive = false; setController(t, "human"); announce(tr("shell.exited") + sfx, "var(--danger)", "warn"); break;
         case "pacing_changed": t.pacing = ev.pacing as Pacing; break;
         case "mode_changed": t.mode = ev.mode; t.effectiveMode = ev.effectiveMode ?? ev.mode; break;
@@ -367,8 +358,8 @@
       await Promise.all([connectionListener, admissionListener, tabListener, abortListener, eventListener]);
       await refreshProfiles();
       await refreshExtensions().catch(() => {});
-      const info = await invoke<{ socket: string; shell: string; session: string | null; sessions: string[]; externalPending?: boolean }>("start", { rows: 24, cols: 80 });
-      st.socket = info.socket ?? ""; st.shell = info.shell ?? "";
+      const info = await invoke<{ socket: string; session: string | null; sessions: string[]; externalPending?: boolean }>("start", { rows: 24, cols: 80 });
+      st.socket = info.socket ?? "";
       for (const id of info.sessions) if (!tab(id)) addTab(id);
       st.active = info.session ?? "";
       st.externalPending = !!info.externalPending;
@@ -378,19 +369,17 @@
         const saved = savedTimelines(tail);
         for (const [id, history] of Object.entries(saved)) {
           const live = tab(id);
-          if (!live?.shared) continue;
           // Live events win if they arrived while startup was reading the audit.
-          if (live && !live.timeline.items.length) live.timeline = history;
-          else if (!live) st.pastTimelines[id] = history;
+          if (live?.shared && !live.timeline.items.length) live.timeline = history;
         }
       }
       // A window opened later, or a reload, must still see who is waiting.
       try { st.admissions = await invoke<{ connId: number; agentId: string }[]>("pending_admissions"); } catch {}
-      st.booted = true; st.backendOnline = true;
+      st.backendOnline = true;
       await tick();
       await invoke("ui_ready");
       setTimeout(() => { terms[st.active]?.refit(); focusTerm(); }, 50);
-      setInterval(async () => { for (const id of st.order) { try { const s = await invoke<any>("status", { session: id }); const t = tab(id); if (t) { t.processAlive = !!s.processAlive; t.externalStarting = s.externalStarting === true; t.externalInputAvailable = s.externalInputAvailable === true; t.shared = s.shared === true; t.surfaceGeneration = s.surfaceGeneration ?? t.surfaceGeneration; t.surfaceAvailable = s.surfaceAvailable === true; t.inputPending = s.inputPending === true; if (t.shared) t.agents = s.connectedAgents ?? []; } } catch {} } }, 5000);
+      setInterval(async () => { for (const id of st.order) { try { const s = await invoke<any>("status", { session: id }); const t = tab(id); if (t) { t.processAlive = !!s.processAlive; t.externalStarting = s.externalStarting === true; t.externalInputAvailable = s.externalInputAvailable === true; t.shared = s.shared === true; t.surfaceAvailable = s.surfaceAvailable === true; t.inputPending = s.inputPending === true; if (t.shared) t.agents = s.connectedAgents ?? []; } } catch {} } }, 5000);
     } catch (e) {
       st.settingsTab = "profiles"; st.settingsOpen = true;
       log(`start failed: ${e}`); toast(tr("engine.failed", { err: String(e) }), "danger");

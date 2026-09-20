@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { t, tabName } from "../lib/i18n.svelte";
+  import { t } from "../lib/i18n.svelte";
   import { fly } from "svelte/transition";
-  import { st, cur } from "../lib/store.svelte";
+  import { cur } from "../lib/store.svelte";
   import { cmd } from "../lib/bridge";
   let now = $state(performance.now());
   $effect(() => { let r = 0; const tick = () => { now = performance.now(); r = requestAnimationFrame(tick); }; r = requestAnimationFrame(tick); return () => cancelAnimationFrame(r); });

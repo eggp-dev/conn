@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t, tabName } from "../lib/i18n.svelte";
+  import { t } from "../lib/i18n.svelte";
   import { st, tab, cur } from "../lib/store.svelte";
   import { agentColor } from "../lib/themes";
   import AppMenu from "./AppMenu.svelte";

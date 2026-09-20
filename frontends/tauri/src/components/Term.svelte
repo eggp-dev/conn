@@ -59,7 +59,7 @@
       // Escape closes an open overlay instead of reaching the shell.
       if (e.key === "Escape" && (st.settingsOpen || st.timelineOpen || st.centerOpen || st.paletteOpen || tab(session)?.handback)) return false;
       const key = shortcutKey(e);
-      if (appShortcut(e) && ["k", ",", "j", "t", "w", "Enter", "[", "]", "ArrowRight", "ArrowLeft"].includes(key)) return false;
+      if (appShortcut(e) && ["k", ",", "j", "t", "w", "Enter", "[", "]", "ArrowRight"].includes(key)) return false;
       if (appShortcut(e) && /^[1-9]$/.test(key)) return false;
       return true;
     });
@@ -131,7 +131,6 @@
       if (!mounted || p.session !== session) return;
       term.write(b64ToBytes(p.data), () => {
         if (!mounted) return;
-        t.outputSeq = p.outputSeq;
         measure();
       });
     });

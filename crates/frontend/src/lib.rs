@@ -615,7 +615,6 @@ fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Resul
             }
             Ok(Value::Null)
         },
-        "update_info" => Ok(json!({"version": env!("CARGO_PKG_VERSION"), "os": std::env::consts::OS, "arch": std::env::consts::ARCH})),
         "open_release" => updates::open(&arg::<String>(&args, "url")?).map(|_| Value::Null),
         "pending_admissions" => Ok(json!(state.hub.pending_admissions().into_iter().map(|a| json!({"connId":a.conn_id,"agentId":a.agent_id})).collect::<Vec<_>>())),
         "admission_policy" => Ok(json!({"ask": state.hub.admission_policy() == AdmissionPolicy::Ask})),

@@ -66,8 +66,8 @@ mockIPC((command,args:any)=>{
         void emit("ss:tab_opened", {session,externalPrivate:true,externalStarting:false,focus:true});
       }
       void emit("ss:output", {session,data:btoa("\x1b[5n\x1b[6n\x1b[c\x1b[>c\x1b]52;c;dGVzdC1jbGlwYm9hcmQ=\x07External terminal fixture\r\nReady for local input.\r\n")});
-      // A wrongly routed command event must not enter a private title or timeline.
-      void emit("ss:event", {session,event:"human_exec",cmd:"private-marker"});
+      // A wrongly routed command event must not enter a private timeline.
+      void emit("ss:event", {session,event:"shell_command_started",commandId:"private-marker",actor:"human",cmd:"private-marker"});
     };
     setTimeout(publish, options.has("slowStart") ? Number(options.get("slowStart")) || 2000 : 0);
     return null;

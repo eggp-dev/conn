@@ -14,11 +14,8 @@ export type TabState = {
   title: string;
   /** Privacy is resolved before the terminal subscribes to output. */
   statusReady: boolean;
-  shellIntegration: { state: string; shell?: string; reason?: string };
   shared: boolean;
   externalOrigin: boolean;
-  surfaceGeneration: number;
-  outputSeq: number;
   surfaceAvailable: boolean;
   inputPending: boolean;
   externalStarting: boolean;
@@ -54,7 +51,7 @@ export type TabState = {
 
 export function newTab(id: string, n: number): TabState {
   return {
-    id, title: `Terminal ${n}`, statusReady: false, shellIntegration: { state: "unavailable" }, shared: false, externalOrigin: false, surfaceGeneration: 1, outputSeq: 0, surfaceAvailable: false, inputPending: false, externalStarting: false, externalInputAvailable: false, profileId: null, profileName: null, reviewRequired: false, processAlive: true, policyBlockedUntil: 0, attended: false, attention: null, openedBy: null,
+    id, title: `Terminal ${n}`, statusReady: false, shared: false, externalOrigin: false, surfaceAvailable: false, inputPending: false, externalStarting: false, externalInputAvailable: false, profileId: null, profileName: null, reviewRequired: false, processAlive: true, policyBlockedUntil: 0, attended: false, attention: null, openedBy: null,
     controller: { type: "human" }, mode: "autopilot", effectiveMode: "autopilot", gate: false,
     pacing: { minWriteIntervalMs: 0, enterGraceMs: 0, leaseTtlSecs: 60, approvalTtlSecs: 300 },
     mask: null, allows: [], agents: [], typing: false, proposal: null, approval: null, grace: null, ctlReq: null,
@@ -66,14 +63,11 @@ export function newTab(id: string, n: number): TabState {
 export type Announcement = { id: number; text: string; detail?: string; ms: number; color: string; kind: "conn" | "approval" | "attention" | "info" | "warn" };
 
 export const st = $state({
-  booted: false,
   externalPending: false,
   backendOnline: false,
   socket: "",
-  shell: "",
   tabs: {} as Record<string, TabState>,
   order: [] as string[],
-  pastTimelines: {} as Record<string, TimelineState>,
   active: "" as string,
   tabSeq: 0,
   toasts: [] as Toast[],

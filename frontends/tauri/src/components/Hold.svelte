@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { t, tabName } from "../lib/i18n.svelte";
+  import { t } from "../lib/i18n.svelte";
   import { fly } from "svelte/transition";
-  import { st, cur } from "../lib/store.svelte";
+  import { cur } from "../lib/store.svelte";
   import { cmd } from "../lib/bridge";
   const a = $derived(cur().approval!);
   const targets = $derived(a.analysis?.segments.flatMap((s) => s.targets) ?? []);
@@ -49,7 +49,6 @@
 {/if}
 
 <style>
-  .rowglow { position: absolute; left: 8px; right: 8px; z-index: 7; pointer-events: none; border-radius: 6px; background: color-mix(in srgb, var(--warn) 10%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--warn) 35%, transparent), 0 0 24px color-mix(in srgb, var(--warn) 25%, transparent); }
   .hold { position: relative; margin: 6px 16px; z-index: 9; display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(12px); border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line)); box-shadow: var(--shadow); font-size: 12.5px; }
   .top { display: flex; gap: 12px; align-items: baseline; }
   .label { color: var(--warn); font-weight: 700; white-space: nowrap; }

@@ -4,6 +4,8 @@ import { newTimeline, recordTimeline, visibleTimeline, timelineSteps, importSave
 const request = (id = 'r1', actor = 'codex') => ({ event: 'control_requested', request: { requestId: id, agentId: actor, reason: 'Inspect a file' } });
 const grant = (actor = 'codex', lease = 'l1') => ({ event: 'control_granted', agentId: actor, lease, reason: 'Inspect a file' });
 const exec = (cmd = 'pwd', policy = 'allow') => ({ event: 'agent_exec', agentId: 'codex', cmd, policy });
+const human = (cmd: string, commandId = cmd) => ({ event: 'shell_command_started', commandId, actor: 'human', cmd });
+const privateTimeline = () => Object.assign(newTimeline(), { recording: false });
 
 test('a denied control request stays visible, with its reason, and is never a command', () => {
   const s = newTimeline();
@@ -69,7 +71,7 @@ test('saved denied audit commands are not marked executed or joined to a new lea
 });
 test('retention bounds the list and preserves control details when the parent ages out', () => {
   const s = newTimeline(); recordTimeline(s,grant()); recordTimeline(s,exec());
-  for(let i=0;i<399;i++) recordTimeline(s,{event:'human_exec',cmd:`echo ${i}`});
+  for(let i=0;i<399;i++) recordTimeline(s,human(`echo ${i}`));
   assert.equal(s.items.length,400);
   assert.ok(s.items[0].steps.some(s=>s.type==='control_granted'));
   assert.equal(s.items[0].controlId,undefined);
@@ -111,7 +113,7 @@ test('planned request remains distinct from actual command, including after pare
   recordTimeline(s,exec('ls'),2);
   assert.equal(s.items[1].text,'ls');
   assert.equal(s.items[0].originalRequest?.params.command,'pwd');
-  for(let i=0;i<399;i++) recordTimeline(s,{event:'human_exec',cmd:'true'},3+i);
+  for(let i=0;i<399;i++) recordTimeline(s,human('true',`h${i}`),3+i);
   assert.equal(s.items[0].text,'ls');
   assert.deepEqual(s.items[0].originalRequest,originalRequest);
 });
@@ -133,7 +135,7 @@ test('control grants and elapsed grace never imply command approval, including a
   recordTimeline(s, {event:'exec_scheduled',execId:'e1',agentId:'codex',cmd:'pwd',graceMs:5000});
   recordTimeline(s, exec());
   assert.deepEqual(commandDecisions(visibleTimeline(s,'commands')[0]), []);
-  for(let i=0;i<399;i++) recordTimeline(s,{event:'human_exec',cmd:'true'});
+  for(let i=0;i<399;i++) recordTimeline(s,human('true',`h${i}`));
   assert.ok(s.items[0].steps.some(s=>s.type==='control_granted'));
   assert.deepEqual(commandDecisions(s.items[0]), []);
 });
@@ -168,8 +170,8 @@ test('saved commands preserve explicit human acts without guessing from policy o
 });
 
 test('private sessions never collect live events or restored activity', () => {
-  const s = newTimeline(true);
-  recordTimeline(s, {event:'human_exec', cmd:'private-marker'});
+  const s = privateTimeline();
+  recordTimeline(s, human('private-marker'));
   recordTimeline(s, {event:'control_requested', request:{requestId:'r1', agentId:'caller', reason:'private-marker'}});
   recordTimeline(s, exec('private-marker'));
   importSavedActivity(s, [{action:'exec', actor:'human', cmd:'private-marker'}]);
@@ -186,7 +188,7 @@ test('restoration excludes old external automation payloads while keeping normal
     {action:'control_request_resolved', actor:'caller', reason:'private-marker', state:'denied', originalRequest:{method:'request_control',params:{origin:'external_automation'}}},
     {action:'exec', actor:'human', cmd:'pwd'},
   ]);
-  recordTimeline(s, {event:'human_exec', cmd:'private-marker', externalPrivate:true});
+  recordTimeline(s, {...human('private-marker'), externalPrivate:true});
   assert.deepEqual(s.items.map(item => item.text), ['pwd']);
   assert.equal(JSON.stringify(s).includes('private-marker'), false);
 });
@@ -223,14 +225,14 @@ test('saved shell lifecycle joins by ID and a missing finish never implies succe
   assert.ok(s.items.every(i=>i.saved));
 });
 test('private lifecycle events and saved records are ignored', () => {
-  const s = newTimeline(true);
+  const s = privateTimeline();
   recordTimeline(s,{event:'shell_command_started',commandId:'c1',actor:'human',cmd:'private'});
   recordTimeline(s,{event:'shell_command_finished',commandId:'c1',exitCode:0,durationMs:1});
   importSavedActivity(s,[{action:'shell_command_started',commandId:'c1',actor:'human',cmd:'private'}]);
   assert.equal(s.items.length,0);
 });
 
-test('saved records stay in their own session, with legacy records separate', () => {
+test('saved records stay in their own session, and records without one are dropped', () => {
   const entries = [
     { action: 'exec', session: 'shell-a', actor: 'codex', cmd: 'pwd', policy: 'allow' },
     { action: 'exec', session: 'shell-b', actor: 'codex', cmd: 'ls', policy: 'allow' },
@@ -238,10 +240,9 @@ test('saved records stay in their own session, with legacy records separate', ()
     { action: 'exec', session: 'private', actor: 'codex', cmd: 'secret', externalPrivate: true },
   ];
   const groups = savedTimelines(entries);
-  assert.deepEqual(Object.keys(groups), ['shell-a', 'shell-b', 'legacy']);
+  assert.deepEqual(Object.keys(groups), ['shell-a', 'shell-b']);
   assert.equal(groups['shell-a'].items[0].text, 'pwd');
   assert.equal(groups['shell-b'].items[0].text, 'ls');
-  assert.equal(groups.legacy.items[0].text, 'date');
   assert.equal(groups['new-shell'], undefined);
   recordTimeline(groups['shell-a'], exec('whoami'));
   assert.equal(groups['shell-b'].items.length, 1);
@@ -252,9 +253,9 @@ test('sharing boundaries retain earlier shell history and exclude the private in
   const s=newTimeline();
   recordTimeline(s,{event:'shell_command_started',commandId:'c1',actor:'human',cmd:'pwd'},1);
   recordTimeline(s,{event:'sharing_changed',shared:false,generation:2,cmd:'never retained'},2);
-  recordTimeline(s,{event:'human_exec',cmd:'PRIVATE_CANARY'},3);
+  recordTimeline(s,human('PRIVATE_CANARY'),3);
   recordTimeline(s,{event:'sharing_changed',shared:true,generation:3},4);
-  recordTimeline(s,{event:'human_exec',cmd:'whoami'},5);
+  recordTimeline(s,human('whoami'),5);
   assert.deepEqual(s.items.map(i=>[i.kind,i.text]),[['exec','pwd'],['sharing',''],['sharing',''],['exec','whoami']]);
   assert.deepEqual(s.items.filter(i=>i.kind==='sharing').map(i=>i.shared),[false,true]);
   assert.equal(s.items[0].status,'unknown');assert.equal(s.recording,true);
