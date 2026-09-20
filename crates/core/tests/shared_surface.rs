@@ -1,6 +1,6 @@
 //! Shared-session observation is independent of desktop and tab focus.
 mod common;
-use common::{Harness, present};
+use common::{Harness, SessionExt, present};
 use conn_core::{affordance::Actor, session::{SessionError, ConnKind}, ipc::{self,Hub,Client}};
 use serde_json::json;
 use std::sync::Arc;

@@ -1,11 +1,11 @@
 //! Regressions from the 0.3.0/0.4.1 hands-on collaboration review.
 mod common;
 
-use common::Harness;
+use common::{Harness, SessionExt};
 use conn_core::affordance::Actor;
 use conn_core::approval::{ApprovalState, Decision};
 use conn_core::backend::{Profile, ShellKind};
-use conn_core::session::{AgentMode, ControlOutcome, KeyResult, ProposalState, ServerEvent, SessionError};
+use conn_core::session::{AgentMode, ConnKind, ControlOutcome, KeyResult, ProposalState, ServerEvent, SessionError};
 use serde_json::json;
 
 #[test]
@@ -188,7 +188,8 @@ fn real_pty_copilot_interrupt_stops_running_shell_command() {
     wait_for(|| session.lock().screen().cursor_line().contains("conn-interrupt$"));
     {
         let mut s = session.lock();
-        let id = s.subscribe_agent("interrupt-test", Box::new(|_: ServerEvent| {}));
+        let id = 1;
+        s.register_conn(id, ConnKind::Agent, "interrupt-test", Box::new(|_: ServerEvent| {}));
         common::present(&mut s, vec![]);
         s.agent_request_control(id).unwrap();
         s.agent_type(id, "sleep 30").unwrap();

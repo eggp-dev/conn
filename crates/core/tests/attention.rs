@@ -3,7 +3,7 @@ mod common;
 
 use std::time::Duration;
 
-use common::Harness;
+use common::{Harness, SessionExt};
 use conn_core::affordance::{Actor, Affordance};
 use conn_core::ipc::Hub;
 use conn_core::session::{ServerEvent};
@@ -41,11 +41,10 @@ fn hub_routes_attention_across_sessions() {
     hub.add("t2", sb.clone());
     assert_eq!(hub.attended_id().as_deref(), Some("t1"));
     assert!(sa.lock().attended() && !sb.lock().attended());
-    assert_eq!(hub.resolve(None).unwrap().0, "t1");
     assert!(hub.set_attended("t2"));
     assert!(!sa.lock().attended() && sb.lock().attended());
-    assert_eq!(hub.resolve(None).unwrap().0, "t2");
-    assert_eq!(hub.resolve(Some("t1")).unwrap().0, "t1");
+    assert_eq!(hub.attended_id().as_deref(), Some("t2"));
+    assert!(hub.get("t1").is_some());
     assert!(!hub.set_attended("nope"));
     hub.remove("t2");
     assert_eq!(hub.attended_id().as_deref(), Some("t1"));

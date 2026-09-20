@@ -5,7 +5,8 @@ use std::time::Duration;
 
 use conn_core::audit::{Audit, Event};
 use conn_core::policy::{Policy, PolicyStore, EXAMPLE_POLICY};
-use conn_core::session::{ConnKind, EventSink, ServerEvent, Session, SessionConfig};
+use conn_core::authority::ConnId;
+use conn_core::session::{ConnKind, ControlOutcome, EventSink, KeyResult, LeaseInfo, ServerEvent, Session, SessionConfig, SessionError};
 use conn_core::Pacing;
 
 pub type Buf = Arc<Mutex<Vec<u8>>>;
@@ -37,6 +38,28 @@ pub fn present(session: &mut Session, screen: Vec<String>) {
 pub fn frame_sink(buf: &Buf) -> conn_core::session::OutputFrameSink {
     let buf = buf.clone();
     Box::new(move |frame| buf.lock().unwrap().extend_from_slice(&frame.data))
+}
+
+/// Shorthands for tests that do not care about the request reason or the intent.
+pub trait SessionExt {
+    fn agent_request_control(&mut self, conn: ConnId) -> Result<LeaseInfo, SessionError>;
+    fn agent_request_control_with(&mut self, conn: ConnId, reason: Option<String>) -> Result<ControlOutcome, SessionError>;
+    fn agent_send_key(&mut self, conn: ConnId, key: &str) -> Result<KeyResult, SessionError>;
+}
+
+impl SessionExt for Session {
+    fn agent_request_control(&mut self, conn: ConnId) -> Result<LeaseInfo, SessionError> {
+        match self.agent_request_control_with(conn, None)? {
+            ControlOutcome::Granted { lease } => Ok(lease),
+            ControlOutcome::Pending { request_id } => panic!("control request {request_id} is pending"),
+        }
+    }
+    fn agent_request_control_with(&mut self, conn: ConnId, reason: Option<String>) -> Result<ControlOutcome, SessionError> {
+        self.agent_request_control_original(conn, serde_json::json!({ "reason": reason }))
+    }
+    fn agent_send_key(&mut self, conn: ConnId, key: &str) -> Result<KeyResult, SessionError> {
+        self.agent_send_key_with(conn, key, None)
+    }
 }
 
 pub struct Harness {

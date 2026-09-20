@@ -1,7 +1,7 @@
 //! Policy and audit must see a complete command, independently of terminal wrapping.
 mod common;
 
-use common::Harness;
+use common::{Harness, SessionExt};
 use conn_core::approval::Decision;
 use conn_core::session::{KeyResult, ServerEvent};
 

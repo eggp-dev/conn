@@ -1,6 +1,6 @@
 #![cfg(unix)]
 mod common;
-use common::Buf;
+use common::{Buf, SessionExt};
 use conn_core::{
     audit::{Audit, Event},
     backend::Profile,

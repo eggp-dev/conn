@@ -156,7 +156,7 @@ content. Revocation cannot recall bytes already delivered to the client/model.
 `hello_required`, `owner_required`, `surface_unavailable`, `not_available`,
 `busy`, `not_controller`, `lease_expired`, `process_exited`, `invalid_input`,
 `not_found`, `rate_limited`, `input_pending`, `approval_pending`, `exec_pending`, `proposal_pending`, `intent_required`,
-`masked`, `control_denied`, `wrong_mode`, `unsupported`, `connection_closing`, `admission_pending`, `admission_denied`, `io`, `parse`.
+`masked`, `control_denied`, `wrong_mode`, `unsupported`, `connection_closing`, `admission_pending`, `admission_denied`, `parse`.
 
 Private/unauthorized session access uses a generic unavailable response. The owner can start the app with `CONN_TRACE_REFUSALS=1` to print the cause of each such refusal to stderr (reasons and identifiers only). A client should
 not automatically bypass an unavailable surface, switch to a separate shell, or claim a

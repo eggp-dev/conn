@@ -60,12 +60,10 @@ impl From<SessionError> for RpcError {
             SessionError::ExecPending(_) => "exec_pending",
             SessionError::RateLimited { .. } => "rate_limited",
             SessionError::Masked(_) => "masked",
-            SessionError::ControlDenied(_) => "control_denied",
             SessionError::WrongMode(_) => "wrong_mode",
             SessionError::ProposalPending(_) => "proposal_pending",
             SessionError::IntentRequired => "intent_required",
             SessionError::NotAvailable(_) => "not_available",
-            SessionError::Io(_) => "io",
             SessionError::SurfaceUnavailable => "surface_unavailable",
         };
         RpcError { code: code.into(), message: e.to_string() }
@@ -331,22 +329,6 @@ impl Hub {
         Ok(id)
     }
 
-    /// 1-based position of a session in the tab order.
-    pub fn index_of(&self, id: &str) -> Option<usize> {
-        self.sessions.lock().iter().position(|(i, _)| i == id).map(|p| p + 1)
-    }
-
-    /// Find a session by id or by 1-based index.
-    pub fn find_tab(&self, tab: &Value) -> Option<(SessionId, SharedSession)> {
-        let list = self.sessions.lock();
-        let hit = match tab {
-            Value::Number(n) => n.as_u64().and_then(|n| list.get(n.checked_sub(1)? as usize)),
-            Value::String(s) => list.iter().find(|(i, _)| i == s).or_else(|| s.parse::<usize>().ok().and_then(|n| list.get(n.checked_sub(1)?))),
-            _ => None,
-        };
-        hit.map(|(i, s)| (i.clone(), s.clone()))
-    }
-
     pub fn add(&self, id: &str, session: SharedSession) {
         let first = self.sessions.lock().is_empty();
         session.lock().set_tabs_supported(self.tabs_supported());
@@ -450,17 +432,6 @@ impl Hub {
         let id = session.map(str::to_string).or_else(|| self.public_attended_id())?;
         self.get_public(&id).map(|s| (id, s))
     }
-
-    /// Resolve a request's target: the named session, else the attended one.
-    pub fn resolve(&self, session: Option<&str>) -> Option<(SessionId, SharedSession)> {
-        match session {
-            Some(id) => self.get(id).map(|s| (id.to_string(), s)),
-            None => {
-                let id = self.attended_id().or_else(|| self.ids().first().cloned())?;
-                self.get(&id).map(|s| (id, s))
-            }
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -482,12 +453,7 @@ impl EventSink for TokioSink {
     }
 }
 
-/// Serve the sessions on `path` until the future is dropped.
-pub async fn serve(path: PathBuf, hub: SharedHub) -> std::io::Result<()> {
-    let listener = crate::transport::Listener::bind(&path)?;
-    serve_listener(listener, hub).await
-}
-
+/// Serve the sessions behind `listener` until the future is dropped.
 async fn serve_listener(mut listener: crate::transport::Listener, hub: SharedHub) -> std::io::Result<()> {
     let mut next_conn: ConnId = 1;
     loop {
@@ -501,7 +467,7 @@ async fn serve_listener(mut listener: crate::transport::Listener, hub: SharedHub
     }
 }
 
-/// Run `serve` on a dedicated thread with its own runtime. For embedders that do
+/// Serve the sessions on `path` from a dedicated runtime. For embedders that do
 /// not want to manage tokio. Returns a guard; dropping it stops the server and
 /// removes the socket file.
 pub fn serve_in_background(path: PathBuf, hub: SharedHub) -> std::io::Result<ServerGuard> {

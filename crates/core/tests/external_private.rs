@@ -3,7 +3,7 @@ mod common;
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use common::{Buf, SharedBuf, VecSink};
+use common::{Buf, SessionExt, SharedBuf, VecSink};
 use conn_core::affordance::{Actor, Affordance};
 use conn_core::audit::{Audit, Event};
 use conn_core::ipc::{self, Client, Hub};
@@ -49,7 +49,8 @@ fn private_input_is_untracked_and_human_takeover_permanently_revokes_external_wr
     assert!(records.lock().unwrap().is_empty());
     assert!(trace.lock().unwrap().is_empty());
     assert_eq!(&*rendered.lock().unwrap(), b"private output", "the owner's renderer still receives private output");
-    assert!(!events.lock().unwrap().iter().any(|e| matches!(e, ServerEvent::HumanExec { .. } | ServerEvent::AgentExec { .. })));
+    assert!(!events.lock().unwrap().iter().any(|e| matches!(e, ServerEvent::AgentExec { .. })));
+    assert!(!format!("{:?}", events.lock().unwrap()).contains("fixture"));
 }
 
 #[test]
@@ -202,7 +203,8 @@ fn direct_startup_preserves_argv_cwd_and_env_without_logging_hidden_input_or_sta
     assert!(!String::from_utf8_lossy(&output.lock().unwrap()).contains("synthetic-hidden-value"));
     assert!(engine.session().lock().input_line().is_empty());
     assert!(records.lock().unwrap().is_empty());
-    assert!(!events.lock().unwrap().iter().any(|e| matches!(e, ServerEvent::HumanExec { .. } | ServerEvent::AgentExec { .. })));
+    assert!(!events.lock().unwrap().iter().any(|e| matches!(e, ServerEvent::AgentExec { .. })));
+    assert!(!format!("{:?}", events.lock().unwrap()).contains("synthetic-hidden-value"));
     assert!(engine.write_external(b"late").is_err());
 }
 

@@ -3,7 +3,7 @@ mod common;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use common::Harness;
+use common::{Harness, SessionExt};
 use conn_core::affordance::{Actor, Affordance};
 use conn_core::approval::{ApprovalState, Decision};
 use conn_core::authority::{AuthorityError, RevokeReason};

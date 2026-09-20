@@ -50,18 +50,12 @@ pub struct ApprovalQueue {
 }
 
 impl ApprovalQueue {
-    pub const DEFAULT_TTL: Duration = Duration::from_secs(300);
-
     pub fn new(ttl: Duration) -> Self {
         Self { seq: 0, items: Vec::new(), ttl }
     }
 
     pub fn set_ttl(&mut self, ttl: Duration) {
         self.ttl = ttl;
-    }
-
-    pub fn create(&mut self, agent_id: &str, conn: ConnId, cmd: &str, label: &str, now: Instant) -> &ApprovalRequest {
-        self.create_with(agent_id, conn, cmd, label, now, None, None)
     }
 
     #[allow(clippy::too_many_arguments)]

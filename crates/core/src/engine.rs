@@ -83,7 +83,6 @@ pub struct Engine {
     exited: Arc<AtomicBool>,
     exit_code: parking_lot::Mutex<Option<Option<u32>>>,
     shell: String,
-    pid: Option<u32>,
 }
 
 pub fn default_shell() -> String {
@@ -257,7 +256,6 @@ impl Engine {
             exited,
             exit_code: parking_lot::Mutex::new(None),
             shell,
-            pid,
         })
     }
 
@@ -275,10 +273,6 @@ impl Engine {
         &self.shell
     }
 
-    pub fn pid(&self) -> Option<u32> {
-        self.pid
-    }
-
     /// Human keyboard input. Revokes any agent lease first.
     pub fn write_input(&self, bytes: &[u8]) {
         self.session.lock().human_input(bytes);
@@ -289,17 +283,9 @@ impl Engine {
         self.session.lock().write_external(bytes)
     }
 
-    pub fn resize(&self, rows: u16, cols: u16) {
-        self.session.lock().resize(rows, cols);
-    }
-
-    /// Register an in-process frontend. Returns an id for `unsubscribe`.
+    /// Register an in-process frontend. Returns its connection id.
     pub fn subscribe(&self, name: &str, sink: Box<dyn EventSink>) -> ConnId {
         self.session.lock().subscribe(name, sink)
-    }
-
-    pub fn unsubscribe(&self, id: ConnId) {
-        self.session.lock().unsubscribe(id);
     }
 
     pub fn has_exited(&self) -> bool {
@@ -315,22 +301,6 @@ impl Engine {
         let code = rx.and_then(|rx| rx.recv().ok()).flatten();
         *self.exit_code.lock() = Some(code);
         code
-    }
-
-    /// Non-blocking variant of `wait`.
-    pub fn try_wait(&self) -> Option<Option<u32>> {
-        if let Some(c) = *self.exit_code.lock() {
-            return Some(c);
-        }
-        let guard = self.exit_rx.lock();
-        let rx = guard.as_ref()?;
-        match rx.try_recv() {
-            Ok(code) => {
-                *self.exit_code.lock() = Some(code);
-                Some(code)
-            }
-            Err(_) => None,
-        }
     }
 }
 

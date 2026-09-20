@@ -4,7 +4,7 @@ mod common;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
-use common::Harness;
+use common::{Harness, SessionExt};
 use conn_core::affordance::{Actor, Affordance};
 use conn_core::approval::{ApprovalState, Decision};
 use conn_core::policy::EXAMPLE_POLICY;

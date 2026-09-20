@@ -3,7 +3,7 @@ mod common;
 
 use std::time::{Duration, Instant};
 
-use common::Harness;
+use common::{Harness, SessionExt};
 use conn_core::affordance::{Actor, Affordance};
 use conn_core::session::{AgentMode, ControlOutcome, ControlRequestState, KeyResult, ProposalState, ServerEvent, SessionError};
 

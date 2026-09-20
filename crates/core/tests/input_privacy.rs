@@ -1,6 +1,6 @@
 mod common;
-use common::Harness;
-use conn_core::{affordance::{Actor, Affordance}, audit::Audit, session::{ServerEvent, SessionError}};
+use common::{Harness, SessionExt};
+use conn_core::{affordance::{Actor, Affordance}, audit::Audit, session::SessionError};
 use std::{collections::HashSet, sync::{Arc, Mutex}};
 
 #[test]
@@ -15,7 +15,7 @@ fn human_secrets_never_become_commands_titles_or_trace_payloads() {
     }
     assert!(!format!("{:?}", h.audit_events()).contains("SYNTHETIC"));
     assert!(!format!("{:?}", trace.lock().unwrap()).contains("SYNTHETIC"));
-    assert!(!events.lock().unwrap().iter().any(|e| matches!(e, ServerEvent::HumanExec {..})));
+    assert!(!format!("{:?}", events.lock().unwrap()).contains("SYNTHETIC"));
     assert!(h.pty_str().contains("SYNTHETIC_PASSWORD"), "input must still reach the child");
 }
 
