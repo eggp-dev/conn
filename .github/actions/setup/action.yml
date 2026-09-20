@@ -4,6 +4,9 @@ inputs:
   desktop:
     description: Install Linux desktop libraries
     default: 'false'
+  rust-cache:
+    description: Restore compiled dependencies from earlier CI runs. Never set for release builds, which compile from scratch.
+    default: 'false'
 runs:
   using: composite
   steps:
@@ -21,6 +24,16 @@ runs:
     - name: Pinned Rust toolchain
       shell: bash
       run: rustup show active-toolchain
+    - name: Compiled Rust dependencies from earlier runs
+      if: inputs.rust-cache == 'true'
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      with:
+        # The CLI sidecar builds into the root target directory, the desktop shell into its own.
+        workspaces: |
+          . -> target
+          frontends/tauri/src-tauri -> target
+        # Pull requests read the cache that main wrote; they do not each write their own.
+        save-if: ${{ github.ref == 'refs/heads/main' }}
     - name: Frontend dependencies
       shell: bash
       working-directory: frontends/tauri

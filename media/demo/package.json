@@ -15,16 +15,16 @@
     "@remotion/fonts": "4.0.525",
     "@remotion/media": "4.0.525",
     "@remotion/transitions": "4.0.525",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "remotion": "4.0.525"
   },
   "devDependencies": {
     "@remotion/eslint-config-flat": "4.0.525",
-    "@types/react": "19.2.7",
-    "@types/web": "0.0.166",
+    "@types/react": "19.3.0",
+    "@types/web": "0.0.356",
     "eslint": "9.19.0",
-    "prettier": "3.8.1",
+    "prettier": "3.9.7",
     "typescript": "5.9.3"
   },
   "scripts": {

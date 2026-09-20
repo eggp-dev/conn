@@ -21,6 +21,10 @@ class CiScopeTests(unittest.TestCase):
         self.assertEqual(ci_scope.scope("push", ["site/src/components/Landing.astro", "site/package-lock.json"]), {"rust": [], "desktop": []})
         self.assertEqual(ci_scope.scope("pull_request", ["scripts/release.py"])["rust"], ALL)
 
+    def test_dependabot_configuration_needs_no_native_runner_but_workflows_do(self):
+        self.assertEqual(ci_scope.scope("pull_request", [".github/dependabot.yml"]), {"rust": [], "desktop": []})
+        self.assertEqual(ci_scope.scope("pull_request", [".github/dependabot.yml", ".github/workflows/ci.yml"]), {"rust": ALL, "desktop": ALL})
+
     def test_markdown_compiled_into_binaries_is_not_documentation(self):
         self.assertEqual(ci_scope.classify("plugin/skills/conn/SKILL.md"), "native")
         self.assertEqual(ci_scope.scope("pull_request", ["plugin/skills/conn/SKILL.md"])["rust"], ALL)
