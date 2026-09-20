@@ -18,7 +18,7 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::affordance::{affordances_for, Actor, Affordance, AffordanceState};
-use crate::approval::{self, ApprovalQueue, ApprovalRequest, ApprovalState, Decision as ApprovalDecision};
+use crate::approval::{ApprovalQueue, ApprovalRequest, ApprovalState, Decision as ApprovalDecision};
 use crate::audit::Audit;
 use crate::authority::{Authority, AuthorityError, ConnId, Controller, Lease, RevokeReason};
 use crate::config::Pacing;
@@ -367,8 +367,6 @@ pub struct Status {
     pub pacing: Pacing,
     #[serde(rename = "affordanceMask")]
     pub affordance_mask: Option<Vec<Affordance>>,
-    #[serde(rename = "promptActive")]
-    pub prompt_active: bool,
     pub mode: AgentMode,
     /// Effective mode; unobserved sessions have no input authority.
     #[serde(rename = "effectiveMode")]
@@ -424,9 +422,6 @@ pub struct SessionConfig {
     pub output: Option<Box<dyn Write + Send>>,
     pub master: Option<Box<dyn MasterPty + Send>>,
     pub pacing: Pacing,
-    /// Draw the approval prompt into `output` (terminal mode). Frontends set this to
-    /// false and render their own from `ApprovalRequested`.
-    pub render_prompt: bool,
     /// Pid of the shell, used to read its cwd (`lsof -d cwd`) when analysing a command.
     pub shell_pid: Option<u32>,
 }
@@ -469,14 +464,9 @@ pub struct Session {
     output_frame_sink: Option<OutputFrameSink>,
     master: Option<Box<dyn MasterPty + Send>>,
     pacing: Pacing,
-    render_prompt: bool,
     process_alive: bool,
     conns: HashMap<ConnId, ConnInfo>,
     next_local_conn: ConnId,
-    /// Approval id currently displayed in the terminal, if any.
-    ui: Option<String>,
-    /// PTY output held back while the approval prompt is on screen.
-    held_output: Vec<u8>,
     affordance_mask: Option<HashSet<Affordance>>,
     last_agent_write: Option<Instant>,
     scheduled: Option<ScheduledExec>,
@@ -532,9 +522,8 @@ impl Session {
     }
 
     /// Construct a private native session with activity recording disabled.
-    pub fn new_external_private(mut cfg: SessionConfig) -> Self {
+    pub fn new_external_private(cfg: SessionConfig) -> Self {
         cfg.audit.set_enabled(false);
-        cfg.render_prompt = false;
         Self::with_origin(cfg, true)
     }
 
@@ -571,12 +560,9 @@ impl Session {
             output_frame_sink: None,
             master: cfg.master,
             pacing: cfg.pacing,
-            render_prompt: cfg.render_prompt,
             process_alive: true,
             conns: HashMap::new(),
             next_local_conn: LOCAL_CONN_BASE,
-            ui: None,
-            held_output: Vec::new(),
             affordance_mask: None,
             last_agent_write: None,
             scheduled: None,
@@ -1071,10 +1057,6 @@ impl Session {
             if self.process_alive { self.write_pty(bytes); }
             return;
         }
-        if self.ui.is_some() {
-            self.ui_input(bytes);
-            return;
-        }
         self.shell_recording_armed |= !bytes.is_empty() && self.shell_recording_ready && self.shell_prompt_confirmed;
         // 1. revoke lease  2. controller = Human   (both inside `revoke`)
         let revoked = self.authority.revoke();
@@ -1127,18 +1109,14 @@ impl Session {
         Some(lease.label())
     }
 
-    /// Output from the PTY. Passed through untouched unless the approval prompt is up.
+    /// Output from the PTY, passed through untouched.
     pub fn pty_output(&mut self, bytes: &[u8]) {
         if bytes.is_empty() { return; }
         self.output_seq = self.output_seq.saturating_add(1);
         if self.screen.process(bytes) {
             self.screen_dirty = true;
         }
-        if self.ui.is_some() {
-            self.held_output.extend_from_slice(bytes);
-        } else {
-            self.write_output(bytes);
-        }
+        self.write_output(bytes);
         if self.conns.values().any(|c| c.stream_output) {
             use base64::Engine as _;
             let data = base64::engine::general_purpose::STANDARD.encode(bytes);
@@ -1909,7 +1887,6 @@ impl Session {
                     json!({ "approval": req.id, "cmd": cmd, "label": label, "intent": intent }),
                 );
                 self.broadcast(ServerEvent::ApprovalRequested { request: req.clone() });
-                self.show_next_prompt();
                 self.notify_tools_changed();
                 Ok(KeyResult::Pending { approval_id: req.id, cmd, label })
             }
@@ -2026,7 +2003,7 @@ impl Session {
     // ----- approval -------------------------------------------------------
 
     /// Human decision on a pending approval. `by` is recorded in the audit log
-    /// (e.g. "prompt", "cli", "frontend").
+    /// (e.g. "cli", "frontend").
     pub fn resolve_approval(&mut self, id: &str, decision: ApprovalDecision, by: &str) -> Result<ApprovalInfo, SessionError> {
         if self.approvals.get(id).is_none() {
             return Err(SessionError::NotFound(id.to_string()));
@@ -2089,48 +2066,8 @@ impl Session {
         self.notify(req.conn, ev.clone());
         self.broadcast(ev);
         self.broadcast(ServerEvent::AgentExec { agent_id: req.agent_id.clone(), cmd: req.cmd.clone(), policy: format!("confirm:{outcome}"), intent: req.intent.clone(), submission_id });
-        if self.ui.as_deref() == Some(id) {
-            self.close_prompt();
-        }
-        self.show_next_prompt();
         self.notify_tools_changed();
         Some(req)
-    }
-
-    fn show_next_prompt(&mut self) {
-        if !self.render_prompt || self.ui.is_some() {
-            return;
-        }
-        let Some(req) = self.approvals.first_pending().cloned() else { return };
-        let cols = self.screen.size().cols;
-        let bytes = approval::render_prompt(&req, cols);
-        self.write_output(&bytes);
-        self.ui = Some(req.id);
-    }
-
-    fn close_prompt(&mut self) {
-        self.ui = None;
-        let mut out = approval::leave_prompt();
-        out.append(&mut self.held_output);
-        self.write_output(&out);
-    }
-
-    fn ui_input(&mut self, bytes: &[u8]) {
-        let Some(id) = self.ui.clone() else { return };
-        for b in bytes {
-            let decision = match b {
-                b'a' | b'y' => ApprovalDecision::Grant,
-                b'd' | b'n' | 0x03 | 0x1b => ApprovalDecision::Deny,
-                b'A' => ApprovalDecision::AllowSession,
-                _ => continue,
-            };
-            let _ = self.resolve_approval(&id, decision, "prompt");
-            break;
-        }
-    }
-
-    pub fn prompt_active(&self) -> bool {
-        self.ui.is_some()
     }
 
     // ----- housekeeping ---------------------------------------------------
@@ -2221,7 +2158,6 @@ impl Session {
             connected_frontends: self.conns.values().filter(|c| c.kind == ConnKind::Frontend).map(|c| c.name.clone()).collect(),
             pacing: self.pacing.clone(),
             affordance_mask: self.affordance_mask(),
-            prompt_active: self.ui.is_some(),
             mode: self.mode,
             effective_mode: self.effective_mode(),
             attended: self.attended,

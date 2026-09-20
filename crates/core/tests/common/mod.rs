@@ -51,22 +51,9 @@ impl Harness {
         Self::with(&Self::test_policy(), Duration::from_secs(60), Duration::from_secs(300))
     }
 
-    pub fn headless() -> Self {
-        let mut h = Self::new();
-        let (session, audit) = Self::build(&Self::test_policy(), Duration::from_secs(60), Duration::from_secs(300), &h.pty, &h.stdout, false);
-        h.session = session;
-        h.audit = audit;
-        h
-    }
-
     pub fn with(policy_yaml: &str, lease_ttl: Duration, approval_ttl: Duration) -> Self {
         let pty: Buf = Default::default();
         let stdout: Buf = Default::default();
-        let (session, audit) = Self::build(policy_yaml, lease_ttl, approval_ttl, &pty, &stdout, true);
-        Self { session, pty, stdout, audit }
-    }
-
-    fn build(policy_yaml: &str, lease_ttl: Duration, approval_ttl: Duration, pty: &Buf, stdout: &Buf, render_prompt: bool) -> (Session, Arc<Mutex<Vec<Event>>>) {
         let (audit, store) = Audit::memory();
         let session = Session::new(SessionConfig {
             rows: 24,
@@ -81,13 +68,12 @@ impl Harness {
                 approval_ttl_secs: 0,
                 ..Pacing::default()
             },
-            render_prompt,
             shell_pid: None,
         });
         let mut session = session;
         session.set_ttls(lease_ttl, approval_ttl);
         present(&mut session, vec![]);
-        (session, store)
+        Self { session, pty, stdout, audit: store }
     }
 
     pub fn frontend(&mut self, name: &str) -> Arc<Mutex<Vec<ServerEvent>>> {

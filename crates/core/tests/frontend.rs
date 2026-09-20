@@ -17,7 +17,7 @@ fn names(evs: &[ServerEvent]) -> Vec<String> {
 
 #[test]
 fn frontend_receives_lifecycle_events() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     let fe = h.frontend("ui");
     h.agent(1, "copilot");
     h.session.agent_request_control(1).unwrap();
@@ -40,14 +40,12 @@ fn frontend_receives_lifecycle_events() {
 }
 
 #[test]
-fn headless_mode_does_not_draw_the_prompt() {
-    let mut h = Harness::headless();
+fn human_input_denies_a_pending_approval_and_clears_the_typed_line() {
+    let mut h = Harness::new();
     h.agent(1, "copilot");
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "sudo ls").unwrap();
     assert!(matches!(h.session.agent_send_key(1, "ENTER").unwrap(), KeyResult::Pending { .. }));
-    assert!(!h.session.prompt_active());
-    assert!(!h.stdout_str().contains("\x1b[?1049h"));
     // Human keystrokes are a takeover, never a prompt answer: "y" must not approve.
     // The pending command is already typed on the line, so the approval cannot stay
     // alive either, or a later approve would submit that line plus the human's bytes.
@@ -182,7 +180,7 @@ fn approval_expires_via_pacing_ttl() {
 
 #[test]
 fn example_policy_still_applies_in_headless_mode() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     h.agent(1, "copilot");
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "rm -rf /").unwrap();

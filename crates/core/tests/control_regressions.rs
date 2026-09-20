@@ -10,7 +10,7 @@ use serde_json::json;
 
 #[test]
 fn mode_switch_refuses_physical_input_until_cancelled() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     h.agent(1, "claude");
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "echo mode-switch-test").unwrap();
@@ -27,7 +27,7 @@ fn mode_switch_refuses_physical_input_until_cancelled() {
 
 #[test]
 fn cancelled_grace_retains_tracking_and_cannot_hide_pending_input() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     h.agent(1, "claude");
     let mut pacing = h.session.pacing().clone(); pacing.enter_grace_ms = 5000; pacing.lease_ttl_secs = 60; pacing.approval_ttl_secs = 300;
     h.session.set_pacing(pacing);
@@ -42,7 +42,7 @@ fn cancelled_grace_retains_tracking_and_cannot_hide_pending_input() {
 
 #[test]
 fn dirty_history_input_blocks_mode_switch_even_when_tracker_text_is_empty() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     h.agent(1, "claude");
     h.session.agent_request_control(1).unwrap();
     h.session.agent_send_key(1, "UP").unwrap();
@@ -51,7 +51,7 @@ fn dirty_history_input_blocks_mode_switch_even_when_tracker_text_is_empty() {
 
 #[test]
 fn tab_return_preserves_lease_but_release_requires_new_control_decision() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     h.agent(1, "claude");
     h.session.agent_request_control(1).unwrap();
     h.session.set_attended(false);
@@ -65,7 +65,7 @@ fn tab_return_preserves_lease_but_release_requires_new_control_decision() {
 
 #[test]
 fn human_return_does_not_bypass_control_gate() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     h.agent(1, "claude");
     h.session.agent_request_control(1).unwrap();
     h.session.human_take();
@@ -78,7 +78,7 @@ fn human_return_does_not_bypass_control_gate() {
 
 #[test]
 fn copilot_interrupt_reaches_pty_and_rejects_proposal() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     h.agent(1, "claude");
     h.session.set_mode(AgentMode::Copilot).unwrap();
     h.session.agent_request_control(1).unwrap();
@@ -94,7 +94,7 @@ fn copilot_interrupt_reaches_pty_and_rejects_proposal() {
 
 #[test]
 fn revoked_sharing_cannot_append_to_existing_shell_input() {
-    let mut h=Harness::headless();h.agent(1,"claude");h.session.agent_request_control(1).unwrap();
+    let mut h=Harness::new();h.agent(1,"claude");h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1,"echo stale").unwrap();h.session.set_shared(false).unwrap();
     assert!(h.session.agent_type(1,"echo proposed").is_err());
     assert!(h.session.agent_interrupt(1).is_err());
@@ -105,7 +105,7 @@ fn revoked_sharing_cannot_append_to_existing_shell_input() {
 
 #[test]
 fn review_required_allow_session_rejection_keeps_request_pending() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     let mut profile = Profile::local("powershell".into(), "pwsh".into()); profile.shell = ShellKind::PowerShell;
     h.session.set_execution_profile(profile);
     h.agent(1, "claude");
@@ -125,7 +125,7 @@ fn review_required_allow_session_rejection_keeps_request_pending() {
 
 #[test]
 fn modes_are_available_in_presented_snapshot_and_changes_reach_agents() {
-    let mut h=Harness::headless();let events=h.agent(1,"claude");
+    let mut h=Harness::new();let events=h.agent(1,"claude");
     h.session.set_mode(AgentMode::Copilot).unwrap();
     let snap=h.session.snapshot(Actor::Agent{conn:1}).unwrap();
     assert_eq!(snap.mode,AgentMode::Copilot);assert_eq!(snap.effective_mode,AgentMode::Copilot);
@@ -135,7 +135,7 @@ fn modes_are_available_in_presented_snapshot_and_changes_reach_agents() {
 
 #[test]
 fn status_distinguishes_same_named_sockets_without_duplicate_agent_labels() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     h.agent(2, "copilot"); h.agent(1, "copilot");
     let st = h.session.status();
     assert_eq!(st.connected_agents, ["copilot"]);
@@ -148,7 +148,7 @@ fn status_distinguishes_same_named_sockets_without_duplicate_agent_labels() {
 
 #[test]
 fn grace_cosign_records_distinct_live_and_saved_evidence() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     let events = h.frontend("ui"); h.agent(1, "claude");
     let mut pacing = h.session.pacing().clone(); pacing.enter_grace_ms = 5000; pacing.lease_ttl_secs = 60; pacing.approval_ttl_secs = 300; h.session.set_pacing(pacing);
     h.session.agent_request_control(1).unwrap(); h.session.agent_type(1, "echo test").unwrap();
@@ -212,7 +212,7 @@ fn real_pty_copilot_interrupt_stops_running_shell_command() {
 
 #[test]
 fn human_input_denies_a_pending_approval_instead_of_editing_its_command() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     h.agent(1, "a");
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "sudo ls").unwrap();

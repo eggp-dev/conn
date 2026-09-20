@@ -77,8 +77,8 @@ impl Drop for Mcp {
 #[test]
 fn dynamic_catalog_keeps_authorized_recovery_after_source_loss() {
     for scenario in ["closed", "private", "removed", "exited"] {
-        let old: SharedSession = Arc::new(common::Harness::headless().session.into());
-        let target: SharedSession = Arc::new(common::Harness::headless().session.into());
+        let old: SharedSession = Arc::new(common::Harness::new().session.into());
+        let target: SharedSession = Arc::new(common::Harness::new().session.into());
         let hub = Hub::single("old", old.clone());
         hub.set_opener(Arc::new(|_, _| Err("unused".into())));
         let dir = tempfile::tempdir().unwrap();
@@ -134,7 +134,7 @@ fn dynamic_catalog_keeps_authorized_recovery_after_source_loss() {
 }
 #[test]
 fn pending_admission_keeps_one_tool_that_succeeds_after_allow() {
-    let tab: SharedSession = Arc::new(common::Harness::headless().session.into());
+    let tab: SharedSession = Arc::new(common::Harness::new().session.into());
     common::present(&mut tab.lock(), vec!["admitted".into()]);
     let hub = Hub::single("tab", tab.clone());
     hub.set_admission_policy(conn_core::ipc::AdmissionPolicy::Ask);

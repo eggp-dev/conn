@@ -1,9 +1,8 @@
-//! Approval queue and the in-terminal approval prompt.
+//! Approval queue.
 
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use unicode_width::UnicodeWidthStr;
 
 use crate::authority::ConnId;
 
@@ -122,71 +121,4 @@ impl ApprovalQueue {
             .map(|a| a.id.clone())
             .collect()
     }
-}
-
-/// Render the approval prompt as raw terminal bytes (alternate screen, raw mode).
-/// The label comes first: the human should be able to decide in three seconds.
-pub fn render_prompt(req: &ApprovalRequest, cols: u16) -> Vec<u8> {
-    let inner_max = (cols as usize).saturating_sub(4).clamp(30, 100);
-    let mut lines: Vec<String> = Vec::new();
-    lines.push(String::new());
-    lines.push(format!("  ⚠  {}", req.label));
-    if let Some(i) = &req.intent {
-        lines.push(format!("     intent   {i}"));
-    }
-    if let Some(a) = &req.analysis {
-        for s in &a.segments {
-            for t in &s.targets {
-                let mut d = format!("     target   {}", t.path);
-                if t.git_repo { d.push_str(" · git"); }
-                if let Some(n) = t.entries { d.push_str(&format!(" · {n} entries")); }
-                if !t.exists { d.push_str(" · missing"); }
-                if t.protected { d.push_str(" · protected path"); }
-                lines.push(d);
-            }
-        }
-    }
-    lines.push(String::new());
-    lines.push(format!("     from     {} · {}", req.agent_id, req.requested_at));
-    lines.push(format!("     id       {}", req.id));
-    lines.push(String::new());
-    for chunk in wrap(&req.cmd, inner_max - 4) {
-        lines.push(format!("  {chunk}"));
-    }
-    lines.push(String::new());
-    lines.push("  [a] approve   [d] deny   [A] allow for this session".to_string());
-    lines.push(String::new());
-
-    let width = lines.iter().map(|l| l.width()).max().unwrap_or(0).max(inner_max.min(44));
-    let title = "─ approval needed ";
-    let mut out = String::new();
-    out.push_str("\x1b[?1049h\x1b[H\x1b[2J\x1b[?25l");
-    out.push_str("\r\n");
-    out.push_str(&format!("┌{}{}┐\r\n", title, "─".repeat(width.saturating_sub(title.width()))));
-    for l in &lines {
-        out.push_str(&format!("│{}{}│\r\n", l, " ".repeat(width.saturating_sub(l.width()))));
-    }
-    out.push_str(&format!("└{}┘\r\n", "─".repeat(width)));
-    out.push_str("\r\n  You can also decide with `conn approve <id>`.\r\n");
-    out.into_bytes()
-}
-
-pub fn leave_prompt() -> Vec<u8> {
-    b"\x1b[?25h\x1b[?1049l".to_vec()
-}
-
-fn wrap(s: &str, max: usize) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut cur = String::new();
-    for ch in s.chars() {
-        let w = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(1);
-        if cur.width() + w > max && !cur.is_empty() {
-            out.push(std::mem::take(&mut cur));
-        }
-        cur.push(ch);
-    }
-    if !cur.is_empty() || out.is_empty() {
-        out.push(cur);
-    }
-    out
 }

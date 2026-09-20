@@ -20,7 +20,7 @@ fn fixture(private: bool) -> (SharedSession, Buf, Arc<Mutex<Vec<Event>>>) {
     let cfg = SessionConfig {
         rows: 24, cols: 80, audit, policy: policy(),
         pty_writer: Box::new(SharedBuf(bytes.clone())), output: None,
-        master: None, pacing: Default::default(), render_prompt: false, shell_pid: None,
+        master: None, pacing: Default::default(), shell_pid: None,
     };
     let s = if private { Session::new_external_private(cfg) } else { Session::new(cfg) };
     (Arc::new(parking_lot::Mutex::new(s)), bytes, records)

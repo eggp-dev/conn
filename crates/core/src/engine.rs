@@ -56,8 +56,6 @@ pub struct EngineConfig {
     pub output: Option<Box<dyn Write + Send>>,
     /// Native renderer delivery with sequencing; installed before reader startup.
     pub output_frame: Option<crate::session::OutputFrameSink>,
-    /// Draw the approval prompt into `output`. Frontends set false.
-    pub render_prompt: bool,
     /// How often the session tick runs (lease/approval expiry, grace timers, screen events).
     pub tick: Duration,
 }
@@ -79,7 +77,6 @@ impl Default for EngineConfig {
             pacing: Pacing::default(),
             output: None,
             output_frame: None,
-            render_prompt: false,
             tick: Duration::from_millis(50),
         }
     }
@@ -212,7 +209,6 @@ impl Engine {
             output: cfg.output,
             master: Some(pair.master),
             pacing: cfg.pacing,
-            render_prompt: cfg.render_prompt,
             shell_pid: pid,
         };
         let session: SharedSession = Arc::new(parking_lot::Mutex::new(if cfg.external_private {

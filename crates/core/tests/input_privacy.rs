@@ -72,7 +72,7 @@ fn real_hidden_password_input_in_an_ordinary_tab_is_not_audited() {
     let engine=Engine::spawn(EngineConfig {
         profile:Some(profile),audit:Some(audit),
         policy:Some(PolicyStore::from_policy(Policy::parse("default: deny\n").unwrap())),
-        output:Some(Box::new(SharedBuf(output.clone()))),render_prompt:false,..Default::default()
+        output:Some(Box::new(SharedBuf(output.clone()))),..Default::default()
     }).unwrap();
     let deadline=Instant::now()+Duration::from_secs(5);
     while !String::from_utf8_lossy(&output.lock().unwrap()).contains("READY") {

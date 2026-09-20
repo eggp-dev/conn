@@ -9,7 +9,7 @@ use conn_core::session::{KeyResult, ServerEvent};
 fn wrapped_unicode_redirect_is_reviewed_and_audited_in_full() {
     let command = format!("printf '%s' '{}' > test-file.md", "협업 실험 🚀 ".repeat(24));
     for cols in [20, 80, 132] {
-        let mut h = Harness::headless();
+        let mut h = Harness::new();
         let events = h.frontend("ui");
         h.session.resize(4, cols);
         h.agent(1, "agent");
@@ -43,7 +43,7 @@ fn wrapped_unicode_redirect_is_reviewed_and_audited_in_full() {
 #[test]
 fn wrapping_cannot_hide_a_dangerous_prefix_from_policy() {
     let command = format!("rm -- '{}' && printf '%s' 'done'", "example-".repeat(40));
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     h.session.resize(3, 40);
     h.agent(1, "agent");
     h.session.agent_request_control(1).unwrap();

@@ -65,7 +65,7 @@ fn unattended_default_is_safe_even_for_the_human_cli_path() {
 #[test]
 fn grace_in_a_tab_nobody_watches_knocks_for_attention() {
     use conn_core::session::KeyResult;
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     let events = h.frontend("ui");
     h.agent(1, "a");
     h.session.set_pacing(conn_core::Pacing { enter_grace_ms: 3000, ..Default::default() });

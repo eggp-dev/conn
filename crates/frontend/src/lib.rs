@@ -272,7 +272,7 @@ fn spawn_tab_with(app: &AppHandle, state: &AppState, window: &str, mut rows: u16
         drop(pending); abort_pending(app, state, window, &id); return Err("External session unavailable".into());
     }
     let spawned = Engine::spawn(EngineConfig {
-        profile: Some(profile), rows, cols, render_prompt: false, external_private, launch,
+        profile: Some(profile), rows, cols, external_private, launch,
         output_frame: Some(terminal_output(app.clone(), id.clone())),
         // Both graphical frontends render with xterm, regardless of the launcher TERM.
         // Explicit profile environment overrides still take precedence in Engine.
