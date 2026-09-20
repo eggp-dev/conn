@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 fn session() -> SharedSession {
-    let s: SharedSession = Arc::new(Harness::headless().session.into());
+    let s: SharedSession = Arc::new(Harness::new().session.into());
     present(&mut s.lock(), vec!["$".into()]);
     s
 }

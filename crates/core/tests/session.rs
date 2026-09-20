@@ -3,7 +3,7 @@ mod common;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use common::Harness;
+use common::{Harness, SessionExt};
 use conn_core::affordance::{Actor, Affordance};
 use conn_core::approval::{ApprovalState, Decision};
 use conn_core::authority::{AuthorityError, RevokeReason};
@@ -148,11 +148,10 @@ fn deny_blocks_and_clears_line_without_approval() {
     assert_eq!(h.pty_str(), "rm -rf /\x15");
     assert!(h.session.status().pending.is_empty());
     assert!(h.session.resolve_first_pending(Decision::Grant, "cli").is_err());
-    assert!(!h.stdout_str().contains("\x1b[?1049h"));
 }
 
 #[test]
-fn confirm_then_deny_from_prompt() {
+fn confirm_then_deny_keeps_the_lease() {
     let mut h = Harness::new();
     h.agent(1, "copilot");
     h.session.agent_request_control(1).unwrap();
@@ -166,22 +165,14 @@ fn confirm_then_deny_from_prompt() {
         other => panic!("{other:?}"),
     };
     assert_eq!(h.pty_str(), "rm -rf ./tmp", "ENTER must not reach the PTY");
-    assert!(h.stdout_str().contains("\x1b[?1049h") && h.stdout_str().contains("recursive delete"));
-    assert!(h.session.prompt_active());
     assert_eq!(h.session.check_approval(&id).unwrap().state, ApprovalState::Pending);
     assert!(h.session.affordances(Actor::Agent { conn: 1 }).contains(&Affordance::CheckApproval));
     assert!(matches!(h.session.agent_type(1, "x"), Err(SessionError::ApprovalPending(_))));
 
-    // PTY output while the prompt is up is held back, then flushed
-    h.session.pty_output(b"late");
-    assert!(!h.stdout_str().contains("late"));
-
-    h.session.human_input(b"d");
-    assert!(h.session.controller().lease().is_some(), "answering the prompt is not a takeover");
+    h.session.resolve_approval(&id, Decision::Deny, "cli").unwrap();
+    assert!(h.session.controller().lease().is_some(), "deciding an approval is not a takeover");
     assert_eq!(h.session.check_approval(&id).unwrap().state, ApprovalState::Denied);
     assert_eq!(h.pty_str(), "rm -rf ./tmp\x15");
-    assert!(h.stdout_str().ends_with("\x1b[?1049llate"));
-    assert!(!h.session.prompt_active());
     let exec = h.audit_events().into_iter().find(|e| e.action == "exec").unwrap();
     assert_eq!(exec.fields["policy"], "confirm");
     assert_eq!(exec.fields["approval"], "denied");
@@ -199,13 +190,13 @@ fn confirm_then_grant_via_cli_and_session_allow() {
     assert_eq!(info.state, ApprovalState::Granted);
     assert_eq!(h.pty_str(), "kubectl delete pod a\r");
 
-    // second time: [A] promotes the label for the session
+    // second time: allow_session promotes the label for the session
     h.clear_pty();
     common::present(&mut h.session, vec!["$ ".into()]);
     h.session.agent_type(1, "kubectl delete pod b").unwrap();
     assert!(matches!(h.session.agent_send_key(1, "ENTER").unwrap(), KeyResult::Pending { .. }));
     common::present(&mut h.session, vec!["Approval: delete resource".into()]);
-    h.session.human_input(b"A");
+    h.session.resolve_first_pending(Decision::AllowSession, "cli").unwrap();
     assert_eq!(h.pty_str(), "kubectl delete pod b\r");
     assert_eq!(h.session.status().session_allows, vec!["delete resource".to_string()]);
 
@@ -229,7 +220,6 @@ fn approval_expires_via_tick() {
     h.session.tick(Instant::now() + Duration::from_secs(1));
     assert_eq!(h.session.check_approval(&approval_id).unwrap().state, ApprovalState::Expired);
     assert_eq!(h.pty_str(), "sudo ls\x15");
-    assert!(!h.session.prompt_active());
 }
 
 #[test]
@@ -254,7 +244,6 @@ fn agent_disconnect_denies_its_pending_approval() {
     let KeyResult::Pending { approval_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
     h.session.connection_closed(1);
     assert_eq!(h.session.check_approval(&approval_id).unwrap().state, ApprovalState::Denied);
-    assert!(!h.session.prompt_active());
 }
 
 #[test]

@@ -3,13 +3,11 @@
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use uuid::Uuid;
 
 pub type ConnId = u64;
 
 #[derive(Debug, Clone)]
 pub struct Lease {
-    pub id: Uuid,
     pub seq: u64,
     pub agent_id: String,
     pub conn: ConnId,
@@ -74,8 +72,6 @@ pub struct Authority {
 }
 
 impl Authority {
-    pub const DEFAULT_TTL: Duration = Duration::from_secs(60);
-
     pub fn new(ttl: Duration) -> Self {
         Self { controller: Controller::Human, ttl, seq: 0 }
     }
@@ -108,7 +104,6 @@ impl Authority {
         }
         self.seq += 1;
         let lease = Lease {
-            id: Uuid::new_v4(),
             seq: self.seq,
             agent_id: agent_id.to_string(),
             conn,

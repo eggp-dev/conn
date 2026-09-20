@@ -1,6 +1,6 @@
 #![cfg(unix)]
 mod common;
-use common::{Buf, SharedBuf};
+use common::{Buf, SessionExt};
 use conn_core::{
     audit::{Audit, Event},
     backend::Profile,
@@ -56,7 +56,7 @@ impl Shell {
             policy: Some(PolicyStore::from_policy(
                 Policy::parse("default: allow\nrequire_intent: false\n").unwrap(),
             )),
-            output: Some(Box::new(SharedBuf(output.clone()))),
+            output_frame: Some(common::frame_sink(&output)),
             ..Default::default()
         })
         .unwrap();
