@@ -41,6 +41,13 @@ class RepositoryTests(unittest.TestCase):
         self.assertTrue(any("absent.md" in error for error in errors))
         self.assertTrue(any("missing-reference.md" in error for error in errors))
 
+    def test_template_placeholder_destinations_are_not_relative_paths(self):
+        source = "[asset]({repository}/releases/download/{tag}/{mac_dmg}) [odd]({Not-One}/x.md) [gone](absent/{tag}.md)"
+        errors = check_repo.markdown_errors(self.root / "notes.md", self.root, source)
+        self.assertEqual(len(errors), 2)
+        self.assertTrue(any("{Not-One}/x.md" in error for error in errors))
+        self.assertTrue(any("absent/{tag}.md" in error for error in errors))
+
     def test_relative_links_cannot_escape_source_or_link_private_files(self):
         readme = self.root / "README.md"
         local = self.root / "SETUP.local.md"
