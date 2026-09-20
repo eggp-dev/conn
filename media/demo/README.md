@@ -58,8 +58,6 @@ Actual source clips are in [`public/footage/collaboration/`](public/footage/coll
 
 `src/footage.ts` defines the 1,860-frame edit. `src/copy.ts` contains both languages. The composition shows the complete captured frame at a constant scale. Long waits and setup detours may be omitted, preserving the order of requests, decisions and results. A hold may retain an actual recorded frame; it must not fabricate a later state.
 
-The earlier `public/footage/*.mp4` clips and `scripts/agent-driver.py` belong to the first scripted RPC demo. **They are not used by this edit.**
-
 ## Review before publication
 
 - Compare the requested commands and results against the source captures and provenance.

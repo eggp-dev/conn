@@ -65,16 +65,9 @@ https://github.com/user-attachments/assets/c20ec712-1915-44c2-a6a2-08b83e6951c4
 
 The agent fixes a failing test. You take the keyboard, add an edge case that fails, and ask it to continue from the terminal. 62 seconds. [About this recording](docs/demo-test-repair.md)
 
-## New in v0.8.0
-
-- Agents keep reading and working in a shared session while its window is minimized, behind another app, or on another tab.
-- A new agent connection waits until you press **Allow**. You can turn the question off in **Settings → Agents**.
-- Control stays with one tab at a time, and your typing still takes it back at once.
-
-Upgrade the app and restart its MCP clients together. [Changelog](CHANGELOG.md) · [Product contract](docs/PRD.md) · [Extensions](docs/extensions.md)
-
 ## More
 
+- [Changelog](CHANGELOG.md) · [Product contract](docs/PRD.md) · [Extensions](docs/extensions.md). After an update, restart your MCP clients too.
 - [Earlier film: the agent starts in the wrong folder, you correct it](docs/demo.md)
 - [The story: a small correction in a shared terminal](docs/collaboration-story.md)
 - [FAQ: control, SSH, passwords, and history](docs/faq.md)

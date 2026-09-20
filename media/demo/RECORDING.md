@@ -8,7 +8,7 @@ The left pane is the real CLI’s PTY rendered with xterm. The right pane is Con
 
 The operator scripted the scenario and automated the **human role**: entering prompts in Codex, approving requests, and typing into Conn. No independent person was recorded. This is a live demonstration with an external model, not an unscripted usability study. The film shortens waiting and may omit setup detours, including the actual first attempt to use unavailable `python` followed by recovery with `python3`. The final edit holds a fixed view, with no zooms or pans.
 
-The [six source clips](public/footage/collaboration/) and their [provenance](public/footage/collaboration/provenance.json) identify the footage used. Original JPEG frames, timestamp manifests and private CLI/RPC logs remain outside public assets. Do not publish logs or `connection.json`: they can contain private text or a local transport token. The initial scripted driver in `scripts/agent-driver.py` is legacy and was **not used** for this recording.
+The [six source clips](public/footage/collaboration/) and their [provenance](public/footage/collaboration/provenance.json) identify the footage used. Original JPEG frames, timestamp manifests and private CLI/RPC logs remain outside public assets. Do not publish logs or `connection.json`: they can contain private text or a local transport token.
 
 ## Reproduce the isolated session
 

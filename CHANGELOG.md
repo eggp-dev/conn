@@ -27,12 +27,11 @@
 - Remove public owner impersonation, raw-output subscriptions, unattended Entrust, and terminal-proxy/headless startup. Keep MCP, agent commands and local profile/log utilities.
 - Add a versioned extension registry, declarative themes and opt-in native OpenAI completion proposals using the OS credential store. Acceptance inserts text; execution remains separate.
 - Keep shared UI, owner-window enforcement, bilingual settings and the reserved interaction dock. Extend rendering, authentication, authority and cancellation regression coverage.
+- Validate native macOS sharing, hidden/masked authentication, Keychain and live-lease focus/minimization guards; distinguish development-app evidence from distribution verification. [macOS results](docs/shared-surface-macos-validation-results.md).
 
 This preview introduces a breaking protocol change. Restart the app and its MCP clients together; live sessions are not migrated. Existing profile/settings files and saved activity remain. Reconnected agents do not inherit explicit selection by display name. See [the product contract](docs/PRD.md), [protocol v2](docs/protocol.md) and [extensions](docs/extensions.md).
 
 한국어: 실제 표시 화면을 관찰 기준으로 통합하고, 같은 셸에서 연결별 공유를 시작·중단할 수 있게 했습니다. 구형 headless·Entrust·공개 소켓의 소유자 경로를 제거하고, 선언형 테마와 OS 키 저장소 기반 자동완성을 추가합니다. 프로토콜이 바뀌므로 앱과 MCP를 함께 재시작해야 합니다. 기존 파일과 저장 기록은 유지하지만 실행 중인 셸을 이전하지는 않습니다.
-
-- Validate native macOS sharing, hidden/masked authentication, Keychain and live-lease focus/minimization guards; distinguish development-app evidence from distribution verification. [macOS results](docs/shared-surface-macos-validation-results.md).
 
 ## 0.6.0 — Preview · 2026-09-17
 
@@ -40,26 +39,20 @@ This preview introduces a breaking protocol change. Restart the app and its MCP 
 - Remove the macOS DMG license agreement while retaining bundled MIT notices and Developer ID notarization.
 - Keep timeline activity scoped to its shell and preserve readable markers, 24px click targets and horizontal navigation.
 - Unify dock motion, menus and settings surfaces. Add compact agent setup, advanced disclosures, numeric pacing, unsaved-change protection and concise diagnostics.
-
-한국어: 앱 내 서명 업데이트, 동의 화면 없는 macOS 설치, 셸별 타임라인과 최소 클릭 영역, 일관된 모션 및 간결한 설정을 추가했습니다. 설치·재시작은 사용자가 선택합니다.
-
-
 - Restore human command history through local Bash/Zsh execution hooks, without collecting application input or changing user dotfiles. SSH and editor sessions remain usable; only the outer local command is recorded.
 - Join shell start/completion to agent review records by submission ID; show working directory, exit code, duration, and unconfirmed completion. Keep private external sessions excluded and show unavailable integration explicitly.
-
 - Scope native frontend event subscriptions to their owning window, preventing other windows from receiving private tab events.
 - Linux: add a default-off D-Bus external automation adapter with explicit caller executable permissions, shared private-session handling, and native-window acceptance coverage.
-
 - Stop reconstructing ordinary human commands from raw keystrokes. Password, paste and editor input no longer create command history or payload-bearing traces; unfinished human input blocks agent appends until completed or interrupted.
 - Restrict Unix audit files to owner-only permissions and reject symlink destinations. Add English/Korean notices explaining agent screen access and retained request details.
-
-
 - Replace recorded, agent-based external automation with private, owner-scoped native sessions. A startup command launches the supplied program directly on the PTY and replaces the allowed local profile's executable and arguments.
 - Route external writes through a dedicated input source, without agent control approval, policy review, proposals or Grace. Ordinary AI-agent collaboration keeps its existing rules.
 - Exclude private external activity, raw human input and payload-derived titles from Conn recording; block MCP/public IPC discovery and access. No private-to-agent sharing is implemented.
 - Keep request status metadata-only with generic errors. Accept and discard the legacy `intent` parameter; revoke external writes on human input, cancellation, disable or profile removal.
 - Require one explicit re-enable of previous automation permissions; keep the allowed profile selection. Earlier audit/timeline files and backups are not automatically removed.
 - Rename launcher examples generically and update the scripting dictionary and English/Korean guides. Native Apple Event and external-launcher acceptance testing remains required before release.
+
+한국어: 앱 내 서명 업데이트, 동의 화면 없는 macOS 설치, 셸별 타임라인과 최소 클릭 영역, 일관된 모션 및 간결한 설정을 추가했습니다. 설치·재시작은 사용자가 선택합니다.
 
 한국어: 외부 자동화를 비공유 세션과 전용 입력 경로로 교체하는 변경입니다. 시작 프로그램은 기본 셸에 입력하지 않고 직접 실행하며, 에이전트 승인·정책·Grace를 거치지 않습니다. 비공유 활동과 원시 사람 입력은 Conn 기록에 남기지 않고 MCP·공개 IPC 접근을 차단합니다. 이전 허용은 한 번 다시 켜야 합니다. 일반 세션의 원시 사람 입력 기록도 제거했습니다. AI 공유는 아직 구현하지 않았으며, 과거 기록도 자동 삭제하지 않습니다. 실제 Mac 검증은 배포 전 별도로 필요합니다.
 
