@@ -32,8 +32,8 @@ or passwords in a report, screenshot, shell command or commit.
 1. Confirm native WebKit viewport text and MCP snapshots agree for Unicode, wide
    characters, wrapping, scroll position and alternate-screen programs. Check
    concealed, transparent and equal foreground/background text. Masked input must
-   remain masked. Snapshots are text-only; explicitly report any missing
-   renderer capability.
+   remain masked. Verify PNG output where available; explicitly report
+   `imageUnavailable` or any missing renderer capability.
 2. Check inactive tabs, internal overlays, unfocused/minimized windows and window
    closure: shared sessions must remain readable and writable under the same lease and policy. Closing a window must terminate its sessions and cancel pending work.
    The contract does not claim detection of every other application's occlusion.
