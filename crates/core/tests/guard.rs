@@ -5,7 +5,7 @@ mod common;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use common::Harness;
+use common::{Harness, SessionExt};
 use conn_core::policy::{Decision, EXAMPLE_POLICY};
 use conn_core::session::{KeyResult, SessionError};
 

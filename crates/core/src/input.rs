@@ -5,14 +5,6 @@
 //! tracker cannot follow. Those mark the tracker `dirty`; the session then falls back
 //! to the VT model's cursor line at ENTER time.
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LineEvent {
-    /// ENTER was pressed. Carries the tracked line as of that moment.
-    Enter { tracked: String, dirty: bool, prompt_col: Option<u16> },
-    /// Ctrl-C was pressed; the line was discarded.
-    Interrupt,
-}
-
 #[derive(Debug, Default)]
 pub struct InputTracker {
     buf: Vec<char>,
@@ -58,8 +50,7 @@ impl InputTracker {
     /// Feed bytes written to the PTY. `cursor_col` is the VT cursor column *before*
     /// these bytes were echoed; it is captured as the prompt width on the first byte
     /// of a new line.
-    pub fn feed(&mut self, bytes: &[u8], cursor_col: u16) -> Vec<LineEvent> {
-        let mut events = Vec::new();
+    pub fn feed(&mut self, bytes: &[u8], cursor_col: u16) {
         let mut i = 0;
         while i < bytes.len() {
             let b = bytes[i];
@@ -78,23 +69,8 @@ impl InputTracker {
                     i += 1;
                     continue;
                 }
-                b'\r' | b'\n' => {
-                    self.flush_pending();
-                    if b == b'\n' && i > 0 && bytes[i - 1] == b'\r' {
-                        i += 1;
-                        continue;
-                    }
-                    events.push(LineEvent::Enter {
-                        tracked: self.line(),
-                        dirty: self.dirty,
-                        prompt_col: self.prompt_col,
-                    });
-                    self.reset();
-                }
-                0x03 => {
-                    events.push(LineEvent::Interrupt);
-                    self.reset();
-                }
+                // ENTER submits the line and Ctrl-C discards it; either way it is gone.
+                b'\r' | b'\n' | 0x03 => self.reset(),
                 0x15 => {
                     // Ctrl-U: kill line
                     self.flush_pending();
@@ -134,7 +110,6 @@ impl InputTracker {
             }
             i += 1;
         }
-        events
     }
 
     fn flush_complete_utf8(&mut self) {
@@ -184,16 +159,6 @@ pub fn resolve_command(tracked: &str, dirty: bool, cursor_line: &str, prompt_col
         return tracked.trim().to_string();
     }
     match from_vt {
-        Some(v) if !v.trim().is_empty() => v.trim().to_string(),
-        _ => tracked.trim().to_string(),
-    }
-}
-
-/// Like `resolve_command` but always prefers the VT line when it is available and
-/// differs from the tracked line. This is a display helper, not a safe policy or
-/// audit source: the cursor row may contain only the end of a wrapped command.
-pub fn resolve_command_prefer_vt(tracked: &str, cursor_line: &str, prompt_col: Option<u16>) -> String {
-    match strip_prompt(cursor_line, prompt_col, tracked) {
         Some(v) if !v.trim().is_empty() => v.trim().to_string(),
         _ => tracked.trim().to_string(),
     }

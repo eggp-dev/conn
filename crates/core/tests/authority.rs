@@ -10,7 +10,7 @@ fn human_to_agent_and_back() {
     assert!(matches!(a.controller(), Controller::Agent(l) if l.conn == 1));
     assert_eq!(lease.label(), "lease#1");
     let revoked = a.revoke().unwrap();
-    assert_eq!(revoked.id, lease.id);
+    assert_eq!(revoked.seq, lease.seq);
     assert!(a.controller().is_human());
 }
 

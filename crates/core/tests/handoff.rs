@@ -3,7 +3,7 @@ mod common;
 
 use std::time::{Duration, Instant};
 
-use common::Harness;
+use common::{Harness, SessionExt};
 use conn_core::affordance::{Actor, Affordance};
 use conn_core::session::{AgentMode, ControlOutcome, ControlRequestState, KeyResult, ProposalState, ServerEvent, SessionError};
 
@@ -13,7 +13,7 @@ fn names(evs: &[ServerEvent]) -> Vec<String> {
 
 #[test]
 fn copilot_proposal_committed_by_human() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     let fe = h.frontend("ui");
     h.agent(1, "claude");
     h.session.set_mode(AgentMode::Copilot).unwrap();
@@ -42,7 +42,7 @@ fn copilot_proposal_committed_by_human() {
 
 #[test]
 fn copilot_confirm_is_granted_by_commit_but_deny_still_blocks() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     h.agent(1, "claude");
     h.session.set_mode(AgentMode::Copilot).unwrap();
     h.session.agent_request_control(1).unwrap();
@@ -63,7 +63,7 @@ fn copilot_confirm_is_granted_by_commit_but_deny_still_blocks() {
 
 #[test]
 fn proposal_is_rejected_by_human_typing_or_esc() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     h.agent(1, "claude");
     h.session.set_mode(AgentMode::Copilot).unwrap();
     h.session.agent_request_control(1).unwrap();
@@ -159,7 +159,7 @@ fn hand_back_returns_control_to_last_agent() {
 
 #[test]
 fn session_allow_can_be_revoked() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     let fe = h.frontend("ui");
     h.agent(1, "claude");
     h.session.agent_request_control(1).unwrap();

@@ -1,13 +1,13 @@
 //! Shared-session observation is independent of desktop and tab focus.
 mod common;
-use common::{Harness, present};
+use common::{Harness, SessionExt, present};
 use conn_core::{affordance::Actor, session::{SessionError, ConnKind}, ipc::{self,Hub,Client}};
 use serde_json::json;
 use std::sync::Arc;
 
 #[test]
 fn background_screen_contains_output_only_and_no_scrollback() {
-    let mut h=Harness::headless(); h.agent(1,"a"); h.session.set_attended(false);
+    let mut h=Harness::new(); h.agent(1,"a"); h.session.set_attended(false);
     h.session.human_input(b"UN_ECHOED_PASSWORD\r");
     h.session.pty_output(b"User: demo\r\nPassword: ******");
     let snap=h.session.snapshot(Actor::Agent{conn:1}).unwrap();
@@ -19,7 +19,7 @@ fn background_screen_contains_output_only_and_no_scrollback() {
 
 #[test]
 fn sharing_keeps_pty_and_requires_selected_connection_immediately() {
-    let mut h=Harness::headless(); h.agent(1,"selected"); h.agent(2,"other");
+    let mut h=Harness::new(); h.agent(1,"selected"); h.agent(2,"other");
     h.session.set_shared(false).unwrap();
     h.session.human_input(b"authenticated\r");
     h.session.set_shared_with_agents(true,vec![1]).unwrap();
@@ -39,7 +39,7 @@ fn sharing_keeps_pty_and_requires_selected_connection_immediately() {
 
 #[test]
 fn physical_input_is_not_forgotten_by_sharing_transition() {
-    let mut h=Harness::headless(); h.agent(1,"a");
+    let mut h=Harness::new(); h.agent(1,"a");
     h.session.set_shared(false).unwrap(); h.session.human_input(b"unfinished");
     let generation=h.session.surface_generation();let audit_len=h.audit_events().len();
     assert!(matches!(h.session.set_shared_with_agents(true,vec![1]),Err(SessionError::InputPending)));
@@ -74,7 +74,7 @@ fn persistent_private_clients_refresh_tools_on_selection_removal_and_stop() {
             }
         }
     }
-    let mut h=Harness::headless();h.session.set_shared(false).unwrap();
+    let mut h=Harness::new();h.session.set_shared(false).unwrap();
     let s=Arc::new(parking_lot::Mutex::new(h.session));let hub=Hub::single("private-session",s.clone());
     let dir=tempfile::tempdir().unwrap();let path=dir.path().join("catalog.sock");
     let _guard=ipc::serve_in_background(path.clone(),hub).unwrap();
@@ -103,8 +103,8 @@ fn persistent_private_clients_refresh_tools_on_selection_removal_and_stop() {
 
 #[test]
 fn untrusted_frontend_registration_and_owner_dispatch_are_rejected() {
-    let mut h=Harness::headless(); h.agent(1,"a");
-    h.session.register_frontend(99,"spoof",Box::new(common::VecSink(Default::default())),true);
+    let mut h=Harness::new(); h.agent(1,"a");
+    h.session.register_frontend(99,"spoof",Box::new(common::VecSink(Default::default())));
     assert_ne!(h.session.conn_kind(99),Some(ConnKind::Frontend));
     let s=Arc::new(parking_lot::Mutex::new(h.session));
     for method in ["input","resize","set_shared","publish_surface","set_mode","approve","decide_control","set_attended"] {
@@ -115,7 +115,7 @@ fn untrusted_frontend_registration_and_owner_dispatch_are_rejected() {
 
 #[test]
 fn socket_identity_cannot_escalate_and_private_candidates_do_not_disclose_screen() {
-    let mut h=Harness::headless(); h.session.set_shared(false).unwrap();
+    let mut h=Harness::new(); h.session.set_shared(false).unwrap();
     let s=Arc::new(parking_lot::Mutex::new(h.session)); let hub=Hub::single("secret",s.clone());
     let dir=tempfile::tempdir().unwrap(); let path=dir.path().join("surface.sock");
     let _guard=ipc::serve_in_background(path.clone(),hub.clone()).unwrap();
@@ -133,7 +133,7 @@ fn socket_identity_cannot_escalate_and_private_candidates_do_not_disclose_screen
 
 #[test]
 fn completion_acceptance_is_bound_to_grid_and_cannot_execute() {
-    let mut h=Harness::headless();h.session.pty_output(b"$ echo");
+    let mut h=Harness::new();h.session.pty_output(b"$ echo");
     let f=h.session.authoritative_surface().unwrap();
     assert!(h.session.accept_completion(&f.surface_id,f.generation,f.revision,"hello\r").is_err());
     h.session.accept_completion(&f.surface_id,f.generation,f.revision,"hello").unwrap();
@@ -145,8 +145,8 @@ fn completion_acceptance_is_bound_to_grid_and_cannot_execute() {
 #[test]
 fn explicit_switch_recovers_from_a_closed_or_private_binding() {
     for close_old in [true,false] {
-        let old=Arc::new(parking_lot::Mutex::new(Harness::headless().session));
-        let target=Arc::new(parking_lot::Mutex::new(Harness::headless().session));
+        let old=Arc::new(parking_lot::Mutex::new(Harness::new().session));
+        let target=Arc::new(parking_lot::Mutex::new(Harness::new().session));
         let hub=Hub::single("old",old.clone());
         hub.set_opener(Arc::new(|_,_|Err("not needed".into())));
         let dir=tempfile::tempdir().unwrap();let path=dir.path().join("switch.sock");
@@ -175,7 +175,7 @@ fn explicit_switch_recovers_from_a_closed_or_private_binding() {
 
 #[test]
 fn private_activity_is_not_recorded_and_history_is_not_backfilled() {
-    let mut h=Harness::headless(); h.session.set_shared(false).unwrap();
+    let mut h=Harness::new(); h.session.set_shared(false).unwrap();
     let before=h.audit_events().len();
     h.session.set_control_gate(true); h.session.set_attended(false);h.session.set_attended(true);
     h.session.human_input(b"PRIVATE_TEST_INPUT\r");
@@ -188,7 +188,7 @@ fn private_activity_is_not_recorded_and_history_is_not_backfilled() {
 #[test]
 fn background_approval_survives_tab_switch_but_requires_human_decision() {
     use conn_core::{session::KeyResult,approval::{Decision,ApprovalState}};
-    let mut h=Harness::headless();h.agent(1,"a");h.session.agent_request_control(1).unwrap();
+    let mut h=Harness::new();h.agent(1,"a");h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1,"sudo ls").unwrap();
     let KeyResult::Pending{approval_id,..}=h.session.agent_send_key(1,"ENTER").unwrap() else {panic!()};
     h.session.set_attended(false);
@@ -202,7 +202,7 @@ fn background_approval_survives_tab_switch_but_requires_human_decision() {
 fn background_grace_executes_but_human_input_still_cancels() {
     use conn_core::{session::{KeyResult,ExecState},Pacing};use std::time::{Duration,Instant};
     for takeover in [false,true] {
-        let mut h=Harness::headless();h.agent(1,"a");
+        let mut h=Harness::new();h.agent(1,"a");
         h.session.set_pacing(Pacing{enter_grace_ms:100,..Pacing::default()});
         h.session.agent_request_control(1).unwrap();h.session.agent_type(1,"echo safe").unwrap();
         let KeyResult::Scheduled{exec_id,..}=h.session.agent_send_key(1,"ENTER").unwrap() else {panic!()};
@@ -216,7 +216,7 @@ fn background_grace_executes_but_human_input_still_cancels() {
 
 #[test]
 fn idle_screen_needs_no_renderer_heartbeat() {
-    let mut h=Harness::headless();h.agent(1,"a");h.session.agent_request_control(1).unwrap();
+    let mut h=Harness::new();h.agent(1,"a");h.session.agent_request_control(1).unwrap();
     h.session.set_attended(false);
     std::thread::sleep(std::time::Duration::from_millis(3050));
     assert!(h.session.snapshot(Actor::Agent{conn:1}).is_ok());
@@ -229,7 +229,7 @@ fn external_origin_can_share_without_restoring_external_writer_or_startup_histor
     let output:common::Buf=Default::default();let (audit,log)=Audit::memory();
     let mut s=Session::new_external_private(SessionConfig{
         rows:24,cols:80,audit,policy:PolicyStore::from_policy(Policy::allow_all()),pty_writer:Box::new(common::SharedBuf(output.clone())),
-        output:None,master:None,pacing:Pacing::default(),render_prompt:false,shell_pid:None,
+        master:None,pacing:Pacing::default(),shell_pid:None,
     });
     s.write_external(b"SYNTHETIC_TEST_PASSWORD").unwrap();
     let generation=s.surface_generation();
@@ -253,7 +253,7 @@ fn external_origin_can_share_without_restoring_external_writer_or_startup_histor
 #[test]
 fn public_agent_cannot_read_another_agents_approval_command() {
     use conn_core::session::KeyResult;
-    let mut h=Harness::headless();h.agent(1,"a");h.agent(2,"b");h.session.agent_request_control(1).unwrap();
+    let mut h=Harness::new();h.agent(1,"a");h.agent(2,"b");h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1,"sudo ls").unwrap();
     let KeyResult::Pending{approval_id,..}=h.session.agent_send_key(1,"ENTER").unwrap() else {panic!()};
     let session=Arc::new(parking_lot::Mutex::new(h.session));
@@ -263,7 +263,7 @@ fn public_agent_cannot_read_another_agents_approval_command() {
 
 #[test]
 fn public_discovery_and_hello_do_not_reveal_unselected_shared_session() {
-    let mut h=Harness::headless();h.session.set_shared(false).unwrap();
+    let mut h=Harness::new();h.session.set_shared(false).unwrap();
     let s=Arc::new(parking_lot::Mutex::new(h.session));let hub=Hub::single("selected-only",s.clone());
     let dir=tempfile::tempdir().unwrap();let path=dir.path().join("selected.sock");let _guard=ipc::serve_in_background(path.clone(),hub).unwrap();
     let selected=Client::connect(&path).unwrap();let id=selected.hello("agent","chosen").unwrap()["conn"].as_u64().unwrap();
@@ -278,7 +278,7 @@ fn public_discovery_and_hello_do_not_reveal_unselected_shared_session() {
 
 #[test]
 fn explicit_hello_session_is_respected_without_moving_humans_view() {
-    let a=Harness::headless();let b=Harness::headless();
+    let a=Harness::new();let b=Harness::new();
     let sa=Arc::new(parking_lot::Mutex::new(a.session));let sb=Arc::new(parking_lot::Mutex::new(b.session));
     let hub=Hub::new();hub.add("a",sa);hub.add("b",sb);
     let dir=tempfile::tempdir().unwrap();let path=dir.path().join("binding.sock");let _guard=ipc::serve_in_background(path.clone(),hub.clone()).unwrap();
@@ -289,7 +289,7 @@ fn explicit_hello_session_is_respected_without_moving_humans_view() {
 
 #[test]
 fn output_is_immediately_observable_without_renderer_acknowledgement() {
-    let mut h=Harness::headless();h.agent(1,"a");
+    let mut h=Harness::new();h.agent(1,"a");
     h.session.agent_request_control(1).unwrap();h.session.agent_type(1,"echo ready").unwrap();
     h.session.pty_output(b"$ echo ready");h.session.set_attended(false);
     assert!(h.session.status().surface_available);
@@ -301,7 +301,7 @@ fn output_is_immediately_observable_without_renderer_acknowledgement() {
 fn agent_cannot_submit_a_cursor_line_with_hidden_text() {
     // The resolved command is echoed to the agent and may come from the raw cursor row.
     use conn_core::session::KeyResult;
-    let mut h=Harness::headless();h.agent(1,"a");h.session.agent_request_control(1).unwrap();
+    let mut h=Harness::new();h.agent(1,"a");h.session.agent_request_control(1).unwrap();
     h.session.pty_output(b"\x1b[2J\x1b[Htoken: \x1b[8mHIDDEN_TOKEN\x1b[28m");
     assert!(!h.session.snapshot(Actor::Agent{conn:1}).unwrap().projection.screen.join("\n").contains("HIDDEN_TOKEN"));
     let err=h.session.agent_send_key(1,"ENTER").unwrap_err();

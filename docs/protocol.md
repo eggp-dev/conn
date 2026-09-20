@@ -80,7 +80,6 @@ the owner's scroll position or include window chrome and overlays.
 | `cursor` | `{row,col}`, or null when hidden |
 | `screen` | Current grid rows, with ANSI conceal and explicit equal colors suppressed |
 | `alternateScreen` | Whether the alternate terminal screen is active |
-| `imageUnavailable` | True: this contract provides terminal text, not a screenshot |
 | `controller`, `processAlive` | Collaboration/process state |
 | `mode`, `effectiveMode` | Configured and current agent behavior |
 
@@ -144,8 +143,8 @@ credential channel.
 Native frontend events are not a public event feed. Agents receive relevant changes
 such as `tools_changed`, `mode_changed`, attention changes, their control revocation,
 approval resolution and proposal/execution results. Events are session-tagged. Raw
-`output`, owner approval cards, other actors' original request payloads and owner settings
-are not made available by setting an agent's `streamOutput` flag.
+PTY output is never an event, and owner approval cards, other actors' original request
+payloads and owner settings are not made available by setting an agent's `streamOutput` flag.
 
 Queued agent events and successful responses carry a participation generation check.
 Snapshots additionally carry the surface generation. Before writing to the transport,
@@ -157,7 +156,7 @@ content. Revocation cannot recall bytes already delivered to the client/model.
 `hello_required`, `owner_required`, `surface_unavailable`, `not_available`,
 `busy`, `not_controller`, `lease_expired`, `process_exited`, `invalid_input`,
 `not_found`, `rate_limited`, `input_pending`, `approval_pending`, `exec_pending`, `proposal_pending`, `intent_required`,
-`masked`, `control_denied`, `wrong_mode`, `unsupported`, `connection_closing`, `admission_pending`, `admission_denied`, `io`, `parse`.
+`masked`, `control_denied`, `wrong_mode`, `unsupported`, `connection_closing`, `admission_pending`, `admission_denied`, `parse`.
 
 Private/unauthorized session access uses a generic unavailable response. The owner can start the app with `CONN_TRACE_REFUSALS=1` to print the cause of each such refusal to stderr (reasons and identifiers only). A client should
 not automatically bypass an unavailable surface, switch to a separate shell, or claim a

@@ -4,11 +4,11 @@
 //! ```no_run
 //! use conn_core::{Engine, EngineConfig};
 //! let engine = Engine::spawn(EngineConfig::default()).unwrap();
-//! engine.subscribe("ui", Box::new(|ev| println!("{ev:?}")), true);
+//! engine.subscribe("ui", Box::new(|ev| println!("{ev:?}")));
 //! engine.write_input(b"ls\r");
 //! ```
 
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
@@ -43,8 +43,6 @@ pub struct EngineConfig {
     pub profile: Option<crate::backend::Profile>,
     /// Shell to spawn. Default: `$SHELL`, else `/bin/zsh`.
     pub shell: Option<String>,
-    /// Extra command to run before the login shell (`shell -l -c "CMD; exec shell -l"`).
-    pub command: Vec<String>,
     pub rows: u16,
     pub cols: u16,
     pub cwd: Option<PathBuf>,
@@ -52,14 +50,8 @@ pub struct EngineConfig {
     pub policy: Option<PolicyStore>,
     pub audit: Option<Audit>,
     pub pacing: Pacing,
-    /// Where PTY output goes for the human. `None` = only streamed to subscribers.
-    pub output: Option<Box<dyn Write + Send>>,
     /// Native renderer delivery with sequencing; installed before reader startup.
     pub output_frame: Option<crate::session::OutputFrameSink>,
-    /// Draw the approval prompt into `output`. Frontends set false.
-    pub render_prompt: bool,
-    /// How often the session tick runs (lease/approval expiry, grace timers, screen events).
-    pub tick: Duration,
 }
 
 impl Default for EngineConfig {
@@ -69,7 +61,6 @@ impl Default for EngineConfig {
             launch: LaunchSpec::ProfileDefault,
             profile: None,
             shell: None,
-            command: vec![],
             rows: 24,
             cols: 80,
             cwd: None,
@@ -77,13 +68,13 @@ impl Default for EngineConfig {
             policy: None,
             audit: None,
             pacing: Pacing::default(),
-            output: None,
             output_frame: None,
-            render_prompt: false,
-            tick: Duration::from_millis(50),
         }
     }
 }
+
+/// How often the session tick runs (lease/approval expiry, grace timers, screen events).
+const TICK: Duration = Duration::from_millis(50);
 
 pub struct Engine {
     killer: parking_lot::Mutex<ChildKiller>,
@@ -92,7 +83,6 @@ pub struct Engine {
     exited: Arc<AtomicBool>,
     exit_code: parking_lot::Mutex<Option<Option<u32>>>,
     shell: String,
-    pid: Option<u32>,
 }
 
 pub fn default_shell() -> String {
@@ -139,9 +129,6 @@ impl Engine {
 
         let profile = cfg.profile.clone().unwrap_or_else(|| crate::backend::Profile::local("local-default".into(), cfg.shell.clone().unwrap_or_else(default_shell)));
         let mut plan = profile.prepare()?;
-        if cfg.external_private && !cfg.command.is_empty() {
-            return Err("External sessions require a direct launch specification".into());
-        }
         if let LaunchSpec::Program { executable, argv } = cfg.launch {
             if !cfg.external_private || profile.backend != crate::backend::BackendKind::Local {
                 return Err("Direct startup requires a private local session".into());
@@ -155,27 +142,8 @@ impl Engine {
             plan.program = executable;
             plan.args = argv;
         }
-        if !cfg.command.is_empty() {
-            if profile.backend != crate::backend::BackendKind::Local { return Err("Startup commands with -- are supported for local profiles only".into()); }
-            use crate::backend::{ShellKind,quote_posix};
-            plan.args = match profile.shell {
-                ShellKind::Posix | ShellKind::Fish => {
-                    let joined = cfg.command.join(" "); // Preserve the documented -- shell-command semantics.
-                    vec!["-l".into(), "-c".into(), format!("{joined}; exec {} -l",quote_posix(&plan.program))]
-                }
-                ShellKind::PowerShell => {
-                    let joined = cfg.command.iter().map(|s| format!("'{}'",s.replace('\'',"''"))).collect::<Vec<_>>().join(" ");
-                    vec!["-NoLogo".into(),"-NoExit".into(),"-Command".into(),format!("& {joined}")]
-                }
-                ShellKind::Cmd => {
-                    if cfg.command.iter().any(|s|s.contains(['"','%','!','^','&','|','<','>','\r','\n'])) { return Err("cmd startup arguments contain shell operators; enter this command interactively".into()); }
-                    vec!["/D".into(),"/K".into(),cfg.command.iter().map(|s|format!("\"{s}\"")).collect::<Vec<_>>().join(" ")]
-                }
-                ShellKind::Custom => return Err("Startup commands require a known shell dialect".into()),
-            };
-        }
         #[cfg(unix)]
-        let integration = if !cfg.external_private && cfg.command.is_empty() && profile.backend == crate::backend::BackendKind::Local {
+        let integration = if !cfg.external_private && profile.backend == crate::backend::BackendKind::Local {
             crate::shell_integration::Integration::prepare(&mut plan, &cfg.env).ok().flatten()
         } else { None };
         let shell = profile.program.clone();
@@ -197,11 +165,8 @@ impl Engine {
         if !cfg.external_private { audit.record(
             "system",
             "session_start",
-            json!({ "pid": pid, "shell": shell, "profileId": profile.id, "backend": profile.backend, "command": cfg.command, "rows": rows, "cols": cols }),
+            json!({ "pid": pid, "shell": shell, "profileId": profile.id, "backend": profile.backend, "rows": rows, "cols": cols }),
         ); }
-        if !cfg.command.is_empty() {
-            audit.record("human", "exec", json!({ "cmd": cfg.command.join(" "), "via": "argv" }));
-        }
 
         let session_cfg = SessionConfig {
             rows,
@@ -209,10 +174,8 @@ impl Engine {
             audit,
             policy,
             pty_writer,
-            output: cfg.output,
             master: Some(pair.master),
             pacing: cfg.pacing,
-            render_prompt: cfg.render_prompt,
             shell_pid: pid,
         };
         let session: SharedSession = Arc::new(parking_lot::Mutex::new(if cfg.external_private {
@@ -254,10 +217,9 @@ impl Engine {
             let exited = exited.clone();
             #[cfg(unix)]
             let integration = integration.clone();
-            let tick = cfg.tick.max(Duration::from_millis(5));
             std::thread::Builder::new().name("ss-tick".into()).spawn(move || {
                 while !exited.load(Ordering::SeqCst) {
-                    std::thread::sleep(tick);
+                    std::thread::sleep(TICK);
                     #[cfg(unix)]
                     if let Some(hook) = integration.lock().as_mut() { hook.drain(&mut session.lock(), pid); }
                     session.lock().tick(Instant::now());
@@ -294,7 +256,6 @@ impl Engine {
             exited,
             exit_code: parking_lot::Mutex::new(None),
             shell,
-            pid,
         })
     }
 
@@ -312,10 +273,6 @@ impl Engine {
         &self.shell
     }
 
-    pub fn pid(&self) -> Option<u32> {
-        self.pid
-    }
-
     /// Human keyboard input. Revokes any agent lease first.
     pub fn write_input(&self, bytes: &[u8]) {
         self.session.lock().human_input(bytes);
@@ -326,17 +283,9 @@ impl Engine {
         self.session.lock().write_external(bytes)
     }
 
-    pub fn resize(&self, rows: u16, cols: u16) {
-        self.session.lock().resize(rows, cols);
-    }
-
-    /// Register an in-process frontend. Returns an id for `unsubscribe`.
-    pub fn subscribe(&self, name: &str, sink: Box<dyn EventSink>, stream_output: bool) -> ConnId {
-        self.session.lock().subscribe(name, sink, stream_output)
-    }
-
-    pub fn unsubscribe(&self, id: ConnId) {
-        self.session.lock().unsubscribe(id);
+    /// Register an in-process frontend. Returns its connection id.
+    pub fn subscribe(&self, name: &str, sink: Box<dyn EventSink>) -> ConnId {
+        self.session.lock().subscribe(name, sink)
     }
 
     pub fn has_exited(&self) -> bool {
@@ -352,22 +301,6 @@ impl Engine {
         let code = rx.and_then(|rx| rx.recv().ok()).flatten();
         *self.exit_code.lock() = Some(code);
         code
-    }
-
-    /// Non-blocking variant of `wait`.
-    pub fn try_wait(&self) -> Option<Option<u32>> {
-        if let Some(c) = *self.exit_code.lock() {
-            return Some(c);
-        }
-        let guard = self.exit_rx.lock();
-        let rx = guard.as_ref()?;
-        match rx.try_recv() {
-            Ok(code) => {
-                *self.exit_code.lock() = Some(code);
-                Some(code)
-            }
-            Err(_) => None,
-        }
     }
 }
 

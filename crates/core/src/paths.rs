@@ -8,13 +8,6 @@ pub fn config_dir() -> PathBuf {
     let dir = home.join(".conn");
     if !dir.exists() {
         let _ = std::fs::create_dir_all(&dir);
-        // One-time migration from the pre-rename location.
-        let old = home.join(".shared-shell");
-        for f in ["policy.yaml", "audit.jsonl"] {
-            if old.join(f).exists() && !dir.join(f).exists() {
-                let _ = std::fs::copy(old.join(f), dir.join(f));
-            }
-        }
     }
     dir
 }

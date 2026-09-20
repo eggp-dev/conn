@@ -13,8 +13,8 @@ use std::{
 
 #[test]
 fn removed_participant_can_switch_to_another_allowed_tab() {
-    let old = Arc::new(parking_lot::Mutex::new(Harness::headless().session));
-    let target = Arc::new(parking_lot::Mutex::new(Harness::headless().session));
+    let old = Arc::new(parking_lot::Mutex::new(Harness::new().session));
+    let target = Arc::new(parking_lot::Mutex::new(Harness::new().session));
     let hub = Hub::single("old", old.clone());
     hub.set_opener(Arc::new(|_, _| Err("unused".into())));
     let dir = tempfile::tempdir().unwrap();
@@ -39,8 +39,8 @@ fn removed_participant_can_switch_to_another_allowed_tab() {
 }
 #[test]
 fn exited_shell_can_switch_to_another_allowed_tab() {
-    let old = Arc::new(parking_lot::Mutex::new(Harness::headless().session));
-    let target = Arc::new(parking_lot::Mutex::new(Harness::headless().session));
+    let old = Arc::new(parking_lot::Mutex::new(Harness::new().session));
+    let target = Arc::new(parking_lot::Mutex::new(Harness::new().session));
     let hub = Hub::single("old", old.clone());
     hub.set_opener(Arc::new(|_, _| Err("unused".into())));
     let dir = tempfile::tempdir().unwrap();
@@ -74,7 +74,7 @@ fn read_reply(r: &mut BufReader<UnixStream>, id: u64) -> Value {
 }
 #[test]
 fn disconnected_pending_request_is_removed_promptly() {
-    let s = Arc::new(parking_lot::Mutex::new(Harness::headless().session));
+    let s = Arc::new(parking_lot::Mutex::new(Harness::new().session));
     s.lock().set_control_gate(true);
     let hub = Hub::single("test", s.clone());
     let dir = tempfile::tempdir().unwrap();
@@ -122,7 +122,7 @@ fn disconnected_pending_request_is_removed_promptly() {
 }
 #[test]
 fn disconnected_agent_cannot_execute_a_scheduled_command() {
-    let h = Harness::headless();
+    let h = Harness::new();
     let pty = h.pty.clone();
     let s = Arc::new(parking_lot::Mutex::new(h.session));
     s.lock().set_pacing(conn_core::Pacing {
@@ -189,7 +189,7 @@ fn disconnected_agent_cannot_execute_a_scheduled_command() {
 
 #[test]
 fn idle_disconnect_removes_connection() {
-    let s = Arc::new(parking_lot::Mutex::new(Harness::headless().session));
+    let s = Arc::new(parking_lot::Mutex::new(Harness::new().session));
     let hub = Hub::single("test", s);
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("audit.sock");
@@ -221,8 +221,8 @@ fn idle_disconnect_removes_connection() {
 #[test]
 fn navigation_catalog_recovers_without_leaking_or_granting_access() {
     use conn_core::affordance::Affordance;
-    let old = Arc::new(parking_lot::Mutex::new(Harness::headless().session));
-    let target = Arc::new(parking_lot::Mutex::new(Harness::headless().session));
+    let old = Arc::new(parking_lot::Mutex::new(Harness::new().session));
+    let target = Arc::new(parking_lot::Mutex::new(Harness::new().session));
     let hub = Hub::single("old", old.clone());
     hub.set_opener(Arc::new(|_, _| Err("unused".into())));
     let dir = tempfile::tempdir().unwrap();
@@ -267,7 +267,7 @@ fn navigation_catalog_recovers_without_leaking_or_granting_access() {
 #[test]
 fn disconnect_rejects_a_waiting_copilot_proposal() {
     use conn_core::session::{AgentMode, ProposalState};
-    let h = Harness::headless();
+    let h = Harness::new();
     let pty = h.pty.clone();
     let s = Arc::new(parking_lot::Mutex::new(h.session));
     s.lock().set_mode(AgentMode::Copilot).unwrap();
@@ -316,7 +316,7 @@ fn disconnect_rejects_a_waiting_copilot_proposal() {
 }
 #[test]
 fn half_closed_pipeline_drains_reads_and_rejects_writes() {
-    let s = Arc::new(parking_lot::Mutex::new(Harness::headless().session));
+    let s = Arc::new(parking_lot::Mutex::new(Harness::new().session));
     present(&mut s.lock(), vec!["$".into()]);
     let hub = Hub::single("test", s.clone());
     let dir = tempfile::tempdir().unwrap();

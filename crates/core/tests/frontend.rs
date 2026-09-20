@@ -4,7 +4,7 @@ mod common;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
-use common::Harness;
+use common::{Harness, SessionExt};
 use conn_core::affordance::{Actor, Affordance};
 use conn_core::approval::{ApprovalState, Decision};
 use conn_core::policy::EXAMPLE_POLICY;
@@ -17,7 +17,7 @@ fn names(evs: &[ServerEvent]) -> Vec<String> {
 
 #[test]
 fn frontend_receives_lifecycle_events() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     let fe = h.frontend("ui");
     h.agent(1, "copilot");
     h.session.agent_request_control(1).unwrap();
@@ -33,21 +33,19 @@ fn frontend_receives_lifecycle_events() {
     for expected in ["control_granted", "agent_input", "approval_requested", "approval_resolved", "agent_exec", "control_revoked", "screen_changed"] {
         assert!(n.contains(&expected.to_string()), "missing {expected} in {n:?}");
     }
-    assert!(!n.contains(&"output".to_string()), "no output streaming unless requested");
+    assert!(!n.contains(&"output".to_string()), "raw output is never an event");
     let req = evs.iter().find_map(|e| match e { ServerEvent::ApprovalRequested { request } => Some(request.clone()), _ => None }).unwrap();
     assert_eq!(req.cmd, "kubectl delete pod x");
     assert_eq!(req.label, "delete resource");
 }
 
 #[test]
-fn headless_mode_does_not_draw_the_prompt() {
-    let mut h = Harness::headless();
+fn human_input_denies_a_pending_approval_and_clears_the_typed_line() {
+    let mut h = Harness::new();
     h.agent(1, "copilot");
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "sudo ls").unwrap();
     assert!(matches!(h.session.agent_send_key(1, "ENTER").unwrap(), KeyResult::Pending { .. }));
-    assert!(!h.session.prompt_active());
-    assert!(!h.stdout_str().contains("\x1b[?1049h"));
     // Human keystrokes are a takeover, never a prompt answer: "y" must not approve.
     // The pending command is already typed on the line, so the approval cannot stay
     // alive either, or a later approve would submit that line plus the human's bytes.
@@ -56,18 +54,6 @@ fn headless_mode_does_not_draw_the_prompt() {
     assert!(h.session.status().pending.is_empty(), "the approval is denied, not answered and not left pending");
     assert_eq!(h.pty_str(), "sudo ls\x15y", "the reviewed line is cleared before the human's byte; nothing is submitted");
     assert!(h.session.resolve_first_pending(Decision::Grant, "frontend").is_err());
-}
-
-#[test]
-fn output_streaming_to_subscribers() {
-    let mut h = Harness::new();
-    let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-    h.session.subscribe("ui", Box::new(common::VecSink(events.clone())), true);
-    h.session.pty_output(b"hello");
-    let evs = events.lock().unwrap();
-    let data = evs.iter().find_map(|e| match e { ServerEvent::Output { data, .. } => Some(data.clone()), _ => None }).unwrap();
-    use base64::Engine as _;
-    assert_eq!(base64::engine::general_purpose::STANDARD.decode(data).unwrap(), b"hello");
 }
 
 #[test]
@@ -182,7 +168,7 @@ fn approval_expires_via_pacing_ttl() {
 
 #[test]
 fn example_policy_still_applies_in_headless_mode() {
-    let mut h = Harness::headless();
+    let mut h = Harness::new();
     h.agent(1, "copilot");
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "rm -rf /").unwrap();

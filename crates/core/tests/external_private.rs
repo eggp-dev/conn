@@ -3,7 +3,7 @@ mod common;
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use common::{Buf, SharedBuf, VecSink};
+use common::{Buf, SessionExt, SharedBuf, VecSink};
 use conn_core::affordance::{Actor, Affordance};
 use conn_core::audit::{Audit, Event};
 use conn_core::ipc::{self, Client, Hub};
@@ -19,8 +19,8 @@ fn fixture(private: bool) -> (SharedSession, Buf, Arc<Mutex<Vec<Event>>>) {
     let bytes: Buf = Default::default();
     let cfg = SessionConfig {
         rows: 24, cols: 80, audit, policy: policy(),
-        pty_writer: Box::new(SharedBuf(bytes.clone())), output: None,
-        master: None, pacing: Default::default(), render_prompt: false, shell_pid: None,
+        pty_writer: Box::new(SharedBuf(bytes.clone())),
+        master: None, pacing: Default::default(), shell_pid: None,
     };
     let s = if private { Session::new_external_private(cfg) } else { Session::new(cfg) };
     (Arc::new(parking_lot::Mutex::new(s)), bytes, records)
@@ -32,7 +32,9 @@ fn private_input_is_untracked_and_human_takeover_permanently_revokes_external_wr
     let events = Arc::new(Mutex::new(Vec::new()));
     let trace = Arc::new(Mutex::new(Vec::new()));
     let mut s = session.lock();
-    s.subscribe("native", Box::new(VecSink(events.clone())), true);
+    let rendered: Buf = Default::default();
+    s.subscribe("native", Box::new(VecSink(events.clone())));
+    s.set_output_frame_sink(Some(common::frame_sink(&rendered)));
     s.set_trace(trace.clone());
     s.write_external(b"external-fixture").unwrap();
     assert!(s.write_external(&[b'x'; 1025]).is_err());
@@ -46,8 +48,9 @@ fn private_input_is_untracked_and_human_takeover_permanently_revokes_external_wr
     s.process_exited(Some(0));
     assert!(records.lock().unwrap().is_empty());
     assert!(trace.lock().unwrap().is_empty());
-    assert!(events.lock().unwrap().iter().any(|e| matches!(e, ServerEvent::Output { .. })));
-    assert!(!events.lock().unwrap().iter().any(|e| matches!(e, ServerEvent::HumanExec { .. } | ServerEvent::AgentExec { .. })));
+    assert_eq!(&*rendered.lock().unwrap(), b"private output", "the owner's renderer still receives private output");
+    assert!(!events.lock().unwrap().iter().any(|e| matches!(e, ServerEvent::AgentExec { .. })));
+    assert!(!format!("{:?}", events.lock().unwrap()).contains("fixture"));
 }
 
 #[test]
@@ -87,7 +90,7 @@ fn private_sessions_reject_agents_and_public_dispatch_even_with_frontend_identit
     {
         let mut s = session.lock();
         s.register_conn(1, ConnKind::Agent, "agent", Box::new(VecSink(denied.clone())));
-        s.register_frontend(2, "socket-ui", Box::new(VecSink(denied.clone())), true);
+        s.register_frontend(2, "socket-ui", Box::new(VecSink(denied.clone())));
         s.pty_output(b"synthetic-secret");
         s.tick(Instant::now());
         assert!(s.conn_kind(1).is_none());
@@ -109,7 +112,7 @@ fn private_sessions_reject_agents_and_public_dispatch_even_with_frontend_identit
         assert_eq!(err.code, "not_found");
         assert_eq!(err.message, "session unavailable");
     }
-    assert!(ipc::dispatch_trusted(&session, 0, "snapshot", &json!({})).is_err(), "no owner-presented surface exists");
+    assert!(session.lock().snapshot(Actor::Human).is_err(), "no owner-presented surface exists");
     assert!(denied.lock().unwrap().is_empty());
     assert!(records.lock().unwrap().is_empty());
 }
@@ -180,7 +183,7 @@ fn direct_startup_preserves_argv_cwd_and_env_without_logging_hidden_input_or_sta
         external_private: true,
         launch: LaunchSpec::Program { executable: "/bin/sh".into(), argv: vec!["-c".into(), script.into(), "fixture".into(), "literal $value ; * with spaces".into()] },
         profile: Some(profile), policy: Some(policy()), audit: Some(audit),
-        output: Some(Box::new(SharedBuf(output.clone()))), ..EngineConfig::default()
+        output_frame: Some(common::frame_sink(&output)), ..EngineConfig::default()
     }).unwrap();
     let until = Instant::now() + Duration::from_secs(5);
     while !String::from_utf8_lossy(&output.lock().unwrap()).contains("ready") {
@@ -188,7 +191,7 @@ fn direct_startup_preserves_argv_cwd_and_env_without_logging_hidden_input_or_sta
         std::thread::sleep(Duration::from_millis(10));
     }
     let events = Arc::new(Mutex::new(Vec::new()));
-    engine.subscribe("native", Box::new(VecSink(events.clone())), false);
+    engine.subscribe("native", Box::new(VecSink(events.clone())));
     engine.write_input(b"synthetic-hidden-value\r");
     let until = Instant::now() + Duration::from_secs(5);
     while !engine.has_exited() {
@@ -200,7 +203,8 @@ fn direct_startup_preserves_argv_cwd_and_env_without_logging_hidden_input_or_sta
     assert!(!String::from_utf8_lossy(&output.lock().unwrap()).contains("synthetic-hidden-value"));
     assert!(engine.session().lock().input_line().is_empty());
     assert!(records.lock().unwrap().is_empty());
-    assert!(!events.lock().unwrap().iter().any(|e| matches!(e, ServerEvent::HumanExec { .. } | ServerEvent::AgentExec { .. })));
+    assert!(!events.lock().unwrap().iter().any(|e| matches!(e, ServerEvent::AgentExec { .. })));
+    assert!(!format!("{:?}", events.lock().unwrap()).contains("synthetic-hidden-value"));
     assert!(engine.write_external(b"late").is_err());
 }
 
@@ -228,7 +232,7 @@ fn external_backpressure_fails_closed_without_blocking_human_takeover() {
         external_private: true,
         launch: LaunchSpec::Program { executable: "/bin/sh".into(), argv: vec!["-c".into(), "stty raw -echo; printf ready; sleep 30".into()] },
         shell: Some("/bin/sh".into()), policy: Some(policy()),
-        output: Some(Box::new(SharedBuf(output.clone()))), ..EngineConfig::default()
+        output_frame: Some(common::frame_sink(&output)), ..EngineConfig::default()
     }).unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     while !String::from_utf8_lossy(&output.lock().unwrap()).contains("ready") {
