@@ -19,6 +19,9 @@ updates:
       # svelte-check and astro check cannot run on the TypeScript 7 native compiler yet.
       - dependency-name: typescript
         update-types: ['version-update:semver-major']
+      # @remotion/eslint-config-flat pins typescript-eslint 8, whose peer range stops at eslint 9.
+      - dependency-name: eslint
+        update-types: ['version-update:semver-major']
     open-pull-requests-limit: 3
   - package-ecosystem: cargo
     directory: /
@@ -28,4 +31,9 @@ updates:
       rust:
         patterns: ['*']
         update-types: [minor, patch]
+    ignore:
+      # 0.9 fails on Windows: the configured environment never reaches the shell
+      # (crates/core/tests/profiles.rs, native_profile_launches_with_environment_...). Needs a Windows debugger.
+      - dependency-name: portable-pty
+        versions: ['0.9.x']
     open-pull-requests-limit: 3

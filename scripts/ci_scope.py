@@ -20,8 +20,9 @@ ALL = [LINUX, "macos-15", "windows-2022"]
 # `site/` is the website (conn.eggp.dev); the always-on job builds it.
 DOCS_PREFIXES = ("docs/", "media/", "site/", ".github/ISSUE_TEMPLATE/")
 DOCS_ROOT_FILES = ("LICENSE", "NOTICE")
-# Shipped to users but not part of any build; the always-on job checks it (`sh -n`).
-LIGHT_FILES = ("scripts/install.sh",)
+# Not part of any build. The always-on job checks the installer (`sh -n`); Dependabot's
+# configuration is read by GitHub, not by a workflow, so it needs no native runner either.
+LIGHT_FILES = ("scripts/install.sh", ".github/dependabot.yml")
 # The Svelte UI. The native shell under src-tauri is excluded below.
 FRONTEND_PREFIX = "frontends/tauri/"
 # The npm workspace root: one lockfile for the UI, the site and the films. No Rust reads it.
@@ -33,7 +34,7 @@ PLATFORM_PREFIXES = (NATIVE_SHELL_PREFIX, ".github/", "crates/frontend/src/autom
 
 def classify(path: str) -> str:
     """Return docs, frontend, platform or native for one repository path."""
-    if path.startswith(PLATFORM_PREFIXES) and not path.startswith(DOCS_PREFIXES):
+    if path.startswith(PLATFORM_PREFIXES) and not path.startswith(DOCS_PREFIXES) and path not in LIGHT_FILES:
         return "platform"
     if path.startswith(DOCS_PREFIXES) or path in DOCS_ROOT_FILES or path in LIGHT_FILES or ("/" not in path and path.endswith(".md")):
         return "docs"

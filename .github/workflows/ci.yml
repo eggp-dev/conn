@@ -107,6 +107,11 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
+      # The release gate (inputs.ref set) compiles from scratch; everything else reuses what main compiled.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        if: inputs.ref == ''
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # The workspace default members: every crate except the desktop shell, which needs the webview toolchain.
       - run: cargo test --locked
   desktop:
@@ -127,6 +132,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           desktop: 'true'
+          rust-cache: ${{ inputs.ref == '' }}
       - name: Build Linux or Windows desktop
         if: runner.os != 'macOS'
         run: npm run tauri build -- --debug --no-bundle
