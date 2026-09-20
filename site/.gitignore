@@ -3,5 +3,6 @@
 /src/generated/
 /public/media/
 /public/install.sh
+/public/robots.txt
 .astro/
 .vercel/

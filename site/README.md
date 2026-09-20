@@ -19,9 +19,35 @@ npm run build    # writes dist/
 | `public/media/` | the hero film, captions and posters from `../docs/assets/` |
 | `public/install.sh` | `../scripts/install.sh`, so `curl -fsSL https://conn.eggp.dev/install.sh \| sh` serves the repository's own script |
 | `src/generated/release.json` | the newest published release on GitHub; without network, the version declared in the repository |
+| `public/media/*-social.jpg` | JPEG copies of the social cards: several link-preview crawlers skip WebP |
+| `src/generated/film.json` | the film's length, read from the MP4, for the video markup |
+| `public/robots.txt` | the site address from `@conn/brand`, pointing crawlers at the sitemap |
 
 Write documentation in `../docs`, never in `src/content/docs`. Which pages are published, and in
 which sidebar group, is decided in `src/site.config.mjs`; the repository address lives there too.
+
+## Search engines and analytics
+
+What crawlers need is written in one place, `src/seo.mjs`, and used by both the landing pages and
+the docs: link-preview tags, `hreflang` (with `x-default`), structured data for the app, the site
+and the film, and the sitemap Starlight generates (`/sitemap-index.xml`, with language alternates).
+Each docs page gets its search-result description from `descriptions` in `src/site.config.mjs`;
+the build fails when a published page has none or when one is longer than 160 characters.
+
+Everything that needs an account is switched on by an environment variable in the Vercel project
+(Settings → Environment Variables, Production) and leaves no trace in the HTML when unset:
+
+| Variable | What it does |
+| --- | --- |
+| `PUBLIC_GOOGLE_SITE_VERIFICATION` | the token from Google Search Console's "HTML tag" method. After verifying, submit `https://conn.eggp.dev/sitemap-index.xml` there. |
+| `PUBLIC_NAVER_SITE_VERIFICATION` | the same for Naver Search Advisor, which matters for Korean search. |
+| `PUBLIC_GA_ID` | a Google Analytics 4 measurement ID (`G-…`). Advertising signals are denied by default, and the script is not loaded at all for visitors who send Global Privacy Control or Do Not Track. |
+
+Vercel Web Analytics needs no variable: the script is added on every Vercel build, and counting
+starts once Web Analytics is enabled for the project in the Vercel dashboard (Analytics tab). It is
+cookieless. Until it is enabled the script request answers 404 and nothing else happens.
+
+The footer says that the site counts visits and that the app has no telemetry. Keep both true.
 
 ## Rules for the landing page
 

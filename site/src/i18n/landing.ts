@@ -73,7 +73,7 @@ export const copy = {
     limits:
       "Not a sandbox. Commands run as you, in your shell, and a command you approve does what it says. Conn does not defend against malicious software already running as your user. It is a preview: macOS on Apple Silicon, Windows x64 and Linux x64.",
     closing: ["Give your agent a seat.", "Keep the keyboard."],
-    footer: { license: "MIT licensed", source: "Source", changelog: "What changed", security: "Report a vulnerability" },
+    footer: { license: "MIT licensed", source: "Source", changelog: "What changed", security: "Report a vulnerability", analytics: "This site counts visits. The app has no telemetry." },
   },
   ko: {
     title: "Conn: 에이전트는 내 터미널에서 일하고, 키보드는 내가 쥡니다",
@@ -145,6 +145,6 @@ export const copy = {
     limits:
       "샌드박스가 아닙니다. 명령은 내 권한으로 내 셸에서 실행되고, 승인한 명령은 적힌 그대로 동작합니다. 이미 내 계정으로 돌고 있는 악성 소프트웨어를 막아 주지는 않습니다. 프리뷰 단계이며 Apple Silicon macOS, Windows x64, Linux x64를 지원합니다.",
     closing: ["에이전트에게 자리를 내주세요.", "키보드는 그대로 쥐고."],
-    footer: { license: "MIT 라이선스", source: "소스", changelog: "변경 내역", security: "취약점 제보" },
+    footer: { license: "MIT 라이선스", source: "소스", changelog: "변경 내역", security: "취약점 제보", analytics: "이 사이트는 방문 수를 집계합니다. 앱에는 원격 측정이 없습니다." },
   },
 } as const;
