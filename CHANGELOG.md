@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Snapshots no longer carry the constant `imageUnavailable: true` field, a remnant of the optional PNG snapshots removed in 0.8.0. Snapshots remain text only.
+- Removed the native OpenAI command suggestions preview, its provider settings and the OS credential-store key storage. Themes and the extension registry stay. A key saved earlier remains in the OS credential store under `dev.eggp.conn.model-provider` until you delete it there.
 
 ## 0.8.2 — Preview · 2026-09-20
 

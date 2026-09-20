@@ -176,7 +176,5 @@ connected agents and share its current viewport. The existing external writer is
 revoked; the shell and SSH connection continue. Stop sharing to continue alone.
 Earlier private input/output is not added to history.
 
-**Settings → Extensions** contains themes and opt-in command suggestions. Choose a
-model and save an API key in the OS credential store. The current shared viewport
-may be sent to the provider. Suggestions insert text only after acceptance; Enter
-is a separate action. [Extension guide](extensions.md)
+**Settings → Extensions** contains terminal themes, including themes you install from
+a JSON file. [Extension guide](extensions.md)

@@ -29,7 +29,7 @@ the terminal into a configuration dashboard.
 
 1. **One execution substrate.** Sharing never replaces the PTY or reconnects SSH.
 2. **One observation source.** Core parses PTY output into the current terminal grid.
-   Agent snapshots and completion context use this projection, with no scrollback.
+   Agent snapshots use this projection, with no scrollback.
 3. **Observation belongs to the shared session.** Current terminal output remains
    available when a window is unfocused, minimized or covered, or another tab is active.
    No raw input, scrollback or process memory is exported. Hidden input stays absent;
@@ -41,9 +41,8 @@ the terminal into a configuration dashboard.
 6. **Participation is independent of control.** Sharing begins with the human in
    control. Selected agents must still obtain authority under the mode and gate.
 7. **Transitions invalidate work.** Sharing changes and takeover revoke conflicting
-   work. Window visibility never invalidates participation. Output changes invalidate
-   stale completion proposals; explicit approvals still gate execution.
-   Stale frames, handles and completion proposals cannot
+   work. Window visibility never invalidates participation. Explicit approvals still
+   gate execution. Stale frames and handles cannot
    restore permission. Stopping sharing does not recall information already sent.
 8. **Origins stay honest.** External launch/input payloads are not converted into
    activity history. A later shared external session keeps per-command review. An integrated local shell
@@ -55,9 +54,8 @@ the terminal into a configuration dashboard.
     acceptance, co-sign and execution are separate events in one session timeline.
 11. **Never forget physical input.** A transition must not silently strand tracked
     agent text or let another actor append to unfinished human input.
-12. **Extensions use the same boundaries.** A model provider receives an authorized
-    visible frame; suggestions are one-shot insertions accepted by the human.
-    Acceptance does not send Enter. An internal agent gets no private-screen exception.
+12. **Extensions use the same boundaries.** A contribution never receives a PTY, an
+    owner bridge or a private screen. An internal agent gets no private-screen exception.
 
 ## Sharing
 
@@ -79,15 +77,14 @@ another connection's selection, even when their display names match.
 
 ## Initial extension boundary
 
-A versioned registry exposes declarative themes and reviewed built-in provider and
-suggestion integrations. The host renders their settings and proposal UI. There is
-no arbitrary third-party JavaScript, CSS, DOM, PTY or filesystem API, marketplace,
-or general executable-plugin loader in this cut.
+A versioned registry exposes declarative themes. The host renders their settings.
+There is no arbitrary third-party JavaScript, CSS, DOM, PTY or filesystem API,
+marketplace, or general executable-plugin loader in this cut.
 
-OpenAI is the first model adapter. Keys belong in the OS credential store; model
-calls run in native code. Missing keychain support fails without plaintext fallback.
-Automatic suggestions require confirmed shell-prompt state. Explicit requests can
-be used in uncertain environments, still with a currently shared visible surface.
+The registry keeps provider and completion kinds for reviewed built-in integrations,
+and rejects them because none ships. The native OpenAI suggestion preview and its
+OS credential-store adapter were removed; external systems are expected to plug in
+through this registry instead.
 
 ## Removed paths
 
@@ -100,7 +97,7 @@ The CLI remains an agent/MCP adapter and profile/local-file utility.
 
 Verify actual rendered Unicode, wrapping, scroll, resizing, alternate screens,
 concealed/masked/hidden input, background observation and sharing revocation. Exercise wrong actor IDs,
-sharing/output races, stale completions, cancellation, private history suppression,
+sharing/output races, cancellation, private history suppression,
 external authentication followed by same-session sharing, and human correction.
 
 Linux tests do not establish native macOS or Windows acceptance. Release notes

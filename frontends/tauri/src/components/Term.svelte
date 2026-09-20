@@ -17,17 +17,18 @@
   const active = $derived(st.active === session);
   export function focus() { term?.focus(); }
   export function size() { return { rows: term?.rows ?? 24, cols: term?.cols ?? 80 }; }
-  export function refit() { fit?.fit(); measure(); }
+  export function refit() { fit?.fit(); }
 
-  function measure() {
+  /** Centre of the cursor cell in the app frame. Measured on demand: only the handoff wash needs it. */
+  export function cursorCenter() {
     const screen = host?.querySelector<HTMLElement>(".xterm-screen");
-    if (!screen || !term || !t) return;
+    if (!screen || !term) return null;
     const w = screen.clientWidth / term.cols;
     const h = screen.clientHeight / term.rows;
     const b = term.buffer.active;
     const r = screen.getBoundingClientRect();
     const pr = (host.offsetParent as HTMLElement | null)?.getBoundingClientRect() ?? host.getBoundingClientRect();
-    t.cursor = { x: r.left - pr.left + b.cursorX * w, y: r.top - pr.top + b.cursorY * h, w, h, row: b.cursorY };
+    return { x: r.left - pr.left + (b.cursorX + .5) * w, y: r.top - pr.top + (b.cursorY + .5) * h };
   }
 
   function applyLook() {
@@ -39,7 +40,7 @@
     term.options.theme = xt;
     term.options.cursorStyle = agent ? "underline" : "block";
     term.options.fontSize = st.fontSize;
-    if (active) { fit.fit(); measure(); }
+    if (active) fit.fit();
   }
 
   onMount(() => {
@@ -52,21 +53,19 @@
     term.open(host);
     // Register before the first fit: the PTY starts at 80x24, while xterm
     // immediately adopts the pane size. Missing this event desynchronizes wrapping.
-    term.onResize(({ rows, cols }) => { cmd("resize", { session, rows, cols }); measure(); });
+    term.onResize(({ rows, cols }) => { cmd("resize", { session, rows, cols }); });
     applyLook();
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
       // Escape closes an open overlay instead of reaching the shell.
       if (e.key === "Escape" && (st.settingsOpen || st.timelineOpen || st.centerOpen || st.paletteOpen || tab(session)?.handback)) return false;
       const key = shortcutKey(e);
-      if (appShortcut(e) && ["k", ",", "j", "t", "w", "Enter", "[", "]", "ArrowRight", "ArrowLeft"].includes(key)) return false;
+      if (appShortcut(e) && ["k", ",", "j", "t", "w", "Enter", "[", "]", "ArrowRight"].includes(key)) return false;
       if (appShortcut(e) && /^[1-9]$/.test(key)) return false;
       return true;
     });
     const inputListener = observeTerminalInput(term, (data, origin) => {
       const tb = t;
-      if (origin === "human") tb.humanInputRevision++;
-      if (origin === "human" && st.completionOpen) { st.completionOpen = false; void cmd("completion_cancel", { session }).catch(() => {}); }
       if (origin === "terminal") {
         // The first child output can precede the final started-status refresh.
         cmd("terminal_response", { session, data });
@@ -96,8 +95,6 @@
       cmd("input", { session, data });
     });
     let mounted = true;
-    term.onRender(measure);
-    term.onCursorMove(measure);
     let previousBottom = parseFloat(getComputedStyle(host).bottom);
     let previousHeight = host.clientHeight;
     let motion: Animation | undefined;
@@ -125,17 +122,13 @@
         motion = host.animate(dockOffsetFrames(cursorDelta + offset), {
           duration: DOCK_MOTION_MS, easing: "linear",
         });
-        motion.onfinish = () => { host.style.willChange = ""; measure(); };
+        motion.onfinish = () => { host.style.willChange = ""; };
       } else { host.style.willChange = ""; }
     });
     ro.observe(host);
     const un = onOutput((p) => {
       if (!mounted || p.session !== session) return;
-      term.write(b64ToBytes(p.data), () => {
-        if (!mounted) return;
-        t.outputSeq = p.outputSeq;
-        measure();
-      });
+      term.write(b64ToBytes(p.data));
     });
     un.then(() => { if (mounted) return cmd("attach_output", { session }); }).catch(() => {});
     return () => { mounted = false; inputListener.dispose(); privateClipboard.dispose(); motion?.cancel(); ro.disconnect(); un.then((f) => f()); term.dispose(); };
@@ -143,7 +136,7 @@
 
   $effect(() => {
     void st.theme; void st.themeRevision; void t?.controller.type; void t?.controller.agentId; void st.fontSize; void active;
-    if (term) { applyLook(); if (active) setTimeout(() => { fit.fit(); measure(); }, 0); }
+    if (term) { applyLook(); if (active) setTimeout(() => fit.fit(), 0); }
   });
 </script>
 

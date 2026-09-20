@@ -4,6 +4,7 @@
   import { fade } from "svelte/transition";
   import { st, cur } from "../lib/store.svelte";
   import { cmd, changeMode } from "../lib/bridge";
+  import { liveAgents, watchLiveAgents } from "../lib/liveAgents.svelte";
   import { agentColor } from "../lib/themes";
   import { t, fmtMs } from "../lib/i18n.svelte";
   let { onclose }: { onclose: () => void } = $props();
@@ -11,10 +12,8 @@
   const isAgent = $derived(tb.controller.type === "agent");
   const color = $derived(isAgent ? agentColor(tb.controller.agentId) : "var(--muted)");
 
-  type Live = { conn: number; agentId: string; affordances: string[] };
-  let live = $state<Live[]>([]);
-  async function poll() { try { live = await cmd<Live[]>("agents"); } catch { live = []; } }
-  $effect(() => { void st.active; poll(); const i = setInterval(poll, 1500); return () => clearInterval(i); });
+  const live = $derived(liveAgents.list);
+  $effect(() => { void st.active; return watchLiveAgents(); });
 
   const MODES = ["observe", "copilot", "autopilot"] as const;
   function key(e: KeyboardEvent) { if (e.key === "Escape") { e.stopPropagation(); onclose(); } }

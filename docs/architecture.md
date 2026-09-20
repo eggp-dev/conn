@@ -12,10 +12,7 @@ flowchart LR
   A[External MCP actor] -->|observation and control request| S
   S --> F
   F -->|authorized grid| A
-  F --> E[Extension host]
-  E --> M[Native model adapter]
-  K[OS credential store] --> M
-  M -->|proposal| U
+  E[Extension host] -->|terminal theme| U
 ```
 
 ## Ports and owners
@@ -39,7 +36,7 @@ size, visible text, nullable cursor and alternate-screen state. The core parses 
 output with a bounded, zero-scrollback terminal model. Snapshots are text-only.
 
 Sharing changes advance the generation; output, cursor and resize changes update the
-screen revision. Completion acceptance checks this same identity. No foreground,
+screen revision. No foreground,
 heartbeat or owner-renderer publication participates in authorization.
 
 ## Transitions
@@ -61,15 +58,9 @@ history under the same session ID; it never reconstructs prior private activity.
 ## Extension host
 
 A typed manifest registry owns API compatibility, declared capabilities and
-reviewed implementation selection. The first extension kinds are theme, provider
-and completion. Themes are bounded data; arbitrary code and global event buses are
-not extension contracts.
-
-Native mediation constructs visible context from the core frame while its
-cancellation is registered in the same session transaction. Workers obtain a key
-from the OS store and make bounded, cancellable requests. Results carry the session,
-surface, generation and frame identity. Acceptance checks them again and uses the
-normal human-input path, without Enter. Theme and provider configuration persist;
-keys, private frames and completion jobs do not enter configuration files.
+reviewed implementation selection. The manifest names theme, provider and completion
+kinds; only themes are implemented, and a manifest of another kind is rejected.
+Themes are bounded data; arbitrary code and global event buses are not extension
+contracts. The selected theme and installed themes persist in `extensions.json`.
 
 See [extension contract](extensions.md), [protocol](protocol.md) and [trust model](security.md).

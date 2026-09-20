@@ -10,7 +10,6 @@
   import { shortcutLabel } from "../lib/shortcuts";
   let { onnew, onpalette, ontimeline, onsettings }: { onnew: () => void; onpalette: () => void; ontimeline: () => void; onsettings: () => void } = $props();
   let now = $state(performance.now());
-  $effect(() => { st.menuOpen = open || updates; return () => { st.menuOpen = false; }; });
   const active = $derived(cur());
   const preparing = $derived(active.externalStarting || (!st.active && st.externalPending));
   const mark = $derived(preparing ? "human" : connMarkState(active, st.backendOnline, now));

@@ -22,7 +22,6 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-base64 = "0.22"
 parking_lot = "0.12"
 conn-core = { path = "../../../crates/core" }
 
@@ -37,5 +36,6 @@ zbus = "5"
 libc = "0.2"
 
 [dev-dependencies]
+base64 = "0.22"
 minisign-verify = "0.2"
 tauri = { version = "2", features = ["test"] }

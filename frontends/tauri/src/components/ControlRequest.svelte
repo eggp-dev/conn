@@ -1,8 +1,8 @@
 <script lang="ts">
   import RequestDetails from "./RequestDetails.svelte";
-  import { t, tabName } from "../lib/i18n.svelte";
+  import { t } from "../lib/i18n.svelte";
   import { fly } from "svelte/transition";
-  import { st, cur } from "../lib/store.svelte";
+  import { cur } from "../lib/store.svelte";
   import { cmd, changeMode } from "../lib/bridge";
   import { agentColor } from "../lib/themes";
   const r = $derived(cur().ctlReq!);
