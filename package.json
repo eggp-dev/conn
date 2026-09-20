@@ -1,0 +1,13 @@
+{
+  "name": "conn-workspace",
+  "private": true,
+  "workspaces": [
+    "frontends/tauri",
+    "site",
+    "media/demo",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24"
+  }
+}

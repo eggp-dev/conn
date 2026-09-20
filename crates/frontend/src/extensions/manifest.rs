@@ -135,7 +135,7 @@ impl Registry {
     }
     pub fn builtin() -> Self {
         let mut registry = Self::new();
-        let themes: Vec<Theme> = serde_json::from_str(include_str!("builtin-themes.json"))
+        let themes: Vec<Theme> = serde_json::from_str(include_str!("../../../../packages/themes/builtin-themes.json"))
             .expect("valid bundled theme data");
         for theme in themes {
             registry

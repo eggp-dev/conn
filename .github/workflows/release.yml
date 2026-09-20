@@ -129,7 +129,9 @@ jobs:
         env:
           TAURI_SIGNING_PUBLIC_KEY: ${{ vars.TAURI_SIGNING_PUBLIC_KEY }}
           CONN_UPDATER_ARTIFACTS: ${{ github.workspace }}/release-artifacts
-        run: cargo test --manifest-path frontends/tauri/src-tauri/Cargo.toml --release --target ${{ matrix.target }} --locked --lib update_tests::release_payload_signatures_match_the_embedded_key -- --ignored --exact
+        # From src-tauri so Cargo reuses the target directory the Tauri build just filled.
+        working-directory: frontends/tauri/src-tauri
+        run: cargo test --release --target ${{ matrix.target }} --locked --lib update_tests::release_payload_signatures_match_the_embedded_key -- --ignored --exact
       - name: Run standalone packaged CLI on its native runner
         run: python scripts/release.py smoke --target ${{ matrix.target }} --artifacts release-artifacts
       - name: Remove temporary macOS signing credentials

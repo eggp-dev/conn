@@ -1,0 +1,10 @@
+{
+  "name": "@conn/brand",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "What Conn is called and where it lives, for the app, the site, the films and the release tooling.",
+  "exports": {
+    "./brand.json": "./brand.json"
+  }
+}

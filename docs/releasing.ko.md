@@ -20,7 +20,7 @@ Actions는 커밋 SHA로 고정합니다. PR에는 서명 secrets를 제공하�
    python3 scripts/release.py bump 0.8.3
    ```
 
-   워크스페이스 버전, `conn-core` 의존성, 데스크톱 Cargo 버전, Tauri 설정, 프런트엔드 package와 lockfile, 두 플러그인 manifest, marketplace 항목, 두 Cargo lockfile 안의 Conn 패키지를 고칩니다(다른 패키지의 버전은 그대로이므로 lockfile을 따로 갱신할 필요가 없습니다). 이어서 `README.md`, `README.ko.md`, `docs/getting-started*.md`, `docs/platform-support*.md`에서 현재 릴리스를 가리키는 곳, 즉 다운로드·태그 주소, 배포 파일 이름, `CONN_VERSION=` 예시, "vX.Y.Z 프리뷰" 표기를 고칩니다. 바뀐 파일마다 고친 개수를 출력합니다. 변경 이력, "v0.8.0에서 달라진 점" 같은 제목, 이 문서의 예시처럼 과거를 적은 부분은 건드리지 않습니다.
+   워크스페이스 버전(데스크톱 크레이트는 이를 상속합니다), `conn-core`·`conn-frontend` 의존성, Tauri 설정, 프런트엔드 package와 루트 `package-lock.json` 안의 해당 항목, 두 플러그인 manifest, marketplace 항목, `Cargo.lock` 안의 Conn 패키지를 고칩니다(다른 패키지의 버전은 그대로이므로 lockfile을 따로 갱신할 필요가 없습니다). 이어서 `README.md`, `README.ko.md`, `docs/getting-started*.md`, `docs/platform-support*.md`에서 현재 릴리스를 가리키는 곳, 즉 다운로드·태그 주소, 배포 파일 이름, `CONN_VERSION=` 예시, "vX.Y.Z 프리뷰" 표기를 고칩니다. 바뀐 파일마다 고친 개수를 출력합니다. 변경 이력, "v0.8.0에서 달라진 점" 같은 제목, 이 문서의 예시처럼 과거를 적은 부분은 건드리지 않습니다.
 
    `bump`는 버전 선언이 이미 서로 다르면 시작하지 않으며, `--force` 없이는 현재 버전보다 높지 않은 버전을 거부합니다. 모든 선언이 새 버전으로 다시 읽힐 때만 파일을 씁니다. `check`도 같은 곳을 확인하므로 다른 버전에 남은 릴리스 링크는 CI에서 실패합니다. `check`가 알려 주는 곳은 직접 고치세요.
 2. 사용자 관점의 [CHANGELOG](../CHANGELOG.md)에 `## X.Y.Z — Preview · YYYY-MM-DD` 제목의 섹션을 추가합니다. 릴리스 안내의 "New in this release"는 이 섹션(목록과 `한국어:` 문단)을 그대로 옮기므로 Conn을 설치하는 사람을 위해 적으세요. 섹션이 없으면 `check`가 실패하며, `## Unreleased` 제목은 인정하지 않고 공개하지도 않습니다. 안내의 나머지는 모든 릴리스에 공통인 `scripts/release_notes.md`의 고정 문구이며, 릴리스 때문에 `release.py`를 고칠 일은 없습니다. 그런 다음 정확한 릴리스 버전으로 확인합니다.
@@ -29,7 +29,7 @@ Actions는 커밋 SHA로 고정합니다. PR에는 서명 secrets를 제공하�
    python3 scripts/release.py check --tag v0.8.2
    python3 scripts/check_repo.py
    python3 -m unittest discover -s tests/release -v
-   cargo test --workspace --locked
+   cargo test --locked
    cd frontends/tauri
    npm ci
    npm test

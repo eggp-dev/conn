@@ -104,7 +104,8 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
-      - run: cargo test --workspace --locked
+      # The workspace default members: every crate except the desktop shell, which needs the webview toolchain.
+      - run: cargo test --locked
   desktop:
     name: Desktop (${{ matrix.os }})
     needs: scope
@@ -134,7 +135,9 @@ jobs:
         run: npm run tauri build -- --debug --bundles app
         working-directory: frontends/tauri
       - name: Native desktop unit tests
-        run: cargo test --manifest-path frontends/tauri/src-tauri/Cargo.toml --lib --locked
+        # From src-tauri so Cargo reuses the target directory the Tauri build just filled.
+        run: cargo test --lib --locked
+        working-directory: frontends/tauri/src-tauri
       - name: Check macOS scripting metadata and compile external automation examples
         if: runner.os == 'macOS'
         run: python3 scripts/check_macos_scripting.py --app frontends/tauri/src-tauri/target/debug/bundle/macos/Conn.app

@@ -11,6 +11,8 @@
     "test": "node tests/timeline/events.test.ts && node tests/icon/state.test.ts && node tests/connections/status.test.ts && node tests/terminal/input.test.ts"
   },
   "dependencies": {
+    "@conn/brand": "*",
+    "@conn/themes": "*",
     "@tauri-apps/api": "^2",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0"

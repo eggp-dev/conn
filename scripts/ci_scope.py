@@ -24,6 +24,8 @@ DOCS_ROOT_FILES = ("LICENSE", "NOTICE")
 LIGHT_FILES = ("scripts/install.sh",)
 # The Svelte UI. The native shell under src-tauri is excluded below.
 FRONTEND_PREFIX = "frontends/tauri/"
+# The npm workspace root: one lockfile for the UI, the site and the films. No Rust reads it.
+FRONTEND_ROOT_FILES = ("package.json", "package-lock.json", ".npmrc")
 NATIVE_SHELL_PREFIX = "frontends/tauri/src-tauri/"
 # Platform-specific packaging, scripting and CI itself: worth every desktop runner before merging.
 PLATFORM_PREFIXES = (NATIVE_SHELL_PREFIX, ".github/", "crates/frontend/src/automation", "scripts/check_macos_scripting.py", "scripts/macos_")
@@ -35,7 +37,7 @@ def classify(path: str) -> str:
         return "platform"
     if path.startswith(DOCS_PREFIXES) or path in DOCS_ROOT_FILES or path in LIGHT_FILES or ("/" not in path and path.endswith(".md")):
         return "docs"
-    if path.startswith(FRONTEND_PREFIX):
+    if path.startswith(FRONTEND_PREFIX) or path in FRONTEND_ROOT_FILES:
         return "frontend"
     return "native"
 

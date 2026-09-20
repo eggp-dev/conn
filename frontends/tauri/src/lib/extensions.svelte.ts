@@ -1,6 +1,6 @@
 import { cmd } from './bridge';
 import { st } from './store.svelte';
-import { THEMES, type ThemeId } from './themes';
+import { ANSI, THEMES, type ThemeId } from './themes';
 
 export type Extension = { id: string; name: string; kind: string; enabled: boolean; capabilities: string[] };
 export type ExtensionTheme = { id: string; name: string; background: string; foreground: string; cursor: string; selection: string; ansi: string[] };
@@ -9,7 +9,6 @@ export type ExtensionCatalog = {
   settings: {theme: string}; themes: ExtensionTheme[];
 };
 export const extensions = $state<{catalog: ExtensionCatalog | null}>({catalog:null});
-const ANSI = ['black','red','green','yellow','blue','magenta','cyan','white','brightBlack','brightRed','brightGreen','brightYellow','brightBlue','brightMagenta','brightCyan','brightWhite'] as const;
 export async function refreshExtensions() {
   const catalog = await cmd<ExtensionCatalog>('extensions_status');
   if (catalog.apiVersion !== 1) throw new Error('Unsupported extension API');

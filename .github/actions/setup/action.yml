@@ -11,7 +11,7 @@ runs:
       with:
         node-version: '24'
         cache: npm
-        cache-dependency-path: frontends/tauri/package-lock.json
+        cache-dependency-path: package-lock.json
     - name: Linux desktop libraries
       if: runner.os == 'Linux' && inputs.desktop == 'true'
       shell: bash
