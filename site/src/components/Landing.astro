@@ -104,6 +104,10 @@ const structured = [
     <meta name="twitter:image" content={social.url} />
     {structured.map((data) => <script type="application/ld+json" set:html={jsonLd(data)} />)}
     <Fragment set:html={headHtml()} />
+    <script>
+      import { inject } from '@vercel/analytics';
+      inject();
+    </script>
   </head>
   <body>
     <header class="nav">

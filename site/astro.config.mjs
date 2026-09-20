@@ -29,6 +29,11 @@ export default defineConfig({
         { tag: "meta", attrs: { property: "og:image:height", content: String(card.height) } },
         { tag: "meta", attrs: { name: "twitter:image", content: card.url } },
         ...headEntries(),
+        {
+          tag: "script",
+          attrs: {},
+          content: "import { inject } from '@vercel/analytics'; inject();",
+        },
       ],
       sidebar: docs.map((group) => ({
         label: group.label,
