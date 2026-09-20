@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Removed the native OpenAI command suggestions preview, its provider settings and the OS credential-store key storage. Themes and the extension registry stay. A key saved earlier remains in the OS credential store under `dev.eggp.conn.model-provider` until you delete it there.
+
 ## 0.8.2 — Preview · 2026-09-20
 
 - Conn's repository moved to `github.com/eggp-dev/conn`. The updater now looks for releases there and trusts both the new and the previous address, so older installations keep updating and this build does too. Install with one line: `brew install --cask eggp-dev/tap/conn` on macOS, or the install script on Linux.

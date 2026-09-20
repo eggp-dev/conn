@@ -41,8 +41,6 @@ export type TabState = {
   allows: string[];
   agents: string[];
   typing: boolean;
-  /** Content-free signal for optional suggestions; input bytes are never retained here. */
-  humanInputRevision: number;
   proposal: null | { id: string; agentId: string; text: string; ready: boolean; intent?: string };
   approval: null | { id: string; agentId: string; cmd: string; label: string; at: number; intent?: string; analysis?: Analysis };
   grace: null | { execId: string; cmd: string; ms: number; start: number; intent?: string };
@@ -59,7 +57,7 @@ export function newTab(id: string, n: number): TabState {
     id, title: `Terminal ${n}`, statusReady: false, shellIntegration: { state: "unavailable" }, shared: false, externalOrigin: false, surfaceGeneration: 1, outputSeq: 0, surfaceAvailable: false, inputPending: false, externalStarting: false, externalInputAvailable: false, profileId: null, profileName: null, reviewRequired: false, processAlive: true, policyBlockedUntil: 0, attended: false, attention: null, openedBy: null,
     controller: { type: "human" }, mode: "autopilot", effectiveMode: "autopilot", gate: false,
     pacing: { minWriteIntervalMs: 0, enterGraceMs: 0, leaseTtlSecs: 60, approvalTtlSecs: 300 },
-    mask: null, allows: [], agents: [], typing: false, humanInputRevision: 0, proposal: null, approval: null, grace: null, ctlReq: null,
+    mask: null, allows: [], agents: [], typing: false, proposal: null, approval: null, grace: null, ctlReq: null,
     lastAgent: null, handback: false, timeline: newTimeline(), cursor: { x: 0, y: 0, w: 8, h: 16, row: 0 }, wash: null,
   };
 }
@@ -87,12 +85,9 @@ export const st = $state({
   fontSize: Number(localStorage.getItem("ss:fontSize") || 13),
   paletteOpen: false,
   centerOpen: false,
-  menuOpen: false,
   sharingOpen: false,
   /** Agent connections waiting for the owner's answer. Connection-level, not per tab. */
   admissions: [] as { connId: number; agentId: string }[],
-  completionOpen: false,
-  completionRequest: 0,
   settingsOpen: false,
   timelineOpen: false,
   settingsTab: "agents" as "profiles" | "agents" | "automation" | "pacing" | "policy" | "appearance" | "extensions" | "diagnostics",

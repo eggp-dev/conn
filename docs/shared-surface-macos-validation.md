@@ -49,13 +49,7 @@ or passwords in a report, screenshot, shell command or commit.
    stop. Stop sharing with and without pending input: access must end immediately,
    while the human can continue in the same process. Verify sharing boundaries in
    the timeline and no retroactive private-input or startup-payload history.
-7. Apply and revert a theme through Extensions. Test OS credential save/presence/
-   deletion using a synthetic value and isolated config, with provider requests
-   disabled. Do not send the synthetic value to OpenAI. Verify no plaintext file
-   fallback and no read-key API. Do not lock or alter the user's entire login keychain.
-8. Exercise completion acceptance/cancellation using fixtures: accept inserts only,
-   never Enter; input, sharing, frame and control changes cancel stale proposals.
-   A real provider call is a separate opt-in acceptance test with user-owned credentials.
+7. Apply and revert a theme through Extensions.
 
 ## Report and fixes
 

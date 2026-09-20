@@ -65,8 +65,6 @@
     });
     const inputListener = observeTerminalInput(term, (data, origin) => {
       const tb = t;
-      if (origin === "human") tb.humanInputRevision++;
-      if (origin === "human" && st.completionOpen) { st.completionOpen = false; void cmd("completion_cancel", { session }).catch(() => {}); }
       if (origin === "terminal") {
         // The first child output can precede the final started-status refresh.
         cmd("terminal_response", { session, data });

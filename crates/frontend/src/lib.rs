@@ -85,7 +85,6 @@ impl Harness {
     pub fn shutdown(&self) {
         cancel_all_pending(&self.state);
         self.state.automation.stop_all();
-        self.state.extensions.cancel_all();
         self.state.server.lock().take();
         for id in self.state.hub.ids() { self.state.hub.remove(&id); }
         for e in self.state.engines.lock().drain().map(|(_,e)|e) { let _ = e.terminate(); }
@@ -196,7 +195,6 @@ fn terminal_output(app: AppHandle, session: String) -> conn_core::session::Outpu
     Box::new(move |frame| {
         use base64::Engine as _;
         if let Some(state) = app.state.upgrade() {
-            state.extensions.cancel(&session);
             let data = base64::engine::general_purpose::STANDARD.encode(&frame.data);
             let value = json!({"session":session,"data":data,"outputSeq":frame.output_seq,"generation":frame.generation});
             let mut output = state.output.lock();
@@ -297,9 +295,6 @@ fn spawn_tab_with(app: &AppHandle, state: &AppState, window: &str, mut rows: u16
             ServerEvent::Output { .. } => {}, // Raw output uses the early writer above.
             other => {
                 let mut v = serde_json::to_value(&other).unwrap_or(Value::Null);
-                if matches!(v["event"].as_str(), Some("control_granted" | "control_revoked" | "mode_changed" | "sharing_changed" | "process_exited")) {
-                    if let Some(state) = handle.state.upgrade() { state.extensions.cancel(&sid); }
-                }
                 if let Some(o) = v.as_object_mut() {
                     o.insert("session".into(), Value::String(sid.clone()));
                 }
@@ -460,7 +455,6 @@ fn open_tab(app: &AppHandle, state: &AppState, window: &str, rows: u16, cols: u1
 fn close_tab(state: &AppState, session: String) -> Result<Option<String>, String> {
     state.pending_sessions.lock().remove(&session);
     state.automation.stop_session(&session);
-    state.extensions.cancel(&session);
     state.output.lock().remove(&session);
     state.hub.remove(&session);
     if let Some(e) = state.engines.lock().remove(&session) {
@@ -476,11 +470,7 @@ fn attend(state: &AppState, session: String) -> Result<bool, String> {
 
 fn input(state: &AppState, session: String, data: String) -> Result<(), String> {
     if cancel_pending(state, &session) { return Ok(()); }
-    let e = engine(state, &session)?;
-    let session_state = e.session();
-    let mut s = session_state.lock();
-    state.extensions.cancel(&session);
-    s.human_input(data.as_bytes());
+    engine(state, &session)?.session().lock().human_input(data.as_bytes());
     Ok(())
 }
 
@@ -493,11 +483,7 @@ fn resize(state: &AppState, session: String, rows: u16, cols: u16) -> Result<(),
     if let Some(pending) = state.pending_sessions.lock().get_mut(&session) {
         pending.rows = rows.max(1); pending.cols = cols.max(1); return Ok(());
     }
-    let e = engine(state, &session)?;
-    let session_state = e.session();
-    let mut s = session_state.lock();
-    state.extensions.cancel(&session);
-    s.resize(rows, cols);
+    engine(state, &session)?.session().lock().resize(rows, cols);
     Ok(())
 }
 
@@ -512,11 +498,7 @@ fn status(state: &AppState, session: String) -> Result<Value, String> {
 
 fn take(state: &AppState, session: String) -> Result<Option<String>, String> {
     if cancel_pending(state, &session) { return Ok(None); }
-    let e = engine(state, &session)?;
-    let session_state = e.session();
-    let mut s = session_state.lock();
-    state.extensions.cancel(&session);
-    Ok(s.human_take())
+    Ok(engine(state, &session)?.session().lock().human_take())
 }
 
 fn approve(state: &AppState, session: String, approval_id: String, decision: String) -> Result<Value, String> {

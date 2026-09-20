@@ -3,8 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const API_VERSION: u32 = 1;
-pub const PROVIDER_ID: &str = "conn.provider.openai";
-pub const COMPLETION_ID: &str = "conn.completion";
 pub const DEFAULT_THEME: &str = "conn.theme.midnight";
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -95,18 +93,9 @@ impl Manifest {
         if !valid_id(&self.id) || !valid_name(&self.name) {
             return Err("Invalid extension identity".into());
         }
-        let expected: BTreeSet<_> = match self.kind {
-            Kind::Theme => [Capability::Theme].into_iter().collect(),
-            Kind::Provider if reviewed_builtin && self.id == PROVIDER_ID => {
-                [Capability::ModelRequest].into_iter().collect()
-            }
-            Kind::Completion if reviewed_builtin && self.id == COMPLETION_ID => [
-                Capability::VisibleFrame,
-                Capability::ModelRequest,
-                Capability::Proposal,
-            ]
-            .into_iter()
-            .collect(),
+        // No executable built-in ships today. One is admitted here by exact reviewed ID and capability set.
+        let expected: BTreeSet<_> = match (&self.kind, reviewed_builtin) {
+            (Kind::Theme, _) => [Capability::Theme].into_iter().collect(),
             _ => return Err("Only reviewed built-in executable extensions are supported".into()),
         };
         if self.capabilities != expected {
@@ -144,10 +133,6 @@ impl Registry {
     pub fn all(&self) -> impl Iterator<Item = &Manifest> {
         self.manifests.values()
     }
-    pub fn allows(&self, id: &str, capability: Capability) -> bool {
-        self.get(id)
-            .is_some_and(|m| m.capabilities.contains(&capability))
-    }
     pub fn builtin() -> Self {
         let mut registry = Self::new();
         let themes: Vec<Theme> = serde_json::from_str(include_str!("builtin-themes.json"))
@@ -166,38 +151,6 @@ impl Registry {
                     true,
                 )
                 .expect("valid built-in theme");
-        }
-        for (id, name, kind, capabilities) in [
-            (
-                PROVIDER_ID,
-                "OpenAI",
-                Kind::Provider,
-                vec![Capability::ModelRequest],
-            ),
-            (
-                COMPLETION_ID,
-                "Command suggestions",
-                Kind::Completion,
-                vec![
-                    Capability::VisibleFrame,
-                    Capability::ModelRequest,
-                    Capability::Proposal,
-                ],
-            ),
-        ] {
-            registry
-                .register(
-                    Manifest {
-                        api_version: API_VERSION,
-                        id: id.into(),
-                        name: name.into(),
-                        kind,
-                        capabilities: capabilities.into_iter().collect(),
-                        theme: None,
-                    },
-                    true,
-                )
-                .expect("valid built-in extension");
         }
         registry
     }

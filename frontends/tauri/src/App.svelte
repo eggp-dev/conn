@@ -8,7 +8,6 @@
   import Island from "./components/Island.svelte";
   import Palette from "./components/Palette.svelte";
   import type { Action, Parser } from "./components/Palette.svelte";
-  import CompletionBar from "./components/CompletionBar.svelte";
   import SharingDialog from "./components/SharingDialog.svelte";
   import Center from "./components/Center.svelte";
   import SettingsSheet from "./components/SettingsSheet.svelte";
@@ -146,7 +145,6 @@
     const holder = c.controller.type === "agent" ? c.controller.agentId ?? "agent" : c.lastAgent?.agentId ?? "agent";
     const lang = i18n.lang; void lang;
     const all: Action[] = [
-      { id: "completion", group: "agents", label: tr("ext.requestCompletion"), aliases: ["complete", "suggest", "자동완성", "제안"], when: () => cur().shared && cur().controller.type === "human", run: () => { st.completionRequest++; } },
       { id: "sharing", group: "view", label: tr(c.shared ? "sharing.manage" : "sharing.start"), aliases: ["share", "private", "공유", "비공유"], run: () => { st.sharingOpen = true; } },
       { id: "take", group: "conn", now: c.controller.type === "agent", label: tr("a.take"), hint: tr("a.take.hint"), aliases: ["take", "revoke", "회수", "뺏기", "제어권"], run: () => cmd("take"), when: () => cur().controller.type === "agent" },
       { id: "handback", group: "conn", now: c.handback, label: tr("a.handback", { agent: holder }), keys: shortcutLabel("⌘⏎"), aliases: ["hand back", "give back", "되돌려주기", "다시"], run: () => chip?.handBack(), when: () => !!cur().lastAgent && cur().controller.type === "human" },
@@ -199,9 +197,9 @@
   const timelineSpace = $derived(!cur().shared || !st.timelineOpen || !timelineHeight ? 0 : timelineHeight + 10);
   function onKey(e: KeyboardEvent) {
     if (!appShortcut(e)) {
-      if (e.key === "Escape" && (st.paletteOpen || st.settingsOpen || st.timelineOpen || st.centerOpen || st.sharingOpen || st.completionOpen || cur().handback)) {
+      if (e.key === "Escape" && (st.paletteOpen || st.settingsOpen || st.timelineOpen || st.centerOpen || st.sharingOpen || cur().handback)) {
         e.preventDefault();
-        st.paletteOpen = false; st.settingsOpen = false; st.timelineOpen = false; st.centerOpen = false; st.sharingOpen = false; st.completionOpen = false;
+        st.paletteOpen = false; st.settingsOpen = false; st.timelineOpen = false; st.centerOpen = false; st.sharingOpen = false;
         cur().handback = false;
         focusTerm();
       }
@@ -268,7 +266,7 @@
         t.surfaceAvailable = false;
         t.approval = null; t.ctlReq = null; t.proposal = null; t.grace = null; t.handback = false;
         setController(t, "human");
-        if (!t.shared) { st.timelineOpen = false; st.completionOpen = false; }
+        if (!t.shared) st.timelineOpen = false;
         void syncStatus(t.id);
         return;
       }
@@ -413,7 +411,7 @@
   <TabStrip onselect={select} onclose={closeTab} onnew={openTab} onsettings={() => openSettings(st.settingsTab)} onpalette={() => { st.settingsOpen = false; st.centerOpen = false; st.paletteOpen = true; }} ontimeline={() => { st.timelineOpen = !st.timelineOpen; }} />
   {#if st.active}<Island onopen={() => { st.paletteOpen = false; st.centerOpen = !st.centerOpen; }} />{/if}
   {#if !!cur().shared}
-  <div class="interaction-dock" bind:clientHeight={dockHeight}><AdmissionRequest /><ControlRequest /><Hold /><Ghost /><GraceBar /><HandbackChip bind:this={chip} /><CompletionBar /></div>
+  <div class="interaction-dock" bind:clientHeight={dockHeight}><AdmissionRequest /><ControlRequest /><Hold /><Ghost /><GraceBar /><HandbackChip bind:this={chip} /></div>
   <Timeline bind:height={timelineHeight} />
   {/if}
   <Toasts />
