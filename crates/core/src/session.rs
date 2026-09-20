@@ -176,7 +176,6 @@ pub enum ControlOutcome {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnKind {
     Agent,
-    Human,
     Frontend,
 }
 

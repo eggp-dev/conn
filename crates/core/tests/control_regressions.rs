@@ -113,9 +113,10 @@ fn review_required_allow_session_rejection_keeps_request_pending() {
     h.session.agent_type(1, "Write-Output hello").unwrap();
     let KeyResult::Pending { approval_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
     let session = std::sync::Arc::new(parking_lot::Mutex::new(h.session));
-    let err = conn_core::ipc::dispatch_trusted(&session, 99, "approve", &json!({"approvalId":approval_id,"decision":"allow_session"})).unwrap_err();
-    assert_eq!(err.code, "invalid_input");
+    let err = conn_core::ipc::dispatch(&session, 1, "approve", &json!({"approvalId":approval_id,"decision":"grant"})).unwrap_err();
+    assert_eq!(err.code, "owner_required", "the requesting agent cannot approve its own command");
     let mut s = session.lock();
+    assert!(matches!(s.resolve_approval(&approval_id, Decision::AllowSession, "cli"), Err(SessionError::InvalidInput(_))));
     assert_eq!(s.check_approval(&approval_id).unwrap().state, ApprovalState::Pending);
     assert!(s.status().session_allows.is_empty());
     assert_eq!(String::from_utf8_lossy(&h.pty.lock().unwrap()), "Write-Output hello");

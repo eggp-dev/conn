@@ -109,7 +109,7 @@ fn private_sessions_reject_agents_and_public_dispatch_even_with_frontend_identit
         assert_eq!(err.code, "not_found");
         assert_eq!(err.message, "session unavailable");
     }
-    assert!(ipc::dispatch_trusted(&session, 0, "snapshot", &json!({})).is_err(), "no owner-presented surface exists");
+    assert!(session.lock().snapshot(Actor::Human).is_err(), "no owner-presented surface exists");
     assert!(denied.lock().unwrap().is_empty());
     assert!(records.lock().unwrap().is_empty());
 }
