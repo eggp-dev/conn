@@ -41,6 +41,32 @@ TARGETS = {
 # Rust target -> Tauri updater platform key. updater_artifacts.py reads this table too.
 PLATFORMS = {"aarch64-apple-darwin": "darwin-aarch64", "x86_64-unknown-linux-gnu": "linux-x86_64", "x86_64-pc-windows-msvc": "windows-x86_64"}
 SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?")
+WORKSPACE_VERSION = "Cargo.toml: workspace package"
+JSON_MANIFESTS = ("frontends/tauri/package.json", "frontends/tauri/src-tauri/tauri.conf.json", "plugin/.claude-plugin/plugin.json", "plugin/.codex-plugin/plugin.json")
+# Lockfiles list every dependency; only Conn's own packages carry the release version.
+LOCKED_PACKAGES = {
+    "Cargo.lock": {"conn", "conn-core", "conn-frontend", "conn-browser-harness"},
+    "frontends/tauri/src-tauri/Cargo.lock": {"conn-desktop", "conn-core", "conn-frontend"},
+}
+# Where `bump` writes what `declarations` reads. Group 1 is the version; each pattern must match exactly once.
+_JSON_VERSION = r'^  "version": "([^"\n]+)"'
+VERSION_PATTERNS = {
+    "Cargo.toml": (r'^\[workspace\.package\]\n(?:(?!\[).*\n)*?version = "([^"\n]+)"', r'^conn-core = \{[^}\n]*\bversion = "([^"\n]+)"'),
+    "frontends/tauri/src-tauri/Cargo.toml": (r'^\[package\]\n(?:(?!\[).*\n)*?version = "([^"\n]+)"',),
+    **{name: (_JSON_VERSION,) for name in JSON_MANIFESTS},
+    "frontends/tauri/package-lock.json": (_JSON_VERSION, r'^    "": \{\n(?:      .*\n)*?      "version": "([^"\n]+)"'),
+    ".claude-plugin/marketplace.json": (r'^      "name": "conn",\n(?:      .*\n)*?      "version": "([^"\n]+)"',),
+    **{name: tuple(rf'^name = "{package}"\nversion = "([^"\n]+)"' for package in sorted(packages)) for name, packages in LOCKED_PACKAGES.items()},
+}
+# Prose that links to the current release. `check` rejects any other version in these places and `bump` rewrites them.
+PROSE_FILES = ("README.md", "README.ko.md", "docs/getting-started.md", "docs/getting-started.ko.md", "docs/platform-support.md", "docs/platform-support.ko.md")
+RELEASE_REFERENCES = [re.compile(prefix + f"(?P<version>{SEMVER.pattern})" + suffix) for prefix, suffix in (
+    (r"releases/download/v", r"(?=/)"),             # .../releases/download/v0.8.2/<asset>
+    (r"releases/tag/v", r""),                       # .../releases/tag/v0.8.2
+    (r"conn-v", r"(?=-(?:aarch64|x86_64)-)"),       # conn-v0.8.2-aarch64-apple-darwin-desktop.dmg
+    (r"CONN_VERSION=v", r""),                       # install script pin
+    (r"\bv", r"(?= (?:preview|프리뷰))"),            # "v0.8.2 preview" labels
+)]
 
 
 class ReleaseError(ValueError):
@@ -85,41 +111,133 @@ def changelog_section(root: Path, version: str) -> str:
     return body
 
 
-def check(root: Path = ROOT, tag: str | None = None) -> str:
-    """All independently published Conn components must share one version."""
-    cargo = read_toml(root / "Cargo.toml")
-    version = validate_version(cargo["workspace"]["package"]["version"])
-    if tag is not None and tag != f"v{version}":
-        raise ReleaseError(f"Tag {tag!r} must match v{version}")
-    declarations = {
+def declarations(root: Path, texts: dict[str, str] | None = None) -> dict[str, str]:
+    """Every published version declaration as the tools that consume it parse it.
+
+    `texts` overrides file contents by name, so `bump` can verify a rewrite before it touches the disk.
+    """
+    def text(name: str) -> str:
+        return texts[name] if texts and name in texts else (root / name).read_text(encoding="utf-8")
+    cargo = tomllib.loads(text("Cargo.toml"))
+    found = {
+        WORKSPACE_VERSION: cargo["workspace"]["package"]["version"],
         "Cargo.toml: workspace conn-core": cargo["workspace"]["dependencies"]["conn-core"]["version"],
-        "frontends/tauri/src-tauri/Cargo.toml": read_toml(root / "frontends/tauri/src-tauri/Cargo.toml")["package"]["version"],
+        "frontends/tauri/src-tauri/Cargo.toml": tomllib.loads(text("frontends/tauri/src-tauri/Cargo.toml"))["package"]["version"],
     }
-    for name in ("frontends/tauri/package.json", "frontends/tauri/src-tauri/tauri.conf.json", "plugin/.claude-plugin/plugin.json", "plugin/.codex-plugin/plugin.json"):
-        declarations[name] = read_json(root / name)["version"]
-    npm_lock = read_json(root / "frontends/tauri/package-lock.json")
-    declarations["package-lock.json: root"] = npm_lock["version"]
-    declarations["package-lock.json: packages root"] = npm_lock["packages"][""]["version"]
-    marketplace = read_json(root / ".claude-plugin/marketplace.json")
-    plugins = [p for p in marketplace["plugins"] if p["name"] == "conn"]
+    for name in JSON_MANIFESTS:
+        found[name] = json.loads(text(name))["version"]
+    npm_lock = json.loads(text("frontends/tauri/package-lock.json"))
+    found["package-lock.json: root"] = npm_lock["version"]
+    found["package-lock.json: packages root"] = npm_lock["packages"][""]["version"]
+    plugins = [p for p in json.loads(text(".claude-plugin/marketplace.json"))["plugins"] if p["name"] == "conn"]
     if len(plugins) != 1:
         raise ReleaseError("Claude marketplace must contain exactly one Conn plugin")
-    declarations[".claude-plugin/marketplace.json"] = plugins[0]["version"]
-    expected_packages = {
-        "Cargo.lock": {"conn", "conn-core", "conn-frontend", "conn-browser-harness"},
-        "frontends/tauri/src-tauri/Cargo.lock": {"conn-desktop", "conn-core", "conn-frontend"},
-    }
-    for name, expected in expected_packages.items():
-        packages = [p for p in read_toml(root / name)["package"] if p["name"] in expected]
+    found[".claude-plugin/marketplace.json"] = plugins[0]["version"]
+    for name, expected in LOCKED_PACKAGES.items():
+        packages = [p for p in tomllib.loads(text(name))["package"] if p["name"] in expected]
         if {p["name"] for p in packages} != expected or len(packages) != len(expected):
             raise ReleaseError(f"{name}: missing or duplicate Conn packages")
         for package in packages:
-            declarations[f"{name}: {package['name']}"] = package["version"]
-    mismatches = [f"{name}: {actual!r}" for name, actual in declarations.items() if actual != version]
+            found[f"{name}: {package['name']}"] = package["version"]
+    return found
+
+
+def release_references(text: str) -> list[re.Match]:
+    """Places in prose that name one release: its tag, download address, asset files or label."""
+    return sorted((match for pattern in RELEASE_REFERENCES for match in pattern.finditer(text)), key=lambda match: match.start())
+
+
+def stale_references(root: Path, version: str) -> list[str]:
+    """Download links that still point at another release, as `file:line` messages."""
+    stale = []
+    for name in PROSE_FILES:
+        if not (root / name).is_file():
+            raise ReleaseError(f"{name} not found; it is expected to link to the current release (see PROSE_FILES)")
+        text = (root / name).read_text(encoding="utf-8")
+        for match in release_references(text):
+            if match["version"] != version:
+                stale.append(f"{name}:{text.count(chr(10), 0, match.start()) + 1}: {match[0]}")
+    return stale
+
+
+def check(root: Path = ROOT, tag: str | None = None) -> str:
+    """All independently published Conn components must share one version.
+
+    That version also needs its changelog section, and the READMEs and guides must link to it.
+    """
+    declared = declarations(root)
+    version = validate_version(declared.pop(WORKSPACE_VERSION))
+    if tag is not None and tag != f"v{version}":
+        raise ReleaseError(f"Tag {tag!r} must match v{version}")
+    mismatches = [f"{name}: {actual!r}" for name, actual in declared.items() if actual != version]
     if mismatches:
         raise ReleaseError(f"Version must be {version} everywhere:\n" + "\n".join(mismatches))
     changelog_section(root, version)
+    stale = stale_references(root, version)
+    if stale:
+        raise ReleaseError(f"Download links and release labels must name {version}; "
+                           "`release.py bump` rewrites them with the manifests:\n" + "\n".join(stale))
     return version
+
+
+def version_key(version: str):
+    """SemVer precedence: a prerelease sorts before its release, numeric identifiers before text."""
+    match = SEMVER.fullmatch(validate_version(version))
+    prerelease = [(0, int(part), "") if part.isdigit() else (1, 0, part) for part in match[4].split(".")] if match[4] else []
+    return int(match[1]), int(match[2]), int(match[3]), not prerelease, prerelease
+
+
+def bump(new: str, root: Path = ROOT, force: bool = False) -> list[tuple[str, int]]:
+    """Rewrite every declaration and release link from the current version to `new`.
+
+    Returns (file, replacements) for each changed file. Nothing is written unless
+    the whole rewrite parses back to `new`. The changelog stays a human's job.
+    """
+    validate_version(new)
+    declared = declarations(root)
+    if len(set(declared.values())) != 1:
+        raise ReleaseError("Version declarations disagree; make `release.py check` pass before bumping:\n" +
+                           "\n".join(f"{name}: {actual!r}" for name, actual in declared.items()))
+    old = validate_version(declared[WORKSPACE_VERSION])
+    if version_key(new) <= version_key(old) and not force:
+        raise ReleaseError(f"{new} is not newer than the current {old}; pass --force to set it anyway")
+    rewritten, counts = {}, {}
+    for name, patterns in VERSION_PATTERNS.items():
+        text = (root / name).read_bytes().decode("utf-8")
+        for pattern in patterns:
+            spans = [match.span(1) for match in re.finditer(pattern, text, re.MULTILINE)]
+            if len(spans) != 1:
+                raise ReleaseError(f"{name}: expected one version declaration matching {pattern!r}, found {len(spans)}")
+            text = text[:spans[0][0]] + new + text[spans[0][1]:]
+        rewritten[name], counts[name] = text, len(patterns)
+    for name in PROSE_FILES:
+        text = (root / name).read_bytes().decode("utf-8")
+        spans = [match.span("version") for match in release_references(text) if match["version"] == old]
+        for first, last in reversed(spans):
+            text = text[:first] + new + text[last:]
+        rewritten[name], counts[name] = text, len(spans)
+    # The consumers' own parsers have the last word, before anything is written.
+    missed = [f"{name}: {actual!r}" for name, actual in declarations(root, rewritten).items() if actual != new]
+    if missed:
+        raise ReleaseError("Rewriting would leave these declarations behind; nothing was changed:\n" + "\n".join(missed))
+    changed = [(name, counts[name]) for name, text in rewritten.items() if text != (root / name).read_bytes().decode("utf-8")]
+    for name, _ in changed:
+        (root / name).write_bytes(rewritten[name].encode("utf-8"))
+    return changed
+
+
+def bump_followups(root: Path, version: str) -> list[str]:
+    """What `bump` leaves to a person, as lines to print."""
+    lines = []
+    try:
+        changelog_section(root, version)
+    except ReleaseError:
+        lines.append(f"Next: add a '## {version} — Preview · YYYY-MM-DD' section to CHANGELOG.md. "
+                     "`release.py check` fails until it exists, and the release notes quote it.")
+    stale = stale_references(root, version)
+    if stale:
+        lines.append("These links name some other release and were left alone; fix them by hand:\n" + "\n".join(stale))
+    return lines
 
 
 def asset_names(version: str, target: str) -> list[str]:
@@ -458,7 +576,10 @@ def draft(artifacts: Path, tag: str, sha: str, root: Path = ROOT) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("check", help="Check version consistency").add_argument("--tag")
+    sub.add_parser("check", help="Check version consistency, the changelog section and release links").add_argument("--tag")
+    raise_version = sub.add_parser("bump", help="Set a new version in every manifest, lockfile entry and download link")
+    raise_version.add_argument("version")
+    raise_version.add_argument("--force", action="store_true", help="Allow a version that is not newer than the current one")
     pack = sub.add_parser("package", help="Collect one platform's prebuilt release assets")
     pack.add_argument("--target", required=True, choices=TARGETS)
     pack.add_argument("--out", type=Path, required=True)
@@ -477,6 +598,13 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "check":
             print(f"Version declarations agree: {check(tag=args.tag)}")
+        elif args.command == "bump":
+            changed = bump(args.version, force=args.force)
+            for name, count in changed:
+                print(f"{name}: {count}")
+            print(f"Set {args.version} in {len(changed)} files.")
+            for line in bump_followups(ROOT, args.version):
+                print(line)
         elif args.command == "package":
             for path in package(args.target, args.out):
                 print(path)
