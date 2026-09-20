@@ -18,7 +18,7 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::affordance::{affordances_for, Actor, Affordance, AffordanceState};
-use crate::approval::{self, ApprovalQueue, ApprovalRequest, ApprovalState, Decision as ApprovalDecision};
+use crate::approval::{ApprovalQueue, ApprovalRequest, ApprovalState, Decision as ApprovalDecision};
 use crate::audit::Audit;
 use crate::authority::{Authority, AuthorityError, ConnId, Controller, Lease, RevokeReason};
 use crate::config::Pacing;
@@ -61,8 +61,6 @@ pub enum ServerEvent {
     ShellCommandFinished { #[serde(rename = "commandId")] command_id: String, #[serde(rename = "exitCode")] exit_code: Option<i32>, #[serde(rename = "durationMs")] duration_ms: u64 },
     /// The visible screen changed (coalesced by the tick).
     ScreenChanged { revision: u64 },
-    /// Owner-only raw PTY output, base64. Never sent on public agent sockets.
-    Output { data: String, #[serde(rename = "outputSeq")] output_seq: u64 },
     SharingChanged { shared: bool, generation: u64 },
     ProcessExited { #[serde(rename = "exitCode")] exit_code: Option<u32> },
     PacingChanged { pacing: Pacing },
@@ -75,9 +73,6 @@ pub enum ServerEvent {
     /// Copilot mode: the proposed command line changed (ghost text).
     ProposalChanged { proposal: Proposal },
     ProposalResolved { #[serde(rename = "proposalId")] proposal_id: String, state: ProposalState, cmd: String, policy: Option<String> },
-    /// The human handed control back to the agent that was last in control.
-    /// The human ran a command (for timelines).
-    HumanExec { cmd: String },
     /// The human started or stopped looking at this session.
     AttentionChanged { attended: bool },
     /// An agent asks the human to come back to this session.
@@ -176,7 +171,6 @@ pub enum ControlOutcome {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnKind {
     Agent,
-    Human,
     Frontend,
 }
 
@@ -184,7 +178,6 @@ struct ConnInfo {
     kind: ConnKind,
     name: String,
     sink: Box<dyn EventSink>,
-    stream_output: bool,
     last_activity: Instant,
 }
 
@@ -208,8 +201,6 @@ pub enum SessionError {
     RateLimited { retry_after_ms: u64 },
     #[error("affordance '{0}' is disabled for agents by the frontend")]
     Masked(String),
-    #[error("control request {0} was denied")]
-    ControlDenied(String),
     #[error("not available in {0:?} mode")]
     WrongMode(AgentMode),
     #[error("a proposal is pending ({0}); the human must commit or reject it")]
@@ -220,8 +211,6 @@ pub enum SessionError {
     NotAvailable(String),
     #[error("terminal screen revision is no longer current")]
     SurfaceUnavailable,
-    #[error("io: {0}")]
-    Io(#[from] std::io::Error),
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -362,13 +351,9 @@ pub struct Status {
     pub connected_agents: Vec<String>,
     #[serde(rename = "agentConnections")]
     pub agent_connections: Vec<AgentConnection>,
-    #[serde(rename = "connectedFrontends")]
-    pub connected_frontends: Vec<String>,
     pub pacing: Pacing,
     #[serde(rename = "affordanceMask")]
     pub affordance_mask: Option<Vec<Affordance>>,
-    #[serde(rename = "promptActive")]
-    pub prompt_active: bool,
     pub mode: AgentMode,
     /// Effective mode; unobserved sessions have no input authority.
     #[serde(rename = "effectiveMode")]
@@ -420,13 +405,8 @@ pub struct SessionConfig {
     pub audit: Audit,
     pub policy: PolicyStore,
     pub pty_writer: Box<dyn Write + Send>,
-    /// Where PTY output goes for the human. `None` when frontends stream it over IPC.
-    pub output: Option<Box<dyn Write + Send>>,
     pub master: Option<Box<dyn MasterPty + Send>>,
     pub pacing: Pacing,
-    /// Draw the approval prompt into `output` (terminal mode). Frontends set this to
-    /// false and render their own from `ApprovalRequested`.
-    pub render_prompt: bool,
     /// Pid of the shell, used to read its cwd (`lsof -d cwd`) when analysing a command.
     pub shell_pid: Option<u32>,
 }
@@ -465,18 +445,12 @@ pub struct Session {
     shell_agent_input: bool,
     audit: Audit,
     pty: Box<dyn Write + Send>,
-    output: Option<Box<dyn Write + Send>>,
     output_frame_sink: Option<OutputFrameSink>,
     master: Option<Box<dyn MasterPty + Send>>,
     pacing: Pacing,
-    render_prompt: bool,
     process_alive: bool,
     conns: HashMap<ConnId, ConnInfo>,
     next_local_conn: ConnId,
-    /// Approval id currently displayed in the terminal, if any.
-    ui: Option<String>,
-    /// PTY output held back while the approval prompt is on screen.
-    held_output: Vec<u8>,
     affordance_mask: Option<HashSet<Affordance>>,
     last_agent_write: Option<Instant>,
     scheduled: Option<ScheduledExec>,
@@ -522,7 +496,7 @@ pub const SUPPORTED_KEYS: &[&str] = &[
     "ENTER", "TAB", "ESC", "BACKSPACE", "UP", "DOWN", "LEFT", "RIGHT", "CTRL_C", "CTRL_D",
 ];
 
-/// Connection ids handed out by `ipc::serve` start at 1. Local subscribers (embedders)
+/// Connection ids handed out by the socket server start at 1. Local subscribers (embedders)
 /// get ids from a separate high range so the two never collide.
 const LOCAL_CONN_BASE: ConnId = 1 << 40;
 
@@ -532,9 +506,8 @@ impl Session {
     }
 
     /// Construct a private native session with activity recording disabled.
-    pub fn new_external_private(mut cfg: SessionConfig) -> Self {
+    pub fn new_external_private(cfg: SessionConfig) -> Self {
         cfg.audit.set_enabled(false);
-        cfg.render_prompt = false;
         Self::with_origin(cfg, true)
     }
 
@@ -567,16 +540,12 @@ impl Session {
             shell_agent_input: false,
             audit: cfg.audit,
             pty: cfg.pty_writer,
-            output: cfg.output,
             output_frame_sink: None,
             master: cfg.master,
             pacing: cfg.pacing,
-            render_prompt: cfg.render_prompt,
             process_alive: true,
             conns: HashMap::new(),
             next_local_conn: LOCAL_CONN_BASE,
-            ui: None,
-            held_output: Vec::new(),
             affordance_mask: None,
             last_agent_write: None,
             scheduled: None,
@@ -649,7 +618,6 @@ impl Session {
             rows: size.rows, cols: size.cols,
             cursor: self.screen.visible_cursor(), screen: self.screen.rows(),
             alternate_screen: self.screen.alternate_screen(),
-            image: None, image_unavailable: true,
         })
     }
 
@@ -941,10 +909,6 @@ impl Session {
         if let Some(sink) = &self.output_frame_sink {
             sink(&OutputFrame { data: bytes.to_vec(), output_seq: self.output_seq, generation: self.surface_generation });
         }
-        if let Some(out) = &mut self.output {
-            let _ = out.write_all(bytes);
-            let _ = out.flush();
-        }
     }
 
     fn notify(&self, conn: ConnId, ev: ServerEvent) {
@@ -993,38 +957,24 @@ impl Session {
 
     pub fn register_conn(&mut self, conn: ConnId, kind: ConnKind, name: &str, sink: Box<dyn EventSink>) {
         if self.is_private() { return; }
-        self.conns.insert(conn, ConnInfo { kind, name: name.to_string(), sink, stream_output: false, last_activity: Instant::now() });
+        self.conns.insert(conn, ConnInfo { kind, name: name.to_string(), sink, last_activity: Instant::now() });
         if kind == ConnKind::Agent {
             self.audit.record(name, "connect", json!({ "conn": conn }));
         }
     }
 
-    /// Register a frontend. `stream_output` = also send raw PTY output as `Output` events.
-    pub fn register_frontend(&mut self, conn: ConnId, name: &str, sink: Box<dyn EventSink>, stream_output: bool) {
+    /// Register a frontend.
+    pub fn register_frontend(&mut self, conn: ConnId, name: &str, sink: Box<dyn EventSink>) {
         if conn < LOCAL_CONN_BASE { return; }
-        self.conns.insert(conn, ConnInfo { kind: ConnKind::Frontend, name: name.to_string(), sink, stream_output, last_activity: Instant::now() });
+        self.conns.insert(conn, ConnInfo { kind: ConnKind::Frontend, name: name.to_string(), sink, last_activity: Instant::now() });
     }
 
-    /// Subscribe an in-process frontend (embedders). Returns a handle id for `unsubscribe`.
-    pub fn subscribe(&mut self, name: &str, sink: Box<dyn EventSink>, stream_output: bool) -> ConnId {
+    /// Subscribe an in-process frontend (embedders). Returns its connection id.
+    pub fn subscribe(&mut self, name: &str, sink: Box<dyn EventSink>) -> ConnId {
         let id = self.next_local_conn;
         self.next_local_conn += 1;
-        self.register_frontend(id, name, sink, stream_output);
+        self.register_frontend(id, name, sink);
         id
-    }
-
-    /// Allocate a distinct in-process automation connection using the agent policy path.
-    pub fn subscribe_agent(&mut self, name: &str, sink: Box<dyn EventSink>) -> ConnId {
-        // Unlike a frontend subscription, an automation connection appears in
-        // the hub-wide connection list. Its ID must be unique across sessions.
-        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1 << 41);
-        let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        self.register_conn(id, ConnKind::Agent, name, sink);
-        id
-    }
-
-    pub fn unsubscribe(&mut self, conn: ConnId) {
-        self.connection_closed(conn);
     }
 
     pub fn conn_kind(&self, conn: ConnId) -> Option<ConnKind> {
@@ -1069,10 +1019,6 @@ impl Session {
                 self.human_input_pending = !matches!(bytes.last(), Some(b'\r' | b'\n' | 3 | 21));
             }
             if self.process_alive { self.write_pty(bytes); }
-            return;
-        }
-        if self.ui.is_some() {
-            self.ui_input(bytes);
             return;
         }
         self.shell_recording_armed |= !bytes.is_empty() && self.shell_recording_ready && self.shell_prompt_confirmed;
@@ -1127,27 +1073,14 @@ impl Session {
         Some(lease.label())
     }
 
-    /// Output from the PTY. Passed through untouched unless the approval prompt is up.
+    /// Output from the PTY, passed through untouched.
     pub fn pty_output(&mut self, bytes: &[u8]) {
         if bytes.is_empty() { return; }
         self.output_seq = self.output_seq.saturating_add(1);
         if self.screen.process(bytes) {
             self.screen_dirty = true;
         }
-        if self.ui.is_some() {
-            self.held_output.extend_from_slice(bytes);
-        } else {
-            self.write_output(bytes);
-        }
-        if self.conns.values().any(|c| c.stream_output) {
-            use base64::Engine as _;
-            let data = base64::engine::general_purpose::STANDARD.encode(bytes);
-            for c in self.conns.values() {
-                if c.stream_output {
-                    c.sink.send_scoped(ServerEvent::Output { data: data.clone(), output_seq: self.output_seq }, self.participation_generation);
-                }
-            }
-        }
+        self.write_output(bytes);
     }
 
     pub fn resize(&mut self, rows: u16, cols: u16) {
@@ -1401,20 +1334,9 @@ impl Session {
         Ok(Snapshot { mode: self.mode, effective_mode: self.effective_mode(), projection, controller: self.controller_info(), process_alive: self.process_alive })
     }
 
-    pub fn agent_request_control(&mut self, conn: ConnId) -> Result<LeaseInfo, SessionError> {
-        match self.agent_request_control_with(conn, None)? {
-            ControlOutcome::Granted { lease } => Ok(lease),
-            ControlOutcome::Pending { request_id } => Err(SessionError::ControlDenied(format!("{request_id} is pending"))),
-        }
-    }
-
-    /// `request_control` with an optional reason. With the control gate on, the request
-    /// is held for the human (`Pending`); otherwise it is granted immediately.
-    pub fn agent_request_control_with(&mut self, conn: ConnId, reason: Option<String>) -> Result<ControlOutcome, SessionError> {
-        self.agent_request_control_original(conn, json!({ "reason": reason }))
-    }
-
-    /// Preserve the submitted parameters before any human decision. Metadata does not authorize execution.
+    /// `request_control`. With the control gate on, the request is held for the human
+    /// (`Pending`); otherwise it is granted immediately. The submitted parameters are
+    /// preserved before any human decision. Metadata does not authorize execution.
     pub fn agent_request_control_original(&mut self, conn: ConnId, params: serde_json::Value) -> Result<ControlOutcome, SessionError> {
         self.require_participant(conn)?;
         if !params.is_object() || params.to_string().len() > 65536 {
@@ -1466,10 +1388,6 @@ impl Session {
         Ok(ControlOutcome::Granted { lease: self.grant_original(conn, reason, "request", Some(original_request))? })
     }
 
-    fn grant(&mut self, conn: ConnId, reason: Option<String>, via: &str) -> Result<LeaseInfo, SessionError> {
-        self.grant_original(conn, reason, via, None)
-    }
-
     fn grant_original(&mut self, conn: ConnId, reason: Option<String>, via: &str, original_request: Option<serde_json::Value>) -> Result<LeaseInfo, SessionError> {
         self.require_participant(conn)?;
         self.require_shared()?;
@@ -1519,7 +1437,7 @@ impl Session {
         if self.mode == AgentMode::Observe {
             return Err(SessionError::WrongMode(self.mode));
         }
-        let info = self.grant(conn, Some("hand_back".into()), "hand_back")?;
+        let info = self.grant_original(conn, Some("hand_back".into()), "hand_back", None)?;
         let ev = ServerEvent::ControlHandedBack { lease: info.lease_id.clone(), agent_id: agent_id.clone(), last_cmd: self.last_agent_cmd.clone() };
         self.notify(conn, ev.clone());
         self.broadcast(ev);
@@ -1573,11 +1491,6 @@ impl Session {
         self.control_gate = ask;
         self.audit.record("frontend", "control_gate", json!({ "ask": ask }));
         self.broadcast(ServerEvent::ControlGateChanged { ask });
-    }
-
-    /// Evaluate the current policy (with session allowances) without executing anything.
-    pub fn evaluate_policy(&self, cmd: &str) -> PolicyDecision {
-        self.policy.evaluate(cmd)
     }
 
     /// Full structural analysis of a line against the current policy and shell cwd.
@@ -1789,14 +1702,9 @@ impl Session {
         Ok(())
     }
 
-    /// Send a named key. ENTER runs the policy check. Equivalent to
-    /// `agent_send_key_with(conn, key, None)`.
-    pub fn agent_send_key(&mut self, conn: ConnId, key: &str) -> Result<KeyResult, SessionError> {
-        self.agent_send_key_with(conn, key, None)
-    }
-
-    /// Send a named key with the agent's stated intent (required for ENTER when the
-    /// policy says so). The intent is shown to the human and recorded in the audit log.
+    /// Send a named key. ENTER runs the policy check and carries the agent's stated
+    /// intent (required when the policy says so). The intent is shown to the human
+    /// and recorded in the audit log.
     pub fn agent_send_key_with(&mut self, conn: ConnId, key: &str, intent: Option<String>) -> Result<KeyResult, SessionError> {
         let intent = intent.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
         let bytes = key_bytes(key).ok_or_else(|| {
@@ -1889,7 +1797,7 @@ impl Session {
                     }
                     return Ok(KeyResult::Scheduled { exec_id, cmd, grace_ms });
                 }
-                self.execute_now_with(&agent_id, &cmd, intent);
+                self.execute_with_source(&agent_id, &cmd, intent, None);
                 Ok(KeyResult::Executed { cmd })
             }
             PolicyDecision::Deny { label } => {
@@ -1909,15 +1817,10 @@ impl Session {
                     json!({ "approval": req.id, "cmd": cmd, "label": label, "intent": intent }),
                 );
                 self.broadcast(ServerEvent::ApprovalRequested { request: req.clone() });
-                self.show_next_prompt();
                 self.notify_tools_changed();
                 Ok(KeyResult::Pending { approval_id: req.id, cmd, label })
             }
         }
-    }
-
-    fn execute_now_with(&mut self, agent_id: &str, cmd: &str, intent: Option<String>) {
-        self.execute_with_source(agent_id, cmd, intent, None);
     }
 
     fn execute_with_source(&mut self, agent_id: &str, cmd: &str, intent: Option<String>, by: Option<&str>) {
@@ -2026,7 +1929,7 @@ impl Session {
     // ----- approval -------------------------------------------------------
 
     /// Human decision on a pending approval. `by` is recorded in the audit log
-    /// (e.g. "prompt", "cli", "frontend").
+    /// (e.g. "cli", "frontend").
     pub fn resolve_approval(&mut self, id: &str, decision: ApprovalDecision, by: &str) -> Result<ApprovalInfo, SessionError> {
         if self.approvals.get(id).is_none() {
             return Err(SessionError::NotFound(id.to_string()));
@@ -2089,48 +1992,8 @@ impl Session {
         self.notify(req.conn, ev.clone());
         self.broadcast(ev);
         self.broadcast(ServerEvent::AgentExec { agent_id: req.agent_id.clone(), cmd: req.cmd.clone(), policy: format!("confirm:{outcome}"), intent: req.intent.clone(), submission_id });
-        if self.ui.as_deref() == Some(id) {
-            self.close_prompt();
-        }
-        self.show_next_prompt();
         self.notify_tools_changed();
         Some(req)
-    }
-
-    fn show_next_prompt(&mut self) {
-        if !self.render_prompt || self.ui.is_some() {
-            return;
-        }
-        let Some(req) = self.approvals.first_pending().cloned() else { return };
-        let cols = self.screen.size().cols;
-        let bytes = approval::render_prompt(&req, cols);
-        self.write_output(&bytes);
-        self.ui = Some(req.id);
-    }
-
-    fn close_prompt(&mut self) {
-        self.ui = None;
-        let mut out = approval::leave_prompt();
-        out.append(&mut self.held_output);
-        self.write_output(&out);
-    }
-
-    fn ui_input(&mut self, bytes: &[u8]) {
-        let Some(id) = self.ui.clone() else { return };
-        for b in bytes {
-            let decision = match b {
-                b'a' | b'y' => ApprovalDecision::Grant,
-                b'd' | b'n' | 0x03 | 0x1b => ApprovalDecision::Deny,
-                b'A' => ApprovalDecision::AllowSession,
-                _ => continue,
-            };
-            let _ = self.resolve_approval(&id, decision, "prompt");
-            break;
-        }
-    }
-
-    pub fn prompt_active(&self) -> bool {
-        self.ui.is_some()
     }
 
     // ----- housekeeping ---------------------------------------------------
@@ -2171,7 +2034,7 @@ impl Session {
             if surface_ready && s.state == ExecState::Scheduled && s.due <= now {
                 s.state = ExecState::Executed;
                 let (agent, cmd, intent) = (s.agent_id.clone(), s.cmd.clone(), s.intent.clone());
-                self.execute_now_with(&agent, &cmd, intent);
+                self.execute_with_source(&agent, &cmd, intent, None);
             }
         }
         if self.screen_dirty {
@@ -2218,10 +2081,8 @@ impl Session {
             policy_path: self.policy.path().map(|p| p.display().to_string()),
             connected_agents,
             agent_connections,
-            connected_frontends: self.conns.values().filter(|c| c.kind == ConnKind::Frontend).map(|c| c.name.clone()).collect(),
             pacing: self.pacing.clone(),
             affordance_mask: self.affordance_mask(),
-            prompt_active: self.ui.is_some(),
             mode: self.mode,
             effective_mode: self.effective_mode(),
             attended: self.attended,

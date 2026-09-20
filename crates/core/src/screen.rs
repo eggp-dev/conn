@@ -23,10 +23,6 @@ pub struct Projection {
     pub generation: u64,
     #[serde(rename = "outputSeq")]
     pub output_seq: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub image: Option<SurfaceImage>,
-    #[serde(rename = "imageUnavailable")]
-    pub image_unavailable: bool,
     pub revision: u64,
     pub size: Size,
     pub cursor: Option<Cursor>,
@@ -39,10 +35,6 @@ pub struct Projection {
 /// No raw input, scrollback, or metadata outside the visible surface belongs here.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SurfaceImage { pub mime_type: String, pub data: String }
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SurfaceFrame {
     pub surface_id: String,
     pub generation: u64,
@@ -53,16 +45,12 @@ pub struct SurfaceFrame {
     pub cursor: Option<Cursor>,
     pub screen: Vec<String>,
     pub alternate_screen: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub image: Option<SurfaceImage>,
-    #[serde(default)]
-    pub image_unavailable: bool,
 }
 
 impl SurfaceFrame {
     pub fn projection(&self) -> Projection {
         Projection { surface_id: self.surface_id.clone(), generation: self.generation, output_seq: self.output_seq,
-            image: self.image.clone(), image_unavailable: self.image_unavailable, revision: self.revision, size: Size { rows: self.rows, cols: self.cols },
+            revision: self.revision, size: Size { rows: self.rows, cols: self.cols },
             cursor: self.cursor.clone(), screen: self.screen.clone(), alternate_screen: self.alternate_screen }
     }
 }

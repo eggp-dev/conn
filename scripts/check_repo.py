@@ -108,7 +108,9 @@ def markdown_targets(markdown: str) -> list[str]:
 def markdown_errors(path: Path, root: Path, markdown: str, public_paths: set[Path] | None = None) -> list[str]:
     errors = []
     for target in markdown_targets(markdown):
-        if target.startswith(("#", "/")) or urlsplit(target).scheme:
+        # A destination that starts with a {placeholder} is filled in when its template is rendered
+        # (scripts/release_notes.md); the release tests check where those links lead.
+        if target.startswith(("#", "/")) or urlsplit(target).scheme or re.match(r"\{[a-z_]+\}", target):
             continue
         destination = unquote(urlsplit(target).path)
         if not destination:

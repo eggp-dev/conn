@@ -16,15 +16,12 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::affordance::{Actor, Affordance};
-use crate::approval::Decision as ApprovalDecision;
 use crate::authority::{AuthorityError, ConnId};
-use crate::config::Pacing;
-use crate::session::{AgentMode, ConnKind, ControlRequestState, EventSink, ExecState, KeyResult, ProposalState, ServerEvent, SessionError, SharedSession};
+use crate::session::{ConnKind, ControlRequestState, EventSink, ExecState, KeyResult, ProposalState, ServerEvent, SessionError, SharedSession};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Request {
@@ -63,12 +60,10 @@ impl From<SessionError> for RpcError {
             SessionError::ExecPending(_) => "exec_pending",
             SessionError::RateLimited { .. } => "rate_limited",
             SessionError::Masked(_) => "masked",
-            SessionError::ControlDenied(_) => "control_denied",
             SessionError::WrongMode(_) => "wrong_mode",
             SessionError::ProposalPending(_) => "proposal_pending",
             SessionError::IntentRequired => "intent_required",
             SessionError::NotAvailable(_) => "not_available",
-            SessionError::Io(_) => "io",
             SessionError::SurfaceUnavailable => "surface_unavailable",
         };
         RpcError { code: code.into(), message: e.to_string() }
@@ -114,43 +109,23 @@ fn str_param(params: &Value, key: &str) -> Option<String> {
     params.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
 }
 
-fn bytes_param(params: &Value, key: &str) -> Result<Vec<u8>, RpcError> {
-    let s = str_param(params, key).unwrap_or_default();
-    base64::engine::general_purpose::STANDARD
-        .decode(s)
-        .map_err(|e| RpcError { code: "invalid_input".into(), message: format!("{key}: not base64 ({e})") })
-}
-
 /// Synchronous dispatch. Runs under the session lock; must not block.
 pub fn dispatch(session: &SharedSession, conn: ConnId, method: &str, params: &Value) -> Result<Value, RpcError> {
-    {
-        let s = session.lock();
-        if s.is_private() { trace_refusal("session is private", conn, "-"); return Err(session_unavailable()); }
-        if !s.participant_allowed(conn) { trace_refusal("connection is not a selected participant", conn, "-"); return Err(session_unavailable()); }
-        if s.conn_kind(conn) != Some(ConnKind::Agent) {
-            return Err(RpcError { code: "owner_required".into(), message: "public connections must identify as agents".into() });
-        }
+    let mut s = session.lock();
+    if s.is_private() { trace_refusal("session is private", conn, "-"); return Err(session_unavailable()); }
+    if !s.participant_allowed(conn) { trace_refusal("connection is not a selected participant", conn, "-"); return Err(session_unavailable()); }
+    if s.conn_kind(conn) != Some(ConnKind::Agent) {
+        return Err(RpcError { code: "owner_required".into(), message: "public connections must identify as agents".into() });
     }
     if !matches!(method, "affordances" | "snapshot" | "request_control" | "release_control" | "type" | "send_key" | "interrupt" | "request_attention" | "check_approval" | "control_request_state" | "proposal_state" | "exec_state" | "status") {
         return Err(RpcError { code: "owner_required".into(), message: "this operation belongs to the local owner UI".into() });
     }
     if method == "status" {
-        let s = session.lock();
         return Ok(json!({"controller": s.status().controller, "mode": s.mode(), "effectiveMode": s.effective_mode(), "attended": s.attended(), "shared": !s.is_private(), "surfaceAvailable": s.status().surface_available }));
     }
-    dispatch_trusted(session, conn, method, params)
-}
-
-/// In-process native UI only. Never route a socket or browser client here.
-pub fn dispatch_trusted(session: &SharedSession, conn: ConnId, method: &str, params: &Value) -> Result<Value, RpcError> {
-    let mut s = session.lock();
     s.note_connection_activity(conn);
-    let kind = s.conn_kind(conn).unwrap_or(ConnKind::Human);
-    let actor = match kind {
-        ConnKind::Agent => Actor::Agent { conn },
-        _ => Actor::Human,
-    };
-    if kind == ConnKind::Agent && matches!(method, "check_approval" | "control_request_state" | "proposal_state" | "exec_state") {
+    let actor = Actor::Agent { conn };
+    if matches!(method, "check_approval" | "control_request_state" | "proposal_state" | "exec_state") {
         let key = match method { "check_approval" => "approvalId", "control_request_state" => "requestId", "proposal_state" => "proposalId", _ => "execId" };
         if !s.owns_request(conn, method, params[key].as_str().unwrap_or_default()) { return Err(session_unavailable()); }
     }
@@ -184,10 +159,6 @@ pub fn dispatch_trusted(session: &SharedSession, conn: ConnId, method: &str, par
             let intent = str_param(params, "intent");
             s.agent_send_key_with(conn, &key, intent).map(|r| serde_json::to_value(r).unwrap())
         }
-        "analyse" => {
-            let cmd = str_param(params, "cmd").unwrap_or_default();
-            Ok(serde_json::to_value(s.analyse_line(&cmd)).unwrap())
-        }
         "interrupt" => s.agent_interrupt(conn).map(|_| json!({ "interrupted": true })),
         "check_approval" => {
             let id = str_param(params, "approvalId").unwrap_or_default();
@@ -200,111 +171,7 @@ pub fn dispatch_trusted(session: &SharedSession, conn: ConnId, method: &str, par
                 None => Err(SessionError::NotFound(id)),
             }
         }
-        // ----- human / frontend -----
-        "status" => Ok(serde_json::to_value(s.status()).unwrap()),
-        "take" => Ok(json!({ "revoked": s.human_take() })),
-        "approve" => {
-            let decision = match str_param(params, "decision").as_deref() {
-                Some("deny") => ApprovalDecision::Deny,
-                Some("allow_session") => ApprovalDecision::AllowSession,
-                _ => ApprovalDecision::Grant,
-            };
-            let by = if kind == ConnKind::Frontend { "frontend" } else { "cli" };
-            // An approval must name what it approves. Approving "whatever is oldest"
-            // is how an automated approver once granted someone else's rm -rf.
-            match str_param(params, "approvalId") {
-                Some(id) if !id.is_empty() => s.resolve_approval(&id, decision, by),
-                _ => Err(SessionError::InvalidInput("approvalId is required; see `status` for pending ids".into())),
-            }
-            .map(|a| serde_json::to_value(a).unwrap())
-        }
-        "decide_control" => {
-            let id = str_param(params, "requestId").unwrap_or_default();
-            let grant = params.get("grant").and_then(|v| v.as_bool()).unwrap_or(false);
-            s.decide_control(&id, grant).map(|r| serde_json::to_value(r).unwrap())
-        }
-        "accept_proposal" => {
-            let id = str_param(params, "proposalId").unwrap_or_default();
-            s.accept_proposal(&id).map(|r| serde_json::to_value(r).unwrap())
-        }
-        "reject_proposal" => {
-            let id = str_param(params, "proposalId").unwrap_or_default();
-            s.reject_proposal(&id).map(|_| json!({ "rejected": id }))
-        }
-        "hand_back" => s.hand_back().map(|l| serde_json::to_value(l).unwrap()),
         "request_attention" => s.agent_request_attention(conn, str_param(params, "reason")).map(|_| json!({ "requested": true })),
-        "set_mode" => {
-            match serde_json::from_value::<AgentMode>(params.get("mode").cloned().unwrap_or(Value::Null)) {
-                Ok(m) => {
-                    s.set_mode(m).map(|_| json!({ "mode": m, "effectiveMode": s.effective_mode() }))
-                }
-                Err(e) => Err(SessionError::InvalidInput(format!("mode: {e}; use observe | copilot | autopilot"))),
-            }
-        }
-        "set_control_gate" => {
-            let ask = params.get("ask").and_then(|v| v.as_bool()).unwrap_or(false);
-            s.set_control_gate(ask);
-            Ok(json!({ "ask": ask }))
-        }
-        "revoke_session_allow" => {
-            let label = str_param(params, "label").unwrap_or_default();
-            Ok(json!({ "revoked": s.revoke_session_allow(&label) }))
-        }
-        "execute_now" => {
-            let id = str_param(params, "execId").unwrap_or_default();
-            s.execute_now_scheduled(&id).map(|_| json!({ "executed": id }))
-        }
-        "cancel_exec" => {
-            let id = str_param(params, "execId").unwrap_or_default();
-            s.cancel_exec(&id).map(|_| json!({ "cancelled": id }))
-        }
-        "input" => {
-            if kind == ConnKind::Agent {
-                Err(SessionError::InvalidInput("agents must use type/send_key".into()))
-            } else {
-                match bytes_param(params, "data") {
-                    Ok(b) => {
-                        s.human_input(&b);
-                        Ok(json!({ "written": b.len() }))
-                    }
-                    Err(e) => return Err(e),
-                }
-            }
-        }
-        "resize" => {
-            let rows = params.get("rows").and_then(|v| v.as_u64()).unwrap_or(24) as u16;
-            let cols = params.get("cols").and_then(|v| v.as_u64()).unwrap_or(80) as u16;
-            s.resize(rows, cols);
-            Ok(json!({ "rows": rows, "cols": cols }))
-        }
-        "get_pacing" => Ok(serde_json::to_value(s.pacing()).unwrap()),
-        "set_pacing" => {
-            // partial update: merge onto the current pacing
-            let mut cur = serde_json::to_value(s.pacing()).unwrap();
-            if let (Some(c), Some(p)) = (cur.as_object_mut(), params.as_object()) {
-                for (k, v) in p {
-                    c.insert(k.clone(), v.clone());
-                }
-            }
-            match serde_json::from_value::<Pacing>(cur) {
-                Ok(p) => {
-                    s.set_pacing(p.clone());
-                    Ok(serde_json::to_value(p).unwrap())
-                }
-                Err(e) => Err(SessionError::InvalidInput(e.to_string())),
-            }
-        }
-        "set_affordances" => {
-            let allow = match params.get("allow") {
-                None | Some(Value::Null) => None,
-                Some(v) => match serde_json::from_value::<Vec<Affordance>>(v.clone()) {
-                    Ok(list) => Some(list.into_iter().collect()),
-                    Err(e) => return Err(RpcError { code: "invalid_input".into(), message: e.to_string() }),
-                },
-            };
-            s.set_affordance_mask(allow);
-            Ok(json!({ "allow": s.affordance_mask() }))
-        }
         other => Err(SessionError::InvalidInput(format!("unknown method '{other}'"))),
     };
     r.map_err(RpcError::from)
@@ -462,22 +329,6 @@ impl Hub {
         Ok(id)
     }
 
-    /// 1-based position of a session in the tab order.
-    pub fn index_of(&self, id: &str) -> Option<usize> {
-        self.sessions.lock().iter().position(|(i, _)| i == id).map(|p| p + 1)
-    }
-
-    /// Find a session by id or by 1-based index.
-    pub fn find_tab(&self, tab: &Value) -> Option<(SessionId, SharedSession)> {
-        let list = self.sessions.lock();
-        let hit = match tab {
-            Value::Number(n) => n.as_u64().and_then(|n| list.get(n.checked_sub(1)? as usize)),
-            Value::String(s) => list.iter().find(|(i, _)| i == s).or_else(|| s.parse::<usize>().ok().and_then(|n| list.get(n.checked_sub(1)?))),
-            _ => None,
-        };
-        hit.map(|(i, s)| (i.clone(), s.clone()))
-    }
-
     pub fn add(&self, id: &str, session: SharedSession) {
         let first = self.sessions.lock().is_empty();
         session.lock().set_tabs_supported(self.tabs_supported());
@@ -581,17 +432,6 @@ impl Hub {
         let id = session.map(str::to_string).or_else(|| self.public_attended_id())?;
         self.get_public(&id).map(|s| (id, s))
     }
-
-    /// Resolve a request's target: the named session, else the attended one.
-    pub fn resolve(&self, session: Option<&str>) -> Option<(SessionId, SharedSession)> {
-        match session {
-            Some(id) => self.get(id).map(|s| (id.to_string(), s)),
-            None => {
-                let id = self.attended_id().or_else(|| self.ids().first().cloned())?;
-                self.get(&id).map(|s| (id, s))
-            }
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -613,12 +453,7 @@ impl EventSink for TokioSink {
     }
 }
 
-/// Serve the sessions on `path` until the future is dropped.
-pub async fn serve(path: PathBuf, hub: SharedHub) -> std::io::Result<()> {
-    let listener = crate::transport::Listener::bind(&path)?;
-    serve_listener(listener, hub).await
-}
-
+/// Serve the sessions behind `listener` until the future is dropped.
 async fn serve_listener(mut listener: crate::transport::Listener, hub: SharedHub) -> std::io::Result<()> {
     let mut next_conn: ConnId = 1;
     loop {
@@ -632,7 +467,7 @@ async fn serve_listener(mut listener: crate::transport::Listener, hub: SharedHub
     }
 }
 
-/// Run `serve` on a dedicated thread with its own runtime. For embedders that do
+/// Serve the sessions on `path` from a dedicated runtime. For embedders that do
 /// not want to manage tokio. Returns a guard; dropping it stops the server and
 /// removes the socket file.
 pub fn serve_in_background(path: PathBuf, hub: SharedHub) -> std::io::Result<ServerGuard> {

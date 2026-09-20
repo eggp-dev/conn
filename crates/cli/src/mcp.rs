@@ -268,13 +268,8 @@ impl Bridge {
     }
 }
 
-fn tool_success(mut value: Value) -> Value {
-    let image = value.as_object_mut().and_then(|v| v.remove("image"));
-    let mut content = vec![json!({"type":"text","text":serde_json::to_string_pretty(&value).unwrap()})];
-    if let Some(image) = image.filter(|v| v["mimeType"] == "image/png" && v["data"].is_string()) {
-        content.push(json!({"type":"image","mimeType":"image/png","data":image["data"]}));
-    }
-    json!({"content":content})
+fn tool_success(value: Value) -> Value {
+    json!({"content":[{"type":"text","text":serde_json::to_string_pretty(&value).unwrap()}]})
 }
 
 fn tool_error(msg: String) -> Value {
@@ -385,19 +380,4 @@ pub fn run(socket: PathBuf, agent_id: Option<String>, tool_mode: ToolMode) -> st
         write_msg(&out, &resp);
     }
     Ok(())
-}
-
-#[cfg(test)] mod shared_surface_tests {
-    use super::*;
-    #[test] fn image_payload_is_mcp_image_not_a_base64_text_dump() {
-        let result=tool_success(json!({"screen":["visible"],"image":{"mimeType":"image/png","data":"synthetic-raster"}}));
-        assert_eq!(result["content"][1]["type"],"image");
-        assert_eq!(result["content"][1]["data"],"synthetic-raster");
-        assert!(!result["content"][0]["text"].as_str().unwrap().contains("synthetic-raster"));
-    }
-    #[test] fn text_only_renderers_remain_explicitly_text_only() {
-        let result=tool_success(json!({"screen":["visible"],"imageUnavailable":true}));
-        assert_eq!(result["content"].as_array().unwrap().len(),1);
-        assert!(result["content"][0]["text"].as_str().unwrap().contains("imageUnavailable"));
-    }
 }

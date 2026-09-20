@@ -5,7 +5,8 @@ use std::time::Duration;
 
 use conn_core::audit::{Audit, Event};
 use conn_core::policy::{Policy, PolicyStore, EXAMPLE_POLICY};
-use conn_core::session::{ConnKind, EventSink, ServerEvent, Session, SessionConfig};
+use conn_core::authority::ConnId;
+use conn_core::session::{ConnKind, ControlOutcome, EventSink, KeyResult, LeaseInfo, ServerEvent, Session, SessionConfig, SessionError};
 use conn_core::Pacing;
 
 pub type Buf = Arc<Mutex<Vec<u8>>>;
@@ -33,10 +34,37 @@ pub fn present(session: &mut Session, screen: Vec<String>) {
     session.pty_output(format!("\x1b[2J\x1b[H{}",screen.join("\r\n")).as_bytes());
 }
 
+/// Capture rendered output through the sink the native renderer installs.
+pub fn frame_sink(buf: &Buf) -> conn_core::session::OutputFrameSink {
+    let buf = buf.clone();
+    Box::new(move |frame| buf.lock().unwrap().extend_from_slice(&frame.data))
+}
+
+/// Shorthands for tests that do not care about the request reason or the intent.
+pub trait SessionExt {
+    fn agent_request_control(&mut self, conn: ConnId) -> Result<LeaseInfo, SessionError>;
+    fn agent_request_control_with(&mut self, conn: ConnId, reason: Option<String>) -> Result<ControlOutcome, SessionError>;
+    fn agent_send_key(&mut self, conn: ConnId, key: &str) -> Result<KeyResult, SessionError>;
+}
+
+impl SessionExt for Session {
+    fn agent_request_control(&mut self, conn: ConnId) -> Result<LeaseInfo, SessionError> {
+        match self.agent_request_control_with(conn, None)? {
+            ControlOutcome::Granted { lease } => Ok(lease),
+            ControlOutcome::Pending { request_id } => panic!("control request {request_id} is pending"),
+        }
+    }
+    fn agent_request_control_with(&mut self, conn: ConnId, reason: Option<String>) -> Result<ControlOutcome, SessionError> {
+        self.agent_request_control_original(conn, serde_json::json!({ "reason": reason }))
+    }
+    fn agent_send_key(&mut self, conn: ConnId, key: &str) -> Result<KeyResult, SessionError> {
+        self.agent_send_key_with(conn, key, None)
+    }
+}
+
 pub struct Harness {
     pub session: Session,
     pub pty: Buf,
-    pub stdout: Buf,
     pub audit: Arc<Mutex<Vec<Event>>>,
 }
 
@@ -51,22 +79,8 @@ impl Harness {
         Self::with(&Self::test_policy(), Duration::from_secs(60), Duration::from_secs(300))
     }
 
-    pub fn headless() -> Self {
-        let mut h = Self::new();
-        let (session, audit) = Self::build(&Self::test_policy(), Duration::from_secs(60), Duration::from_secs(300), &h.pty, &h.stdout, false);
-        h.session = session;
-        h.audit = audit;
-        h
-    }
-
     pub fn with(policy_yaml: &str, lease_ttl: Duration, approval_ttl: Duration) -> Self {
         let pty: Buf = Default::default();
-        let stdout: Buf = Default::default();
-        let (session, audit) = Self::build(policy_yaml, lease_ttl, approval_ttl, &pty, &stdout, true);
-        Self { session, pty, stdout, audit }
-    }
-
-    fn build(policy_yaml: &str, lease_ttl: Duration, approval_ttl: Duration, pty: &Buf, stdout: &Buf, render_prompt: bool) -> (Session, Arc<Mutex<Vec<Event>>>) {
         let (audit, store) = Audit::memory();
         let session = Session::new(SessionConfig {
             rows: 24,
@@ -74,25 +88,23 @@ impl Harness {
             audit,
             policy: PolicyStore::from_policy(Policy::parse(policy_yaml).unwrap()),
             pty_writer: Box::new(SharedBuf(pty.clone())),
-            output: Some(Box::new(SharedBuf(stdout.clone()))),
             master: None,
             pacing: Pacing {
                 lease_ttl_secs: 0,
                 approval_ttl_secs: 0,
                 ..Pacing::default()
             },
-            render_prompt,
             shell_pid: None,
         });
         let mut session = session;
         session.set_ttls(lease_ttl, approval_ttl);
         present(&mut session, vec![]);
-        (session, store)
+        Self { session, pty, audit: store }
     }
 
     pub fn frontend(&mut self, name: &str) -> Arc<Mutex<Vec<ServerEvent>>> {
         let events = Arc::new(Mutex::new(Vec::new()));
-        self.session.subscribe(name, Box::new(VecSink(events.clone())), false);
+        self.session.subscribe(name, Box::new(VecSink(events.clone())));
         events
     }
 
@@ -107,9 +119,6 @@ impl Harness {
     }
     pub fn pty_str(&self) -> String {
         String::from_utf8_lossy(&self.pty_bytes()).to_string()
-    }
-    pub fn stdout_str(&self) -> String {
-        String::from_utf8_lossy(&self.stdout.lock().unwrap()).to_string()
     }
     pub fn clear_pty(&self) {
         self.pty.lock().unwrap().clear();

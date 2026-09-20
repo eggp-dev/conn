@@ -159,16 +159,6 @@ pub enum Decision {
     Allow,
 }
 
-impl Decision {
-    pub fn name(&self) -> &'static str {
-        match self {
-            Decision::Deny { .. } => "deny",
-            Decision::Confirm { .. } => "confirm",
-            Decision::Allow => "allow",
-        }
-    }
-}
-
 #[derive(Debug, thiserror::Error)]
 pub enum PolicyError {
     #[error("io: {0}")]

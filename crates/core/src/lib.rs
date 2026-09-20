@@ -12,7 +12,7 @@
 //! * everything else — building blocks used by `session`.
 //!
 //! Native frontends and the matching browser test adapter own rendering.
-//! The core never draws, except for the optional in-terminal approval prompt.
+//! The core never draws.
 
 pub mod backend;
 pub mod profiles;

@@ -1,6 +1,6 @@
 mod common;
-use common::Harness;
-use conn_core::{affordance::{Actor, Affordance}, audit::Audit, session::{ServerEvent, SessionError}};
+use common::{Harness, SessionExt};
+use conn_core::{affordance::{Actor, Affordance}, audit::Audit, session::SessionError};
 use std::{collections::HashSet, sync::{Arc, Mutex}};
 
 #[test]
@@ -15,7 +15,7 @@ fn human_secrets_never_become_commands_titles_or_trace_payloads() {
     }
     assert!(!format!("{:?}", h.audit_events()).contains("SYNTHETIC"));
     assert!(!format!("{:?}", trace.lock().unwrap()).contains("SYNTHETIC"));
-    assert!(!events.lock().unwrap().iter().any(|e| matches!(e, ServerEvent::HumanExec {..})));
+    assert!(!format!("{:?}", events.lock().unwrap()).contains("SYNTHETIC"));
     assert!(h.pty_str().contains("SYNTHETIC_PASSWORD"), "input must still reach the child");
 }
 
@@ -63,7 +63,7 @@ fn audit_files_are_owner_only_and_symlink_targets_are_not_opened() {
 #[test]
 fn real_hidden_password_input_in_an_ordinary_tab_is_not_audited() {
     use conn_core::{Engine, EngineConfig, backend::Profile, policy::{Policy, PolicyStore}};
-    use common::{Buf, SharedBuf};
+    use common::Buf;
     use std::time::{Duration, Instant};
     let (audit, events)=Audit::memory();
     let output: Buf=Default::default();
@@ -72,7 +72,7 @@ fn real_hidden_password_input_in_an_ordinary_tab_is_not_audited() {
     let engine=Engine::spawn(EngineConfig {
         profile:Some(profile),audit:Some(audit),
         policy:Some(PolicyStore::from_policy(Policy::parse("default: deny\n").unwrap())),
-        output:Some(Box::new(SharedBuf(output.clone()))),render_prompt:false,..Default::default()
+        output_frame:Some(common::frame_sink(&output)),..Default::default()
     }).unwrap();
     let deadline=Instant::now()+Duration::from_secs(5);
     while !String::from_utf8_lossy(&output.lock().unwrap()).contains("READY") {
