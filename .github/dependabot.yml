@@ -4,7 +4,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 3
+    # 0 = no version-update pull requests. Security updates still arrive. Raise it when you want them back.
+    open-pull-requests-limit: 0
   - package-ecosystem: npm
     directory: /
     schedule:
@@ -22,7 +23,8 @@ updates:
       # @remotion/eslint-config-flat pins typescript-eslint 8, whose peer range stops at eslint 9.
       - dependency-name: eslint
         update-types: ['version-update:semver-major']
-    open-pull-requests-limit: 3
+    # 0 = no version-update pull requests. Security updates still arrive. Raise it when you want them back.
+    open-pull-requests-limit: 0
   - package-ecosystem: cargo
     directory: /
     schedule:
@@ -36,4 +38,5 @@ updates:
       # (crates/core/tests/profiles.rs, native_profile_launches_with_environment_...). Needs a Windows debugger.
       - dependency-name: portable-pty
         versions: ['0.9.x']
-    open-pull-requests-limit: 3
+    # 0 = no version-update pull requests. Security updates still arrive. Raise it when you want them back.
+    open-pull-requests-limit: 0
