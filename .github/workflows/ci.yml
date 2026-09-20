@@ -89,6 +89,9 @@ jobs:
       - name: The website builds, including the pages it generates from docs/
         run: npm ci && npm run build
         working-directory: site
+      - name: The film project still type-checks (Dependabot updates it through the shared lockfile)
+        run: npm ci && npm run check
+        working-directory: media/demo
   core:
     name: Rust (${{ matrix.os }})
     needs: scope
