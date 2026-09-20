@@ -1,14 +1,11 @@
 [package]
 name = "conn-desktop"
-version = "0.8.2"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "A shared terminal for humans and AI agents."
-repository = "https://github.com/eggp-dev/conn"
+repository.workspace = true
 homepage = "https://github.com/eggp-dev/conn"
-license = "MIT"
-
-# Standalone: not a member of the repo workspace so `cargo test` at the root stays light.
-[workspace]
+license.workspace = true
 
 [lib]
 name = "conn_desktop_lib"
@@ -20,12 +17,11 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-parking_lot = "0.12"
-conn-core = { path = "../../../crates/core" }
-
-conn-frontend = { path = "../../../crates/frontend" }
+serde.workspace = true
+serde_json.workspace = true
+parking_lot.workspace = true
+conn-core.workspace = true
+conn-frontend.workspace = true
 semver = "1"
 tokio = { version = "1", features = ["sync"] }
 tauri-plugin-updater = "2"
@@ -33,9 +29,9 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = "5"
-libc = "0.2"
+libc.workspace = true
 
 [dev-dependencies]
-base64 = "0.22"
+base64.workspace = true
 minisign-verify = "0.2"
 tauri = { version = "2", features = ["test"] }

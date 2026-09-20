@@ -1,7 +1,9 @@
-// The one place the site names the repository and chooses which of ../docs it publishes.
-// If the repository moves again, change `repository` here (and read docs/releasing.md first).
-export const repository = "eggp-dev/conn";
-export const origin = "https://conn.eggp.dev";
+// Which of ../docs the site publishes. The repository and the site address come from @conn/brand,
+// shared with the films and the release tooling.
+import brand from "@conn/brand/brand.json" with { type: "json" };
+
+export const repository = brand.repository;
+export const origin = brand.site;
 
 /** Sidebar groups. Items are file names in ../docs without `.md`; a `.ko.md` sibling becomes the Korean page. */
 export const docs = [

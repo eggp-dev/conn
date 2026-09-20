@@ -1,0 +1,10 @@
+{
+  "name": "@conn/themes",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Conn's built-in terminal themes: one palette file for the native registry and the UI.",
+  "exports": {
+    "./builtin-themes.json": "./builtin-themes.json"
+  }
+}

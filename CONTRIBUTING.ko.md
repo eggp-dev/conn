@@ -59,7 +59,12 @@ npm run test:browser
 | `frontends/tauri/src` | 공유 Svelte UI, 터미널 렌더러, 타임라인, 설정, i18n |
 | `frontends/tauri/src-tauri` | Tauri 어댑터, 네이티브 설정, 패키징 |
 | `plugin` | 에이전트 작업 절차와 MCP 서버 정의 |
+| `packages` | 여러 도구가 함께 읽는 데이터: `brand`(이름·저장소·사이트 주소), `themes`(내장 터미널 테마) |
+| `site` | 웹사이트와 `docs`에서 생성하는 문서 페이지 |
+| `media/demo` | 영상 제작: 촬영 픽스처와 Remotion 컴포지션 |
 | `docs` | 사용법, 프로토콜, 아키텍처, 검증, 릴리스 |
+
+저장소는 Cargo 워크스페이스 하나와 npm 워크스페이스 하나로 구성되며, lockfile은 각각 루트에 하나씩 있습니다. `cargo test`는 플랫폼 웹뷰 도구가 필요한 데스크톱 셸을 제외한 모든 크레이트를 검사합니다. `frontends/tauri`, `site`, `media/demo` 안에서 `npm ci`를 실행하면 해당 프로젝트만 설치합니다.
 
 계약을 변경하기 전에 관련 [아키텍처](docs/architecture.md), [프로토콜](docs/protocol.md), [정책](docs/policy.md), [백엔드](docs/backends.md) 문서를 읽어 주세요.
 
@@ -80,7 +85,7 @@ npm run test:browser
 저장소 루트에서:
 
 ```sh
-cargo test --workspace --locked
+cargo test --locked
 ```
 
 `frontends/tauri`에서:

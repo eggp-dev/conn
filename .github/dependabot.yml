@@ -6,7 +6,7 @@ updates:
       interval: weekly
     open-pull-requests-limit: 3
   - package-ecosystem: npm
-    directory: /frontends/tauri
+    directory: /
     schedule:
       interval: weekly
     groups:
@@ -14,7 +14,7 @@ updates:
         patterns: ['*']
     open-pull-requests-limit: 3
   - package-ecosystem: cargo
-    directories: ['/', '/frontends/tauri/src-tauri']
+    directory: /
     schedule:
       interval: weekly
     groups:

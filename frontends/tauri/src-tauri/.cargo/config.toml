@@ -1,0 +1,6 @@
+# The desktop crate is a member of the repository workspace, but the Tauri CLI, the signing
+# scripts and CI all look for bundles under src-tauri/target. Cargo reads this file only when
+# it runs from this directory (which is how the Tauri CLI runs it), so bundles stay here while
+# `cargo test` at the repository root keeps using the root target directory.
+[build]
+target-dir = "target"

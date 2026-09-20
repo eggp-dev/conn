@@ -10,6 +10,7 @@
   "license": "MIT",
   "private": true,
   "dependencies": {
+    "@conn/brand": "*",
     "@remotion/cli": "4.0.525",
     "@remotion/fonts": "4.0.525",
     "@remotion/media": "4.0.525",

@@ -28,6 +28,10 @@ class CiScopeTests(unittest.TestCase):
     def test_frontend_only_changes_build_one_desktop_and_skip_rust(self):
         self.assertEqual(ci_scope.scope("pull_request", ["frontends/tauri/src/App.svelte", "docs/faq.md"]), {"rust": [], "desktop": [LINUX]})
 
+    def test_the_npm_workspace_root_is_frontend_but_shared_packages_are_not_assumed_light(self):
+        self.assertEqual(ci_scope.scope("pull_request", ["package-lock.json", "package.json", ".npmrc"]), {"rust": [], "desktop": [LINUX]})
+        self.assertEqual(ci_scope.classify("packages/themes/builtin-themes.json"), "native")
+
     def test_rust_pull_requests_test_everywhere_but_build_one_desktop(self):
         self.assertEqual(ci_scope.scope("pull_request", ["crates/core/src/ipc.rs"]), {"rust": ALL, "desktop": [LINUX]})
 

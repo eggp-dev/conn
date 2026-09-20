@@ -20,7 +20,7 @@ Actions are pinned by commit SHA. Pull requests receive no signing secrets. Only
    python3 scripts/release.py bump 0.8.3
    ```
 
-   It rewrites the workspace version, the `conn-core` dependency, the desktop Cargo version, the Tauri config, the frontend package and its lockfile, both plugin manifests, the marketplace entry and Conn's own packages in both Cargo lockfiles (other packages keep their versions, so no lockfile refresh is needed). It then rewrites the links that name the current release in `README.md`, `README.ko.md`, `docs/getting-started*.md` and `docs/platform-support*.md`: download and tag addresses, asset file names, the `CONN_VERSION=` example and the "vX.Y.Z preview" labels. Each changed file is printed with a count. History is left alone: the changelog, headings such as "New in v0.8.0", and the examples on this page.
+   It rewrites the workspace version (the desktop crate inherits it), the `conn-core` and `conn-frontend` dependencies, the Tauri config, the frontend package and its entry in the root `package-lock.json`, both plugin manifests, the marketplace entry and Conn's own packages in `Cargo.lock` (other packages keep their versions, so no lockfile refresh is needed). It then rewrites the links that name the current release in `README.md`, `README.ko.md`, `docs/getting-started*.md` and `docs/platform-support*.md`: download and tag addresses, asset file names, the `CONN_VERSION=` example and the "vX.Y.Z preview" labels. Each changed file is printed with a count. History is left alone: the changelog, headings such as "New in v0.8.0", and the examples on this page.
 
    `bump` refuses to start when the declarations already disagree, and refuses a version that is not newer than the current one unless you pass `--force`. Nothing is written unless every declaration parses back to the new version. `check` verifies the same places, so a release link left on another version fails CI; fix any it reports by hand.
 2. Add a user-facing [CHANGELOG](../CHANGELOG.md) section headed `## X.Y.Z — Preview · YYYY-MM-DD`. The release notes quote that section as written under "New in this release" (the bullets and the `한국어:` paragraph), so write it for the people who install Conn. `check` fails until the section exists; an `## Unreleased` heading does not count and is never published. The rest of the notes is the fixed text in `scripts/release_notes.md`, which holds for every release; nothing in `release.py` is edited for a release. Then check the exact release version:
@@ -29,7 +29,7 @@ Actions are pinned by commit SHA. Pull requests receive no signing secrets. Only
    python3 scripts/release.py check --tag v0.8.2
    python3 scripts/check_repo.py
    python3 -m unittest discover -s tests/release -v
-   cargo test --workspace --locked
+   cargo test --locked
    cd frontends/tauri
    npm ci
    npm test

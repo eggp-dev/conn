@@ -1,0 +1,7 @@
+{
+  "name": "Conn",
+  "repository": "eggp-dev/conn",
+  "previousRepository": "eggplantiny/conn",
+  "site": "https://conn.eggp.dev",
+  "worksWith": ["Claude Code", "Codex", "Cursor", "GitHub Copilot"]
+}

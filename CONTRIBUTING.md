@@ -59,7 +59,12 @@ Reloading or disconnecting the browser ends its live sessions. Test with disposa
 | `frontends/tauri/src` | Shared Svelte UI, terminal renderer, timeline, settings, i18n |
 | `frontends/tauri/src-tauri` | Tauri adapter, native configuration, packaging |
 | `plugin` | Agent procedure and MCP server definition |
+| `packages` | Data shared across toolchains: `brand` (name, repository, site address) and `themes` (built-in terminal themes) |
+| `site` | The website and docs pages generated from `docs` |
+| `media/demo` | Film production: recording fixtures and Remotion compositions |
 | `docs` | User guides, protocol, architecture, validation, releases |
+
+The repository is one Cargo workspace and one npm workspace, each with a single lockfile at the root. `cargo test` covers every crate except the desktop shell, which needs the platform webview toolchain. `npm ci` inside `frontends/tauri`, `site` or `media/demo` installs only that project.
 
 Read the relevant [architecture](docs/architecture.md), [protocol](docs/protocol.md), [policy](docs/policy.md), or [backend](docs/backends.md) guide before changing its contract.
 
@@ -80,7 +85,7 @@ Read the relevant [architecture](docs/architecture.md), [protocol](docs/protocol
 From the repository root:
 
 ```sh
-cargo test --workspace --locked
+cargo test --locked
 ```
 
 From `frontends/tauri`:

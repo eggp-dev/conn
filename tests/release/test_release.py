@@ -19,9 +19,8 @@ release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
 
 VERSION_FILES = [
-    "Cargo.toml", "Cargo.lock", "frontends/tauri/src-tauri/Cargo.toml",
-    "frontends/tauri/src-tauri/Cargo.lock", "frontends/tauri/package.json",
-    "frontends/tauri/package-lock.json", "frontends/tauri/src-tauri/tauri.conf.json",
+    "Cargo.toml", "Cargo.lock", "package-lock.json", "frontends/tauri/package.json",
+    "frontends/tauri/src-tauri/tauri.conf.json",
     "plugin/.claude-plugin/plugin.json", "plugin/.codex-plugin/plugin.json",
     ".claude-plugin/marketplace.json",
 ]
@@ -178,7 +177,7 @@ class ReleaseTests(unittest.TestCase):
         # Somebody else's package at our version number must keep it.
         lock = self.root / "Cargo.lock"
         lock.write_text(lock.read_text(encoding="utf-8") + f'\n[[package]]\nname = "not-conn"\nversion = "{self.version}"\n', encoding="utf-8")
-        npm = self.root / "frontends/tauri/package-lock.json"
+        npm = self.root / "package-lock.json"
         packages = json.loads(npm.read_text(encoding="utf-8"))
         packages["packages"]["node_modules/not-conn"] = {"version": self.version}
         npm.write_text(json.dumps(packages, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

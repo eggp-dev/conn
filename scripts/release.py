@@ -26,8 +26,9 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 NOTES_TEMPLATE = Path(__file__).resolve().with_name("release_notes.md")
-REPOSITORY = "https://github.com/eggp-dev/conn"
-REPOSITORY_SLUG = "eggp-dev/conn"
+# The repository address is shared with the site and the films; see packages/brand.
+REPOSITORY_SLUG = json.loads((ROOT / "packages/brand/brand.json").read_text(encoding="utf-8"))["repository"]
+REPOSITORY = f"https://github.com/{REPOSITORY_SLUG}"
 # Do not "fix" this one. Conn 0.6.0 to 0.8.1 only install an update whose download address starts
 # with the address they were built with, and they cannot be told otherwise. GitHub keeps serving
 # this address for as long as nobody creates a repository with the old name, so the update manifest
@@ -45,16 +46,16 @@ WORKSPACE_VERSION = "Cargo.toml: workspace package"
 JSON_MANIFESTS = ("frontends/tauri/package.json", "frontends/tauri/src-tauri/tauri.conf.json", "plugin/.claude-plugin/plugin.json", "plugin/.codex-plugin/plugin.json")
 # Lockfiles list every dependency; only Conn's own packages carry the release version.
 LOCKED_PACKAGES = {
-    "Cargo.lock": {"conn", "conn-core", "conn-frontend", "conn-browser-harness"},
-    "frontends/tauri/src-tauri/Cargo.lock": {"conn-desktop", "conn-core", "conn-frontend"},
+    "Cargo.lock": {"conn", "conn-core", "conn-frontend", "conn-browser-harness", "conn-desktop"},
 }
 # Where `bump` writes what `declarations` reads. Group 1 is the version; each pattern must match exactly once.
 _JSON_VERSION = r'^  "version": "([^"\n]+)"'
 VERSION_PATTERNS = {
-    "Cargo.toml": (r'^\[workspace\.package\]\n(?:(?!\[).*\n)*?version = "([^"\n]+)"', r'^conn-core = \{[^}\n]*\bversion = "([^"\n]+)"'),
-    "frontends/tauri/src-tauri/Cargo.toml": (r'^\[package\]\n(?:(?!\[).*\n)*?version = "([^"\n]+)"',),
+    # The desktop crate inherits the workspace version, so its manifest declares none.
+    "Cargo.toml": (r'^\[workspace\.package\]\n(?:(?!\[).*\n)*?version = "([^"\n]+)"', r'^conn-core = \{[^}\n]*\bversion = "([^"\n]+)"', r'^conn-frontend = \{[^}\n]*\bversion = "([^"\n]+)"'),
     **{name: (_JSON_VERSION,) for name in JSON_MANIFESTS},
-    "frontends/tauri/package-lock.json": (_JSON_VERSION, r'^    "": \{\n(?:      .*\n)*?      "version": "([^"\n]+)"'),
+    # One npm workspace lockfile at the root; the desktop UI is the only workspace that carries the release version.
+    "package-lock.json": (r'^    "frontends/tauri": \{\n(?:      .*\n)*?      "version": "([^"\n]+)"',),
     ".claude-plugin/marketplace.json": (r'^      "name": "conn",\n(?:      .*\n)*?      "version": "([^"\n]+)"',),
     **{name: tuple(rf'^name = "{package}"\nversion = "([^"\n]+)"' for package in sorted(packages)) for name, packages in LOCKED_PACKAGES.items()},
 }
@@ -122,13 +123,11 @@ def declarations(root: Path, texts: dict[str, str] | None = None) -> dict[str, s
     found = {
         WORKSPACE_VERSION: cargo["workspace"]["package"]["version"],
         "Cargo.toml: workspace conn-core": cargo["workspace"]["dependencies"]["conn-core"]["version"],
-        "frontends/tauri/src-tauri/Cargo.toml": tomllib.loads(text("frontends/tauri/src-tauri/Cargo.toml"))["package"]["version"],
+        "Cargo.toml: workspace conn-frontend": cargo["workspace"]["dependencies"]["conn-frontend"]["version"],
     }
     for name in JSON_MANIFESTS:
         found[name] = json.loads(text(name))["version"]
-    npm_lock = json.loads(text("frontends/tauri/package-lock.json"))
-    found["package-lock.json: root"] = npm_lock["version"]
-    found["package-lock.json: packages root"] = npm_lock["packages"][""]["version"]
+    found["package-lock.json: frontends/tauri"] = json.loads(text("package-lock.json"))["packages"]["frontends/tauri"]["version"]
     plugins = [p for p in json.loads(text(".claude-plugin/marketplace.json"))["plugins"] if p["name"] == "conn"]
     if len(plugins) != 1:
         raise ReleaseError("Claude marketplace must contain exactly one Conn plugin")
