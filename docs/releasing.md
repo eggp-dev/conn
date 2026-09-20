@@ -6,7 +6,7 @@ English · [한국어](releasing.ko.md) · [User installation](getting-started.m
 
 `eggp-dev/conn` uses `main` as its integration branch. Keep Actions tokens read-only by default, enable private vulnerability reporting, and require **Required checks** and resolved conversations for changes to `main`. The [versioned ruleset](../.github/main-ruleset.json) provides PR/CI requirements and an explicit owner recovery bypass. Update an existing ruleset rather than creating duplicates.
 
-CI checks version consistency, repository hygiene, relative documentation links, release tooling, frontend tests and the Svelte build. Rust tests and native desktop debug builds cover Linux, macOS Apple Silicon and Windows. Release packaging uses the same three targets; Intel Mac distribution is paused after v0.4.1. The macOS debug build is bundled and signed ad-hoc in PR CI, then checked with `plutil` and `sdef`; `osacompile` compiles the external automation examples against that exact app without running it. This catches missing scripting resources and dictionary syntax without release credentials. These checks do not replace installer or interactive desktop testing.
+CI checks version consistency (manifests, the changelog section for that version, and the release links in the READMEs and guides), repository hygiene, relative documentation links, release tooling, frontend tests and the Svelte build. Rust tests and native desktop debug builds cover Linux, macOS Apple Silicon and Windows. Release packaging uses the same three targets; Intel Mac distribution is paused after v0.4.1. The macOS debug build is bundled and signed ad-hoc in PR CI, then checked with `plutil` and `sdef`; `osacompile` compiles the external automation examples against that exact app without running it. This catches missing scripting resources and dictionary syntax without release credentials. These checks do not replace installer or interactive desktop testing.
 
 CI sizes itself to the change (`scripts/ci_scope.py`, decided by the **Scope** job). Documentation-only changes run the docs, release tooling and frontend job alone. Web UI changes add one Linux desktop build. A pull request touching Rust runs the tests on all three systems and builds the desktop once on Linux; changes to the native shell, packaging, external automation or CI itself build every desktop before merging. Code merged to `main`, manual runs and every release validation always use the full matrix, and anything the scope cannot classify is treated as code. To get the full matrix on a pull request, add the `full-ci` label before pushing or run the CI workflow manually on the branch. **Required checks** fails if a job that was in scope did not succeed.
 
@@ -14,8 +14,16 @@ Actions are pinned by commit SHA. Pull requests receive no signing secrets. Only
 
 ## Prepare the version
 
-1. Align the workspace version, `conn-core` dependency, desktop Cargo version, Tauri config, frontend package/lock, plugin manifests and marketplace. Refresh both Cargo lockfiles.
-2. Add a user-facing [CHANGELOG](../CHANGELOG.md) entry and check the exact release version:
+1. Set the new version everywhere with one command:
+
+   ```sh
+   python3 scripts/release.py bump 0.8.3
+   ```
+
+   It rewrites the workspace version, the `conn-core` dependency, the desktop Cargo version, the Tauri config, the frontend package and its lockfile, both plugin manifests, the marketplace entry and Conn's own packages in both Cargo lockfiles (other packages keep their versions, so no lockfile refresh is needed). It then rewrites the links that name the current release in `README.md`, `README.ko.md`, `docs/getting-started*.md` and `docs/platform-support*.md`: download and tag addresses, asset file names, the `CONN_VERSION=` example and the "vX.Y.Z preview" labels. Each changed file is printed with a count. History is left alone: the changelog, headings such as "New in v0.8.0", and the examples on this page.
+
+   `bump` refuses to start when the declarations already disagree, and refuses a version that is not newer than the current one unless you pass `--force`. Nothing is written unless every declaration parses back to the new version. `check` verifies the same places, so a release link left on another version fails CI; fix any it reports by hand.
+2. Add a user-facing [CHANGELOG](../CHANGELOG.md) section headed `## X.Y.Z — Preview · YYYY-MM-DD`. The release notes quote that section as written under "New in this release" (the bullets and the `한국어:` paragraph), so write it for the people who install Conn. `check` fails until the section exists; an `## Unreleased` heading does not count and is never published. The rest of the notes is the fixed text in `scripts/release_notes.md`, which holds for every release; nothing in `release.py` is edited for a release. Then check the exact release version:
 
    ```sh
    python3 scripts/release.py check --tag v0.8.2
@@ -56,7 +64,7 @@ The release stages are:
 
 1. Build the matching CLI and desktop package on each native runner.
 2. On Mac, sign and notarize the app, embedded CLI, standalone CLI and DMG as described in [macOS signing](macos-signing.md). Generate the Apple Silicon report, including acceptance and final asset hashes.
-3. `release.py package` normalizes filenames. `finalize` requires all installers, updater archives/signatures and the valid Apple Silicon report before writing `SHA256SUMS` and bilingual notes.
+3. `release.py package` normalizes filenames. `finalize` requires all installers, updater archives/signatures and the valid Apple Silicon report before writing `SHA256SUMS` and the bilingual notes: `scripts/release_notes.md` filled with this version's asset names and changelog section.
 4. After the exact commit's CI and all build/signing jobs pass, `draft` uploads **14 assets**: seven binaries/installers, one macOS updater archive, three updater signatures, `latest.json`, one signing report and `SHA256SUMS`. It creates or updates an unpublished prerelease and refuses to modify a public release.
 
 Re-running can repair an incomplete draft. No workflow publishes automatically. Actions retains temporary build artifacts for seven days; uploaded release assets persist. The CLI archives contain the license and installation notes. The updater manifest is release-scoped and discovered via GitHub release metadata, including the explicit preview channel.
@@ -72,7 +80,7 @@ Review the downloaded draft artifacts, not a different local build.
 - Keep the intentional Windows unsigned notice. Mac assets need successful Developer ID and notarization evidence. Do not tell users to disable system protection.
 - Review the bilingual release notes and download links, replace the pending changelog date with the publication date, and publish the reviewed prerelease explicitly. Then open the public version page and each linked asset to confirm availability.
 
-A green CI build alone is not a claim that every installer or interaction passed. Release notes must say which platform checks ran and what remains untested. Preserve secrets in Actions; never attach certificates, credentials or detailed private logs.
+A green CI build alone is not a claim that every installer or interaction passed. Release notes must say which platform checks ran and what remains untested; that text lives in `scripts/release_notes.md`, so change it there when the validated coverage changes. Preserve secrets in Actions; never attach certificates, credentials or detailed private logs.
 
 For implementation details, see [Tauri's GitHub pipeline guide](https://v2.tauri.app/distribute/pipelines/github/) and the repository's [signing contract](macos-signing.md).
 

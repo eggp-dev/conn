@@ -3,6 +3,7 @@ import importlib.util
 import base64
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 import shutil
@@ -25,6 +26,37 @@ VERSION_FILES = [
     ".claude-plugin/marketplace.json",
 ]
 
+# A made-up changelog: the tests pin where notes come from, not what any real release said.
+CHANGELOG = """# Changelog
+
+## Unreleased
+
+- Unreleased work that must never reach release notes.
+
+## {version} — Preview · 2026-01-02
+
+- First fixture change with `code {{braces}}` kept as written.
+- Second fixture change, see [the protocol](docs/protocol.md) and [the site](https://example.com/).
+
+한국어: 픽스처 변경 사항입니다.
+
+## 0.0.1 — Preview · 2026-01-01
+
+- Older fixture change that belongs to another release.
+"""
+
+# Every kind of release link the real READMEs and guides use, next to history that must never be rewritten.
+PROSE = """| Platform | v{version} preview | v{version} 프리뷰 |
+[Download](https://github.com/eggp-dev/conn/releases/download/v{version}/conn-v{version}-aarch64-apple-darwin-desktop.dmg)
+[All assets](https://github.com/eggp-dev/conn/releases/tag/v{version}). `CONN_VERSION=v{version}` pins a release.
+sudo apt install ./conn-v{version}-x86_64-unknown-linux-gnu-desktop.deb
+
+## New in v0.8.0
+
+Updates need v0.6.0 or later, Intel Macs stopped after v0.4.1, and a library at {version} is not a link.
+"""
+PROSE_LINKS = 7
+
 
 class ReleaseTests(unittest.TestCase):
     def setUp(self):
@@ -37,6 +69,11 @@ class ReleaseTests(unittest.TestCase):
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / name, destination)
         (self.root / "LICENSE").write_text("MIT License\n", encoding="utf-8")
+        declared = release.read_toml(self.root / "Cargo.toml")["workspace"]["package"]["version"]
+        (self.root / "CHANGELOG.md").write_text(CHANGELOG.format(version=declared), encoding="utf-8")
+        for name in release.PROSE_FILES:
+            (self.root / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / name).write_text(PROSE.format(version=declared), encoding="utf-8")
         self.version = release.check(self.root)
         self.tag = "v" + self.version
         self.out = Path(self.temporary.name) / "assets"
@@ -134,6 +171,87 @@ class ReleaseTests(unittest.TestCase):
                     release.check(self.root, self.tag)
                 path.write_text(original, encoding="utf-8")
 
+    def tree(self):
+        return {path.relative_to(self.root).as_posix(): path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
+
+    def test_bump_rewrites_every_declaration_and_release_link(self):
+        # Somebody else's package at our version number must keep it.
+        lock = self.root / "Cargo.lock"
+        lock.write_text(lock.read_text(encoding="utf-8") + f'\n[[package]]\nname = "not-conn"\nversion = "{self.version}"\n', encoding="utf-8")
+        npm = self.root / "frontends/tauri/package-lock.json"
+        packages = json.loads(npm.read_text(encoding="utf-8"))
+        packages["packages"]["node_modules/not-conn"] = {"version": self.version}
+        npm.write_text(json.dumps(packages, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        changed = dict(release.bump("99.1.0", self.root))
+        self.assertEqual(set(changed), set(VERSION_FILES) | set(release.PROSE_FILES))
+        self.assertEqual(set(VERSION_FILES), set(release.VERSION_PATTERNS))
+        self.assertEqual(sum(changed[name] for name in VERSION_FILES), len(release.declarations(self.root)))
+        for name in release.PROSE_FILES:
+            self.assertEqual(changed[name], PROSE_LINKS)
+            self.assertEqual((self.root / name).read_text(encoding="utf-8"), PROSE.format(version="99.1.0").replace("library at 99.1.0", f"library at {self.version}"))
+        self.assertEqual(set(release.declarations(self.root).values()), {"99.1.0"})
+        self.assertIn(f'name = "not-conn"\nversion = "{self.version}"', lock.read_text(encoding="utf-8"))
+        self.assertEqual(json.loads(npm.read_text(encoding="utf-8"))["packages"]["node_modules/not-conn"]["version"], self.version)
+        # The changelog is a person's job: bump says so, and check holds the release until it is done.
+        self.assertIn("## 99.1.0", "\n".join(release.bump_followups(self.root, "99.1.0")))
+        with self.assertRaisesRegex(release.ReleaseError, "CHANGELOG.md has no '## 99.1.0'"):
+            release.check(self.root)
+        changelog = self.root / "CHANGELOG.md"
+        changelog.write_text(changelog.read_text(encoding="utf-8").replace("## Unreleased", "## 99.1.0 — Preview"), encoding="utf-8")
+        self.assertEqual(release.bump_followups(self.root, "99.1.0"), [])
+        self.assertEqual(release.check(self.root, "v99.1.0"), "99.1.0")
+
+    def test_bump_refuses_a_disagreeing_tree_and_an_older_version(self):
+        before = self.tree()
+        lower = ".".join(str(max(int(part) - 1, 0)) for part in self.version.split("."))
+        for version in (self.version, lower, self.version + "-rc.1", "1.2", "v99.0.0"):
+            with self.subTest(version=version), self.assertRaises(release.ReleaseError):
+                release.bump(version, self.root)
+        manifest = self.root / "frontends/tauri/package.json"
+        original = manifest.read_text(encoding="utf-8")
+        manifest.write_text(original.replace(f'"{self.version}"', '"98.0.0"'), encoding="utf-8")
+        with self.assertRaisesRegex(release.ReleaseError, "disagree"):
+            release.bump("99.0.0", self.root, force=True)
+        manifest.write_text(original, encoding="utf-8")
+        self.assertEqual(self.tree(), before)
+        self.assertEqual(release.bump(self.version, self.root, force=True), [])
+        self.assertEqual(len(release.bump(self.version + "-rc.1", self.root, force=True)), len(VERSION_FILES) + len(release.PROSE_FILES))
+        self.assertEqual(set(release.declarations(self.root).values()), {self.version + "-rc.1"})
+        self.assertNotIn(f"v{self.version} preview", (self.root / "README.md").read_text(encoding="utf-8"))
+        # A release is newer than its own prerelease, and the way back restores every byte.
+        release.bump(self.version, self.root)
+        self.assertEqual(self.tree(), before)
+
+    def test_bump_changes_nothing_when_a_declaration_cannot_be_rewritten(self):
+        config = self.root / "frontends/tauri/src-tauri/tauri.conf.json"
+        config.write_text(json.dumps(json.loads(config.read_text(encoding="utf-8")), indent=8), encoding="utf-8")
+        before = self.tree()
+        with self.assertRaisesRegex(release.ReleaseError, "tauri.conf.json"):
+            release.bump("99.0.0", self.root)
+        self.assertEqual(self.tree(), before)
+
+    def test_versions_order_like_semver(self):
+        ordered = ["0.9.9", "1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-rc.2", "1.0.0-rc.10", "1.0.0", "1.0.1", "1.10.0"]
+        self.assertEqual(sorted(reversed(ordered), key=release.version_key), ordered)
+
+    def test_check_rejects_a_release_link_left_on_another_version(self):
+        readme = self.root / "README.ko.md"
+        original = readme.read_text(encoding="utf-8")
+        stale = ("| v0.0.9 preview |", "| v0.0.9 프리뷰 |", "(https://github.com/eggp-dev/conn/releases/tag/v0.0.9)", "`CONN_VERSION=v0.0.9`",
+                 "releases/download/v0.0.9/SHA256SUMS", "./conn-v0.0.9-x86_64-unknown-linux-gnu-desktop.AppImage",
+                 f"releases/tag/v{self.version}-rc.1", f"conn-v{self.version}-rc.1-aarch64-apple-darwin-cli.tar.gz")
+        for text in stale:
+            with self.subTest(text=text):
+                readme.write_text(original + "\n" + text + "\n", encoding="utf-8")
+                with self.assertRaisesRegex(release.ReleaseError, rf"README\.ko\.md:{len(original.splitlines()) + 2}: "):
+                    release.check(self.root)
+                self.assertEqual(len(release.bump_followups(self.root, self.version)), 1)
+        readme.write_text(original + "\nSee v0.0.9, 0.0.9 and the v0.0.9 notes; conn-v2 is a name, not an asset.\n", encoding="utf-8")
+        self.assertEqual(release.check(self.root), self.version)
+        readme.unlink()
+        with self.assertRaisesRegex(release.ReleaseError, "README.ko.md not found"):
+            release.check(self.root)
+
     def test_numeric_semver_and_path_traversal_rejected(self):
         for version in ("01.2.3", "1.2", "1.2.3-01", "1.2.3/../../secret", "1.2.3\n", "1.2.3\u0661"):
             with self.subTest(version=version), self.assertRaises(release.ReleaseError):
@@ -147,6 +265,8 @@ class ReleaseTests(unittest.TestCase):
         })
         with self.assertRaises(release.ReleaseError):
             release.asset_names(self.version, "x86_64-apple-darwin")
+        # One table serves the manifest and updater_artifacts.py; it must cover every packaged target.
+        self.assertEqual(set(release.PLATFORMS), set(release.TARGETS))
 
     def test_missing_platform_build_is_not_a_successful_package(self):
         with self.assertRaises(release.ReleaseError):
@@ -217,13 +337,6 @@ class ReleaseTests(unittest.TestCase):
         for line in manifest.splitlines():
             digest, filename = line.split("  ")
             self.assertEqual(digest, release.sha256(self.out / filename))
-        notes = (self.out / "release-notes.md").read_text()
-        self.assertIn("Preview / prerelease", notes)
-        self.assertIn("getting-started.ko.md", notes)
-        self.assertIn("Developer ID", notes)
-        self.assertNotIn("x86_64-apple-darwin", notes)
-        self.assertIn("Intel Mac packages are paused", notes)
-        self.assertNotIn("currently ad-hoc", notes)
         self.assertNotIn("release-notes.md", manifest)
         (self.out / "private.txt").write_text("do not publish")
         with self.assertRaises(release.ReleaseError):
@@ -232,6 +345,74 @@ class ReleaseTests(unittest.TestCase):
         next(self.out.glob("*.dmg")).unlink()
         with self.assertRaises(release.ReleaseError):
             release.finalize(self.out, self.tag, self.sha, self.root)
+
+    def test_notes_are_the_template_filled_with_this_release(self):
+        self.complete_assets()
+        notes = (self.out / "release-notes.md").read_text(encoding="utf-8")
+        self.assertTrue(notes.startswith(f"# Conn {self.tag}\n"))
+        self.assertIn(f"Source commit: `{self.sha}`", notes)
+        for target in release.TARGETS:
+            for name in release.asset_names(self.version, target):
+                self.assertIn(f"({release.REPOSITORY}/releases/download/{self.tag}/{name})", notes)
+        self.assertNotIn("x86_64-apple-darwin", notes)
+        self.assertIn(f"{release.REPOSITORY}/blob/{self.tag}/CHANGELOG.md", notes)
+        # Nothing of the template's own machinery is published.
+        self.assertNotIn("<!--", notes)
+        self.assertEqual(re.findall(r"\{[a-z_]+\}", notes.replace("{braces}", "")), [])
+        self.assertNotIn("Source commit", release.release_notes(self.root, self.version, self.tag))
+
+    def test_notes_quote_only_this_version_of_the_changelog(self):
+        notes = release.release_notes(self.root, self.version, self.tag, self.sha)
+        self.assertIn("- First fixture change with `code {braces}` kept as written.", notes)
+        self.assertIn("한국어: 픽스처 변경 사항입니다.", notes)
+        self.assertNotIn("Unreleased", notes)
+        self.assertNotIn("Older fixture change", notes)
+        self.assertNotIn(f"## {self.version}", notes)
+        # Repository paths would be dead links on the release page; other links stay as written.
+        self.assertIn(f"[the protocol]({release.REPOSITORY}/blob/{self.tag}/docs/protocol.md)", notes)
+        self.assertIn("[the site](https://example.com/)", notes)
+        self.assertEqual(notes.count("First fixture change"), 1)
+
+    def test_changelog_must_have_a_section_for_the_version(self):
+        path = self.root / "CHANGELOG.md"
+        original = path.read_text(encoding="utf-8")
+        heading = f"## {self.version} — Preview · 2026-01-02"
+        self.assertEqual(release.check(self.root, self.tag), self.version)  # `## Unreleased` on top is fine
+        broken = [
+            ("has no", original.replace(heading, "## 99.0.0 — Preview")),
+            ("has no", original.replace(heading, f"## {self.version}1 — a longer number is another version")),
+            ("has no", original.replace(heading, "## Unreleased")),
+            ("more than one", original + f"\n## {self.version}\n\n- Again.\n"),
+            ("is empty", original.replace("- First fixture", "## 0.0.2\n\n- First fixture")),
+        ]
+        for message, text in broken:
+            with self.subTest(message=message):
+                path.write_text(text, encoding="utf-8")
+                with self.assertRaisesRegex(release.ReleaseError, f"CHANGELOG.md.*{message}"):
+                    release.check(self.root, self.tag)
+        path.unlink()
+        with self.assertRaisesRegex(release.ReleaseError, "CHANGELOG.md not found"):
+            release.check(self.root)
+
+    def test_template_mistakes_fail_instead_of_being_published(self):
+        template = Path(self.temporary.name) / "notes.md"
+        template.write_text("<!-- maintainer comment -->\n# {tag}\n{changes}\n{typo}\n", encoding="utf-8")
+        with self.assertRaisesRegex(release.ReleaseError, r"unknown placeholder \{typo\}"):
+            release.release_notes(self.root, self.version, self.tag, template=template)
+        template.write_text("# {tag}\n", encoding="utf-8")
+        with self.assertRaisesRegex(release.ReleaseError, "changes"):
+            release.release_notes(self.root, self.version, self.tag, template=template)
+        template.write_text("<!-- maintainer comment -->\n# {tag}\n{changes}\n", encoding="utf-8")
+        notes = release.release_notes(self.root, self.version, self.tag, template=template)
+        self.assertTrue(notes.startswith(f"# {self.tag}\n- First fixture change"))
+
+    def test_template_links_into_the_repository_exist(self):
+        template = release.NOTES_TEMPLATE.read_text(encoding="utf-8")
+        paths = re.findall(r"\{repository\}/blob/\{tag\}/([^)\s]+)", template)
+        self.assertGreater(len(paths), 3)
+        for path in paths:
+            with self.subTest(path=path):
+                self.assertTrue((ROOT / path).is_file())
 
     def test_finalize_rejects_invalid_commit_identity(self):
         self.complete_assets()
