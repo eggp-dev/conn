@@ -55,6 +55,7 @@ fn the_admission_setting_survives_saving_tab_defaults_and_a_restart() {
     drop(h);
     let again = harness(dir.path(), Default::default());
     assert_eq!(again.invoke("admission_policy", json!({})).unwrap()["ask"], false);
-    assert_eq!(again.invoke("get_defaults", json!({})).unwrap()["mode"], "copilot");
+    let saved: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.path().join("app.json")).unwrap()).unwrap();
+    assert_eq!(saved["mode"], "copilot");
     again.shutdown();
 }

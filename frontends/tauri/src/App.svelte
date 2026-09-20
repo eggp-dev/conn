@@ -8,7 +8,6 @@
   import Island from "./components/Island.svelte";
   import Palette from "./components/Palette.svelte";
   import type { Action, Parser } from "./components/Palette.svelte";
-  import CompletionBar from "./components/CompletionBar.svelte";
   import SharingDialog from "./components/SharingDialog.svelte";
   import Center from "./components/Center.svelte";
   import SettingsSheet from "./components/SettingsSheet.svelte";
@@ -21,9 +20,9 @@
   import Timeline from "./components/Timeline.svelte";
   import Toasts from "./components/Toasts.svelte";
   import HandoffWash from "./components/HandoffWash.svelte";
-  import { newTimeline, recordTimeline, savedTimelines } from "./lib/timeline";
+  import { recordTimeline, savedTimelines } from "./lib/timeline";
   import { invoke, listen } from "./lib/transport";
-  import { cmd, changeMode, onEvent, onTabOpened, onAdmission, log, type Pacing } from "./lib/bridge";
+  import { cmd, changeMode, onEvent, onTabOpened, onAdmission, log, TOOL_PRESETS, type Pacing } from "./lib/bridge";
   import { st, cur, tab, tabIndex, newTab, toast, announce, type TabState } from "./lib/store.svelte";
   import { THEMES, agentColor } from "./lib/themes";
   import { t as tr, tabName, fmtMs, setLang, LANGS, i18n } from "./lib/i18n.svelte";
@@ -36,8 +35,7 @@
   const focusTerm = () => setTimeout(() => terms[st.active]?.focus(), 0);
 
   function wash(t: TabState, color: string, out: boolean) {
-    const c = t.cursor;
-    t.wash = { x: c.x + c.w / 2, y: c.y + c.h / 2, color, out, key: ++washSeq };
+    t.wash = { ...(terms[t.id]?.cursorCenter() ?? { x: 4, y: 8 }), color, out, key: ++washSeq };
     setTimeout(() => { if (t.wash?.key === washSeq) t.wash = null; }, 1300);
   }
   function setController(t: TabState, kind: "human" | "agent", agentId?: string) {
@@ -58,11 +56,8 @@
   async function syncStatus(id: string) {
     const t = tab(id); if (!t) return;
     const s = await invoke<any>("status", { session: id });
-    t.shellIntegration = s.shellIntegration ?? { state: "unavailable" };
     t.shared = s.shared === true;
     t.externalOrigin = s.externalOrigin === true;
-    t.surfaceGeneration = s.surfaceGeneration ?? 1;
-    t.outputSeq = s.outputSeq ?? 0;
     t.surfaceAvailable = s.surfaceAvailable === true;
     t.inputPending = s.inputPending === true;
     t.externalStarting = s.externalStarting === true;
@@ -113,7 +108,6 @@
     addTab(id);
     await syncStatus(id);
     await select(id);
-    st.booted = true;
     } catch(e) { toast(String(e), "danger"); }
   }
   async function closeTab(id: string) {
@@ -121,8 +115,6 @@
     const idx = st.order.indexOf(id);
     await invoke("close_tab", { session: id });
     st.order = st.order.filter((x) => x !== id);
-    const closed = tab(id);
-    if (closed && !!closed.shared && closed.timeline.items.length) st.pastTimelines[id] = closed.timeline;
     delete st.tabs[id];
     delete terms[id];
     if (st.active === id) { const next = st.order[Math.max(0, idx - 1)]; st.active = next; await invoke("attend", { session: next }); terms[next]?.refit(); focusTerm(); }
@@ -130,11 +122,6 @@
   const needsYou = (tb: TabState | undefined) => !!tb && !!(tb.approval || tb.attention || tb.ctlReq || tb.proposal?.ready);
   const nextNeedingAttention = () => st.order.find((id) => id !== st.active && needsYou(tab(id)));
 
-  const TOOL_PRESETS: [string, string[] | null][] = [
-    ["s.preset.observe", ["snapshot", "request_attention", "check_approval", "switch_tab"]],
-    ["s.preset.notabs", ["snapshot", "request_control", "type", "send_key", "interrupt", "release_control", "check_approval", "request_attention", "switch_tab"]],
-    ["s.preset.all", null],
-  ];
   const maskIs = (p: string[] | null) => p === null ? cur().mask === null : !!cur().mask && p.length === cur().mask!.length && p.every((a) => cur().mask!.includes(a));
   const openSettings = (tab: typeof st.settingsTab) => { st.settingsTab = tab; st.settingsOpen = true; st.centerOpen = false; };
   const setTheme = (id: string) => { void selectTheme(id).catch(() => toast(tr("ext.saveFailed"), "warn")); };
@@ -146,7 +133,6 @@
     const holder = c.controller.type === "agent" ? c.controller.agentId ?? "agent" : c.lastAgent?.agentId ?? "agent";
     const lang = i18n.lang; void lang;
     const all: Action[] = [
-      { id: "completion", group: "agents", label: tr("ext.requestCompletion"), aliases: ["complete", "suggest", "자동완성", "제안"], when: () => cur().shared && cur().controller.type === "human", run: () => { st.completionRequest++; } },
       { id: "sharing", group: "view", label: tr(c.shared ? "sharing.manage" : "sharing.start"), aliases: ["share", "private", "공유", "비공유"], run: () => { st.sharingOpen = true; } },
       { id: "take", group: "conn", now: c.controller.type === "agent", label: tr("a.take"), hint: tr("a.take.hint"), aliases: ["take", "revoke", "회수", "뺏기", "제어권"], run: () => cmd("take"), when: () => cur().controller.type === "agent" },
       { id: "handback", group: "conn", now: c.handback, label: tr("a.handback", { agent: holder }), keys: shortcutLabel("⌘⏎"), aliases: ["hand back", "give back", "되돌려주기", "다시"], run: () => chip?.handBack(), when: () => !!cur().lastAgent && cur().controller.type === "human" },
@@ -199,9 +185,9 @@
   const timelineSpace = $derived(!cur().shared || !st.timelineOpen || !timelineHeight ? 0 : timelineHeight + 10);
   function onKey(e: KeyboardEvent) {
     if (!appShortcut(e)) {
-      if (e.key === "Escape" && (st.paletteOpen || st.settingsOpen || st.timelineOpen || st.centerOpen || st.sharingOpen || st.completionOpen || cur().handback)) {
+      if (e.key === "Escape" && (st.paletteOpen || st.settingsOpen || st.timelineOpen || st.centerOpen || st.sharingOpen || cur().handback)) {
         e.preventDefault();
-        st.paletteOpen = false; st.settingsOpen = false; st.timelineOpen = false; st.centerOpen = false; st.sharingOpen = false; st.completionOpen = false;
+        st.paletteOpen = false; st.settingsOpen = false; st.timelineOpen = false; st.centerOpen = false; st.sharingOpen = false;
         cur().handback = false;
         focusTerm();
       }
@@ -264,11 +250,10 @@
       if (ev.event === "sharing_changed") {
         recordTimeline(t.timeline, ev);
         t.shared = ev.shared === true;
-        t.surfaceGeneration = ev.generation ?? t.surfaceGeneration;
         t.surfaceAvailable = false;
         t.approval = null; t.ctlReq = null; t.proposal = null; t.grace = null; t.handback = false;
         setController(t, "human");
-        if (!t.shared) { st.timelineOpen = false; st.completionOpen = false; }
+        if (!t.shared) st.timelineOpen = false;
         void syncStatus(t.id);
         return;
       }
@@ -356,8 +341,6 @@
 
           if (String(ev.policy).startsWith("deny")) { t.policyBlockedUntil = performance.now() + 2400; toast(tr("policy.blocked", { cmd: ev.cmd }) + sfx, "danger"); }
           break;
-        case "shell_integration_changed": t.shellIntegration = ev.status; break;
-        case "human_exec": t.title = ev.cmd.length > 24 ? ev.cmd.slice(0, 24) + "…" : ev.cmd; break;
         case "process_exited": t.processAlive = false; setController(t, "human"); announce(tr("shell.exited") + sfx, "var(--danger)", "warn"); break;
         case "pacing_changed": t.pacing = ev.pacing as Pacing; break;
         case "mode_changed": t.mode = ev.mode; t.effectiveMode = ev.effectiveMode ?? ev.mode; break;
@@ -369,8 +352,8 @@
       await Promise.all([connectionListener, admissionListener, tabListener, abortListener, eventListener]);
       await refreshProfiles();
       await refreshExtensions().catch(() => {});
-      const info = await invoke<{ socket: string; shell: string; session: string | null; sessions: string[]; externalPending?: boolean }>("start", { rows: 24, cols: 80 });
-      st.socket = info.socket ?? ""; st.shell = info.shell ?? "";
+      const info = await invoke<{ socket: string; session: string | null; sessions: string[]; externalPending?: boolean }>("start", { rows: 24, cols: 80 });
+      st.socket = info.socket ?? "";
       for (const id of info.sessions) if (!tab(id)) addTab(id);
       st.active = info.session ?? "";
       st.externalPending = !!info.externalPending;
@@ -380,19 +363,17 @@
         const saved = savedTimelines(tail);
         for (const [id, history] of Object.entries(saved)) {
           const live = tab(id);
-          if (!live?.shared) continue;
           // Live events win if they arrived while startup was reading the audit.
-          if (live && !live.timeline.items.length) live.timeline = history;
-          else if (!live) st.pastTimelines[id] = history;
+          if (live?.shared && !live.timeline.items.length) live.timeline = history;
         }
       }
       // A window opened later, or a reload, must still see who is waiting.
       try { st.admissions = await invoke<{ connId: number; agentId: string }[]>("pending_admissions"); } catch {}
-      st.booted = true; st.backendOnline = true;
+      st.backendOnline = true;
       await tick();
       await invoke("ui_ready");
       setTimeout(() => { terms[st.active]?.refit(); focusTerm(); }, 50);
-      setInterval(async () => { for (const id of st.order) { try { const s = await invoke<any>("status", { session: id }); const t = tab(id); if (t) { t.processAlive = !!s.processAlive; t.externalStarting = s.externalStarting === true; t.externalInputAvailable = s.externalInputAvailable === true; t.shared = s.shared === true; t.surfaceGeneration = s.surfaceGeneration ?? t.surfaceGeneration; t.surfaceAvailable = s.surfaceAvailable === true; t.inputPending = s.inputPending === true; if (t.shared) t.agents = s.connectedAgents ?? []; } } catch {} } }, 5000);
+      setInterval(async () => { for (const id of st.order) { try { const s = await invoke<any>("status", { session: id }); const t = tab(id); if (t) { t.processAlive = !!s.processAlive; t.externalStarting = s.externalStarting === true; t.externalInputAvailable = s.externalInputAvailable === true; t.shared = s.shared === true; t.surfaceAvailable = s.surfaceAvailable === true; t.inputPending = s.inputPending === true; if (t.shared) t.agents = s.connectedAgents ?? []; } } catch {} } }, 5000);
     } catch (e) {
       st.settingsTab = "profiles"; st.settingsOpen = true;
       log(`start failed: ${e}`); toast(tr("engine.failed", { err: String(e) }), "danger");
@@ -413,7 +394,7 @@
   <TabStrip onselect={select} onclose={closeTab} onnew={openTab} onsettings={() => openSettings(st.settingsTab)} onpalette={() => { st.settingsOpen = false; st.centerOpen = false; st.paletteOpen = true; }} ontimeline={() => { st.timelineOpen = !st.timelineOpen; }} />
   {#if st.active}<Island onopen={() => { st.paletteOpen = false; st.centerOpen = !st.centerOpen; }} />{/if}
   {#if !!cur().shared}
-  <div class="interaction-dock" bind:clientHeight={dockHeight}><AdmissionRequest /><ControlRequest /><Hold /><Ghost /><GraceBar /><HandbackChip bind:this={chip} /><CompletionBar /></div>
+  <div class="interaction-dock" bind:clientHeight={dockHeight}><AdmissionRequest /><ControlRequest /><Hold /><Ghost /><GraceBar /><HandbackChip bind:this={chip} /></div>
   <Timeline bind:height={timelineHeight} />
   {/if}
   <Toasts />

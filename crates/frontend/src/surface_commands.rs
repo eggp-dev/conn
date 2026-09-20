@@ -25,7 +25,6 @@ pub(crate) fn dispatch(state: &AppState, name: &str, args: &Value) -> Option<Res
         state.automation.stop_session(&id);
         let session = e.session();
         let mut s = session.lock();
-        state.extensions.cancel(&id);
         if shared && s.external_origin() && s.is_private() {
             let audit = conn_core::audit::Audit::open(&state.config_dir.join("audit.jsonl"))
                 .map_err(|_| "Could not open collaboration history")?.for_session(id);

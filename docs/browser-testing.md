@@ -72,12 +72,7 @@ files, never your real Codex/Claude/Cursor/Copilot configuration. Do not launch 
 client against this temporary configuration unless you intend to connect it to
 the test backend. CLI staging and backups remain under the test state directory.
 
-## Shared-surface rendering fixtures
+## Pure state checks
 
-The unreleased renderer checks use `tests/browser/surface.html` and
-`tests/browser/completion.html` in the frontend development server. The first mounts
-real xterm DOM output to exercise masking, conceal, Unicode, scrolling, alternate
-screens and raster capture. The second mounts the real completion component with a
-mock command transport to test prompt gating and insertion. Neither contacts a model.
-Run `npm test` for the corresponding pure surface/state checks, and use an actual
-browser for the renderer fixtures. The main app still uses the native backend.
+Run `npm test` in `frontends/tauri` for the timeline, icon-state,
+connection-status and terminal-input checks. They need neither a browser nor the native backend.

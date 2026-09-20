@@ -3,7 +3,7 @@
 [Reporting a vulnerability](../SECURITY.md) · [한국어 요약](#한국어-요약)
 
 **Since v0.8.0.** This page describes the shared-surface contract shipped in v0.8.0; the
-sharing transition and native model extensions arrived in v0.7.0. v0.6.0 keeps externally
+sharing transition and the extension host arrived in v0.7.0. v0.6.0 keeps externally
 created sessions private for their whole lifetime and provides neither.
 
 <a id="one-terminal-one-presented-surface"></a>
@@ -134,30 +134,20 @@ Human takeover, cancel, release, permission/profile removal and closing also rev
 external writer. Its old handles cannot regain authority or silently follow the user
 into another tab. Already delivered input cannot be undone. See [external automation](external-automation.md).
 
-## Native extensions and model data
+<a id="native-extensions-and-model-data"></a>
 
-The [extension host](extensions.md) accepts declarative terminal themes and reviewed
-built-in native execution. It is not a general third-party code sandbox or marketplace.
+## Native extensions
+
+The [extension host](extensions.md) accepts declarative terminal themes. It is not a
+general third-party code sandbox or marketplace, and no executable extension ships.
 Extensions cannot access a PTY, grant control, publish their own terminal frame or bypass
-sharing. Conn renders their settings and proposals with its common UI.
+sharing. Conn renders their settings with its common UI.
 
-The optional OpenAI suggestion feature is off by default. The user saves their own key,
-selects a model and enables suggestions. An automatic request after an 800 ms typing
-pause requires a confirmed idle local shell prompt under human control; a content-free
-signal triggers it. Manual invocation can also be used in an unconfirmed environment.
-Only the current authorized visible text is sent; no files, history, hidden input or
-previous model conversation is added.
-The suggestion is a single-line suffix; accepting it inserts text through the common
-human-input path and never sends Enter. A changed frame invalidates the suggestion.
-
-Keys live in macOS Keychain, Windows Credential Manager or Linux Secret Service. A
-locked/unavailable store fails without plaintext fallback. Keys are not written to profile
-environment, extension JSON, activity logs or proposal payloads. The reviewed native
-provider sends requests to a fixed HTTPS OpenAI endpoint with redirect/proxy overrides
-disabled, bounded input/output, cancellation, timeouts and request limits. Provider error
-bodies are not shown. `store: false` does not promise zero provider retention or free
-processing after a local cancellation. External agent clients have their own model and
-data policies. Conn still has no telemetry client.
+The opt-in native OpenAI suggestion preview from v0.7.0 has been removed. Conn itself
+makes no model request and stores no API key. A key saved by that preview remains in the
+OS credential store until you [remove it](extensions.md#extension-architecture).
+External agent clients have their own model and data policies. Conn still has no
+telemetry client.
 
 ## Stored data and local endpoints
 
@@ -174,7 +164,6 @@ contain sensitive file contents. There is no automatic historical secret redacti
 | Native owner | Window-bound Tauri command/event bridge |
 | Browser test adapter | Loopback HTTP/WebSocket, exact Origin and token checks; runs real shells |
 | MCP | Local `conn mcp` agent transport; owner operations unavailable |
-| Native OpenAI provider | Opt-in HTTPS model request, current visible context only |
 
 Do not expose the browser adapter through a public reverse proxy or upload `.conn` as a
 diagnostic bundle. Local `conn log` reads a file with the caller's OS permissions; it is
@@ -187,18 +176,17 @@ not an extra MCP history permission. Existing logs/backups are not erased by sha
 | Scenario | Expected result and boundary |
 | --- | --- |
 | Hidden or masked authentication | No hidden input is reconstructed; only rendered masks may be observed when shared. |
-| Visible child output | Shared snapshots and enabled native suggestions may transmit it. |
+| Visible child output | Shared snapshots may transmit it. |
 | Sharing stops during a response | Session/participation/surface checks discard obsolete queued disclosure; delivered copies remain. |
 | Old external input handle | No input after takeover/sharing/revocation; no silent reacquisition. |
 | Agent command or original request | Review/history may contain it; no automatic redaction. |
 | Startup argv, environment, child logs, tmux | Outside Conn's input-recording protection; can retain or reprint values. |
-| Keychain missing or locked | Key save/read fails; no config/environment fallback. |
 | Clipboard, screenshot, crash dump, old backup | Separate human/OS exposure routes; not automatically cleared. |
 
 The hardcut needs synthetic hidden/masked/visible input tests, frame/scroll/conceal
 checks, revocation races, owner-spoofing tests and same-SSH-session handoff tests. Unit
-checks and browser adapters do not prove native macOS/Windows rendering, system unlock
-prompts or every external launcher. Live OpenAI calls require a user-configured smoke test.
+checks and browser adapters do not prove native macOS/Windows rendering or every
+external launcher.
 
 <a id="shell-command-integration-unreleased"></a>
 
@@ -238,12 +226,11 @@ from saved timeline data. Back up work as files/version control.
   먼저 해제하고 현재 화면부터 공유하며, 과거 비공유 입력은 기록으로 복구하지 않습니다.
 - 사람의 원시 키 입력은 기록하지 않습니다. 지원하는 로컬 셸의 실행 훅만 사람 명령을
   기록합니다. 외부 세션에는 공유 전환 시 훅을 새로 설치하지 않습니다.
-- 내장 명령 제안은 기본 꺼짐입니다. 사용자 키는 OS 보안 저장소에만 저장합니다. 켜면
-  확인된 로컬 프롬프트의 입력 멈춤 또는 수동 요청 때 현재 공유 화면 텍스트를 OpenAI에
-  보냅니다. 인증·편집기 입력은 자동 호출하지 않으며 수락은 입력만 하고 실행하지 않습니다.
+- v0.7.0 프리뷰의 내장 OpenAI 명령 제안은 제거했습니다. Conn은 모델 요청을 보내거나
+  API 키를 저장하지 않습니다. 그때 저장한 키는 OS 보안 저장소에서 직접 삭제해야 합니다.
 - 정책·공유 제한은 OS 격리가 아닙니다. 같은 계정의 다른 도구, 로그인된 원격 계정의
   권한, 자식 기록·argv·환경·과거 스냅샷까지 제거하지 않습니다.
-- 네이티브 화면·키체인·실제 모델 호출과 외부 런처는 각 플랫폼에서 별도 검증해야 합니다.
+- 네이티브 화면과 외부 런처는 각 플랫폼에서 별도 검증해야 합니다.
 
 <a id="비공유-외부-세션-변경--미배포"></a>
 

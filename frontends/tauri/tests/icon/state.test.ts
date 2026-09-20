@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {connMarkState, graceProgress, type MarkInput} from '../../frontends/tauri/src/lib/connMark.ts';
+import {connMarkState, graceProgress, type MarkInput} from '../../src/lib/connMark.ts';
 const base: MarkInput = {processAlive:true,policyBlockedUntil:0,controller:{type:'human'},ctlReq:null,approval:null,attention:null,proposal:null,grace:null};
 test('terminal availability and human decisions outrank agent ownership',()=>{
  const agent={...base,controller:{type:'agent' as const}};

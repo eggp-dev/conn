@@ -6,8 +6,7 @@ export type Extension = { id: string; name: string; kind: string; enabled: boole
 export type ExtensionTheme = { id: string; name: string; background: string; foreground: string; cursor: string; selection: string; ansi: string[] };
 export type ExtensionCatalog = {
   apiVersion: number; extensions: Extension[];
-  settings: {theme: string; model: string; completionEnabled: boolean; providerEnabled: boolean};
-  keyStatus: 'missing' | 'stored' | 'unavailable'; themes: ExtensionTheme[];
+  settings: {theme: string}; themes: ExtensionTheme[];
 };
 export const extensions = $state<{catalog: ExtensionCatalog | null}>({catalog:null});
 const ANSI = ['black','red','green','yellow','blue','magenta','cyan','white','brightBlack','brightRed','brightGreen','brightYellow','brightBlue','brightMagenta','brightCyan','brightWhite'] as const;

@@ -1,6 +1,4 @@
 import { invoke as nativeInvoke } from '@tauri-apps/api/core';
-import { invoke } from './transport';
-import { checkRelease, type Platform } from './updates';
 
 export type UpdateStatus = { phase: string; current: string; version?: string; notes: string; preview: boolean; supported: boolean; downloaded: number; total?: number; error?: string };
 export const updater = $state({ status: { phase: 'idle', current: '', notes: '', preview: false, supported: false, downloaded: 0 } as UpdateStatus, busy: false, previews: false, automatic: true });
@@ -11,7 +9,6 @@ export async function initUpdates() {
   initialized = true;
   try {
     if (native) updater.status = await nativeInvoke('app_update', { action: 'status' });
-    else { const p = await invoke<Platform>('update_info'); updater.status.current = p.version; }
     updater.previews = localStorage.getItem('conn:update-previews') === 'true' || (localStorage.getItem('conn:update-previews') === null && updater.status.preview);
     updater.automatic = localStorage.getItem('conn:auto-update') !== 'false';
   } catch { initialized = false; }
@@ -31,14 +28,7 @@ export async function updateAction(action: 'check' | 'download' | 'install', con
     if (native) {
       poll = setInterval(async () => { try { const status = await nativeInvoke<UpdateStatus>('app_update', { action: 'status' }); if (!finished) updater.status = status; } catch {} }, 500);
       updater.status = await nativeInvoke('app_update', { action, previews: updater.previews, confirmed });
-    } else if (action === 'check') {
-      const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 20000);
-      try {
-        const platform = await invoke<Platform>('update_info');
-        const release = await checkRelease(platform, updater.previews, controller.signal);
-        updater.status = { ...updater.status, current: platform.version, phase: release ? 'available' : 'current', version: release?.tag.replace(/^v/, ''), notes: release?.notes ?? '', preview: release?.preview ?? false, supported: false };
-      } finally { clearTimeout(timeout); }
-    }
+    } else updater.status.phase = 'current'; // The browser harness has no updater and makes no request.
   } catch (error) { updater.status.phase = 'error'; updater.status.error = String(error); }
   finally { finished = true; if (poll) clearInterval(poll); updater.busy = false; }
 }

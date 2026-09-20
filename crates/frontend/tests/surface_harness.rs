@@ -36,7 +36,6 @@ fn native_output_is_sequenced_and_renderer_cannot_inject_observations() {
     assert_eq!(h.invoke("status",json!({"session":id})).unwrap()["surfaceAvailable"],true);
     h.focus_window("other-window");
     assert_eq!(h.invoke("status",json!({"session":id})).unwrap()["surfaceAvailable"],true);
-    assert!(h.invoke("completion_request",json!({"session":id,"explicit":true,"context":"hidden override"})).is_err());
 }
 #[test]
 fn sharing_changes_keep_same_process_and_private_input_is_not_retroactive() {
@@ -56,14 +55,12 @@ fn sharing_changes_keep_same_process_and_private_input_is_not_retroactive() {
     assert!(audit.contains("sharing_started") && audit.contains("sharing_stopped"));
 }
 #[test]
-fn private_and_wrong_window_cannot_request_completion_or_add_participants() {
+fn wrong_window_and_unknown_connections_cannot_add_participants() {
     let (_dir,h,_output,id)=setup();
     assert!(h.invoke("set_sharing",json!({"session":id,"shared":true,"connectionIds":[999999]})).is_err());
     assert!(h.invoke_in_window("wrong-window","set_sharing",json!({"session":id,"shared":true,"connectionIds":[]})).is_err());
-    h.invoke("set_sharing",json!({"session":id,"shared":false,"connectionIds":[]})).unwrap();
-    assert!(h.invoke("completion_request",json!({"session":id,"explicit":true})).is_err());
     let status=h.invoke("extensions_status",json!({"session":id})).unwrap();
-    assert_eq!(status["settings"]["providerEnabled"],false);
-    assert_eq!(status["settings"]["completionEnabled"],false);
-    assert!(status.get("key").is_none());
+    assert!(status["extensions"].as_array().unwrap().iter().all(|e|e["kind"]=="theme"));
+    assert!(status.get("keyStatus").is_none());
+    assert!(h.invoke("completion_request",json!({"session":id,"explicit":true})).unwrap_err().starts_with("Unknown frontend command"));
 }

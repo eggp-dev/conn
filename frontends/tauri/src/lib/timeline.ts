@@ -11,7 +11,7 @@ export type TimelineItem = {
   controlId?: string; requestId?: string; lease?: string; commands?: string[]; saved?: boolean;
 };
 export type TimelineState = { recording: boolean; items: TimelineItem[]; seq: number; activeControl?: string; waiting: Record<string, string>; awaitingResult: Record<string, string>; refs: Record<string, string> };
-export const newTimeline = (suspended = false): TimelineState => ({ recording: !suspended, items: [], seq: 0, waiting: {}, awaitingResult: {}, refs: {} });
+export const newTimeline = (): TimelineState => ({ recording: true, items: [], seq: 0, waiting: {}, awaitingResult: {}, refs: {} });
 export type TimelineFilter = "all" | "commands" | "collaboration";
 export const isCommand = (it: TimelineItem) => it.kind === "exec";
 export const isPolicyBlocked = (it: TimelineItem) => it.policy === "deny" || it.policy?.startsWith("deny:") === true;
@@ -191,9 +191,6 @@ export function recordTimeline(s: TimelineState, ev: Record<string, any>, t = Da
       it.exitCode = ev.exitCode; it.durationMs = ev.durationMs;
       finish(s, it, ev.exitCode == null ? "unknown" : ev.exitCode === 0 ? "completed" : "failed", t); break;
     }
-    case "human_exec": {
-      const it = add(s, "human", "exec", ev.cmd, t); finish(s, it, "executed", t); break;
-    }
     case "attention_requested":
     case "tab_opened":
     case "agent_switched_tab": {
@@ -237,12 +234,11 @@ export function importSavedActivity(s: TimelineState, entries: Record<string, an
   }
 }
 
-/** Partition persisted records before projection; missing identity is never guessed. */
+/** Partition persisted records before projection; records without a session belong to no tab and are dropped. */
 export function savedTimelines(entries: Record<string, any>[]): Record<string, TimelineState> {
   const groups: Record<string, Record<string, any>[]> = Object.create(null);
   for (const entry of entries) {
-    const id = typeof entry.session === "string" && entry.session ? entry.session : "legacy";
-    (groups[id] ??= []).push(entry);
+    if (typeof entry.session === "string" && entry.session) (groups[entry.session] ??= []).push(entry);
   }
   const result: Record<string, TimelineState> = Object.create(null);
   for (const [id, records] of Object.entries(groups)) {

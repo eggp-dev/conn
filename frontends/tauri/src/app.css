@@ -6,7 +6,6 @@
   --warn: #f59e0b; --ok: #22c55e; --danger: #ef4444; --agent: #8b7cff; --selection: rgba(124, 92, 255, .25);
   --font-ui: -apple-system, "SF Pro Text", "Inter", "Noto Sans KR", system-ui, sans-serif;
   --font-mono: "SF Mono", "JetBrains Mono", Menlo, monospace;
-  --radius: 10px;
   --shadow: 0 12px 40px rgba(0, 0, 0, .45), 0 1px 0 rgba(255, 255, 255, .04) inset;
   --ease: cubic-bezier(.2, .8, .2, 1);
 }

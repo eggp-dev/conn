@@ -84,7 +84,6 @@ the owner's scroll position or include window chrome and overlays.
 | `mode`, `effectiveMode` | Configured and current agent behavior |
 
 There is no renderer publication, heartbeat expiry or focus-dependent fallback.
-The same revision is used for completion context and stale-acceptance rejection.
 A sharing transition invalidates previous tokens and queued response disclosure.
 See [trust limits](security.md#one-terminal-one-presented-surface).
 
@@ -167,5 +166,5 @@ view and take a fresh snapshot.
 
 [External automation](external-automation.md) is a separate owner-bound native adapter,
 not another public socket role. Only the human owner may transition its private session
-to shared participation. [Native extensions](extensions.md) receive an authorized frame
-from the host; they cannot call owner operations through agent IPC either.
+to shared participation. [Native extensions](extensions.md) are declarative themes; they
+cannot call owner operations through agent IPC either.
