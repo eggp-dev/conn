@@ -12,21 +12,21 @@ repository = "https://github.com/eggp-dev/conn"
 [workspace.dependencies]
 conn-core = { path = "crates/core", version = "0.8.2" }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "time", "macros", "signal"] }
-portable-pty = "0.8"
+portable-pty = "0.9"
 vt100 = { path = "vendor/vt100", version = "0.15.2" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
 uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
-thiserror = "1"
+thiserror = "2"
 regex = "1"
 clap = { version = "4", features = ["derive"] }
 libc = "0.2"
 chrono = { version = "0.4", features = ["serde", "clock"] }
-dirs = "5"
+dirs = "7"
 parking_lot = "0.12"
-base64 = "0.22"
+base64 = "0.23"
 globset = "0.4"
 tempfile = "3"
 
