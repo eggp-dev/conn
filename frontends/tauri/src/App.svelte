@@ -22,7 +22,7 @@
   import HandoffWash from "./components/HandoffWash.svelte";
   import { recordTimeline, savedTimelines } from "./lib/timeline";
   import { invoke, listen } from "./lib/transport";
-  import { cmd, changeMode, onEvent, onTabOpened, onAdmission, log, type Pacing } from "./lib/bridge";
+  import { cmd, changeMode, onEvent, onTabOpened, onAdmission, log, TOOL_PRESETS, type Pacing } from "./lib/bridge";
   import { st, cur, tab, tabIndex, newTab, toast, announce, type TabState } from "./lib/store.svelte";
   import { THEMES, agentColor } from "./lib/themes";
   import { t as tr, tabName, fmtMs, setLang, LANGS, i18n } from "./lib/i18n.svelte";
@@ -35,8 +35,7 @@
   const focusTerm = () => setTimeout(() => terms[st.active]?.focus(), 0);
 
   function wash(t: TabState, color: string, out: boolean) {
-    const c = t.cursor;
-    t.wash = { x: c.x + c.w / 2, y: c.y + c.h / 2, color, out, key: ++washSeq };
+    t.wash = { ...(terms[t.id]?.cursorCenter() ?? { x: 4, y: 8 }), color, out, key: ++washSeq };
     setTimeout(() => { if (t.wash?.key === washSeq) t.wash = null; }, 1300);
   }
   function setController(t: TabState, kind: "human" | "agent", agentId?: string) {
@@ -123,11 +122,6 @@
   const needsYou = (tb: TabState | undefined) => !!tb && !!(tb.approval || tb.attention || tb.ctlReq || tb.proposal?.ready);
   const nextNeedingAttention = () => st.order.find((id) => id !== st.active && needsYou(tab(id)));
 
-  const TOOL_PRESETS: [string, string[] | null][] = [
-    ["s.preset.observe", ["snapshot", "request_attention", "check_approval", "switch_tab"]],
-    ["s.preset.notabs", ["snapshot", "request_control", "type", "send_key", "interrupt", "release_control", "check_approval", "request_attention", "switch_tab"]],
-    ["s.preset.all", null],
-  ];
   const maskIs = (p: string[] | null) => p === null ? cur().mask === null : !!cur().mask && p.length === cur().mask!.length && p.every((a) => cur().mask!.includes(a));
   const openSettings = (tab: typeof st.settingsTab) => { st.settingsTab = tab; st.settingsOpen = true; st.centerOpen = false; };
   const setTheme = (id: string) => { void selectTheme(id).catch(() => toast(tr("ext.saveFailed"), "warn")); };

@@ -4,7 +4,7 @@
   import { cur } from "../lib/store.svelte";
   import { cmd } from "../lib/bridge";
   let now = $state(performance.now());
-  $effect(() => { let r = 0; const tick = () => { now = performance.now(); r = requestAnimationFrame(tick); }; r = requestAnimationFrame(tick); return () => cancelAnimationFrame(r); });
+  $effect(() => { if (!cur().grace) return; now = performance.now(); let r = 0; const tick = () => { now = performance.now(); r = requestAnimationFrame(tick); }; r = requestAnimationFrame(tick); return () => cancelAnimationFrame(r); });
   const g = $derived(cur().grace!);
   const left = $derived(Math.max(0, g.ms - (now - g.start)));
 </script>

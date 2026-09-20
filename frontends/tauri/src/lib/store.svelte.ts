@@ -45,7 +45,6 @@ export type TabState = {
   lastAgent: null | { agentId: string; lastCmd?: string; connected: boolean };
   handback: boolean;
   timeline: TimelineState;
-  cursor: { x: number; y: number; w: number; h: number; row: number };
   wash: null | { x: number; y: number; color: string; out: boolean; key: number };
 };
 
@@ -55,7 +54,7 @@ export function newTab(id: string, n: number): TabState {
     controller: { type: "human" }, mode: "autopilot", effectiveMode: "autopilot", gate: false,
     pacing: { minWriteIntervalMs: 0, enterGraceMs: 0, leaseTtlSecs: 60, approvalTtlSecs: 300 },
     mask: null, allows: [], agents: [], typing: false, proposal: null, approval: null, grace: null, ctlReq: null,
-    lastAgent: null, handback: false, timeline: newTimeline(), cursor: { x: 0, y: 0, w: 8, h: 16, row: 0 }, wash: null,
+    lastAgent: null, handback: false, timeline: newTimeline(), wash: null,
   };
 }
 

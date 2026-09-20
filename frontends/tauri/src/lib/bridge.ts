@@ -6,6 +6,13 @@ import { t } from "./i18n.svelte";
 export type Pacing = { minWriteIntervalMs: number; enterGraceMs: number; leaseTtlSecs: number; approvalTtlSecs: number };
 export type Mode = "observe" | "copilot" | "autopilot";
 export type Ev = { event: string; session?: string; [k: string]: any };
+export const TOOLS = ["snapshot", "request_control", "type", "send_key", "interrupt", "release_control", "check_approval", "request_attention", "open_tab", "switch_tab"];
+/** i18n key and affordance mask (`null` = every tool), shared by the palette and settings. */
+export const TOOL_PRESETS: [string, string[] | null][] = [
+  ["s.preset.observe", ["snapshot", "request_attention", "check_approval", "switch_tab"]],
+  ["s.preset.notabs", TOOLS.filter((a) => a !== "open_tab")],
+  ["s.preset.all", null],
+];
 
 /** Invoke a command against the active tab unless `session` is given. */
 export const cmd = <T = any>(name: string, args: Record<string, unknown> = {}) =>

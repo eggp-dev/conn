@@ -9,7 +9,8 @@
   import { invoke } from "../lib/transport";
   import { fade } from "svelte/transition";
   import { st, cur, tab, toast, type Analysis } from "../lib/store.svelte";
-  import { cmd, changeMode, type Mode } from "../lib/bridge";
+  import { cmd, changeMode, TOOLS, TOOL_PRESETS, type Mode } from "../lib/bridge";
+  import { liveAgents, watchLiveAgents } from "../lib/liveAgents.svelte";
   import { THEMES, agentColor } from "../lib/themes";
   import { t, i18n, setLang, LANGS } from "../lib/i18n.svelte";
   let { onclose }: { onclose: () => void } = $props();
@@ -60,30 +61,22 @@
   }
 
   // ---- tools ----
-  const ALL = ["snapshot", "request_control", "type", "send_key", "interrupt", "release_control", "check_approval", "request_attention", "open_tab", "switch_tab"];
   const GROUPS: [string, string[]][] = [
     ["s.tg.see", ["snapshot"]],
     ["s.tg.write", ["request_control", "type", "send_key", "interrupt", "release_control"]],
     ["s.tg.tabs", ["open_tab", "switch_tab"]],
     ["s.tg.knock", ["request_attention", "check_approval"]],
   ];
-  const PRESETS: [string, string[] | null][] = [
-    ["s.preset.observe", ["snapshot", "request_attention", "check_approval", "switch_tab"]],
-    ["s.preset.notabs", ALL.filter((a) => a !== "open_tab")],
-    ["s.preset.all", null],
-  ];
   const has = (a: string) => !cur().mask || cur().mask!.includes(a);
   const presetOn = (p: string[] | null) => p === null ? cur().mask === null : !!cur().mask && p.length === cur().mask!.length && p.every((a) => cur().mask!.includes(a));
   function setMask(a: string, on: boolean) {
-    const set = new Set(cur().mask ?? ALL);
+    const set = new Set(cur().mask ?? TOOLS);
     on ? set.add(a) : set.delete(a);
-    const arr = ALL.filter((x) => set.has(x));
-    apply("set_affordances", { allow: arr.length === ALL.length ? null : arr });
+    const arr = TOOLS.filter((x) => set.has(x));
+    apply("set_affordances", { allow: arr.length === TOOLS.length ? null : arr });
   }
-  type Live = { conn: number; agentId: string; affordances: string[] };
-  let live = $state<Live[]>([]);
-  async function poll() { if (st.settingsTab !== "agents" || !cur().shared) { live = []; return; } try { live = await cmd<Live[]>("agents"); } catch { live = []; } }
-  $effect(() => { void st.active; void st.settingsTab; poll(); const i = setInterval(poll, 2000); return () => clearInterval(i); });
+  const live = $derived(liveAgents.list);
+  $effect(() => { void st.active; if (st.settingsTab === "agents" && cur().shared) return watchLiveAgents(); });
 
   // ---- policy ----
   let policyText = $state("");
@@ -248,7 +241,7 @@
 
 <details class="advanced"><summary>{t("s.advancedPermissions")}</summary>
         <div class="presets">
-          {#each PRESETS as [k, p]}
+          {#each TOOL_PRESETS as [k, p]}
             <button class="pill" class:on={presetOn(p)} aria-pressed={presetOn(p)} onclick={() => apply("set_affordances", { allow: p })}>{t(k)}</button>
           {/each}
         </div>
