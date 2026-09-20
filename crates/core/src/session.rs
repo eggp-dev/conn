@@ -627,7 +627,6 @@ impl Session {
             rows: size.rows, cols: size.cols,
             cursor: self.screen.visible_cursor(), screen: self.screen.rows(),
             alternate_screen: self.screen.alternate_screen(),
-            image: None, image_unavailable: true,
         })
     }
 

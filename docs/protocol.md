@@ -80,7 +80,6 @@ the owner's scroll position or include window chrome and overlays.
 | `cursor` | `{row,col}`, or null when hidden |
 | `screen` | Current grid rows, with ANSI conceal and explicit equal colors suppressed |
 | `alternateScreen` | Whether the alternate terminal screen is active |
-| `imageUnavailable` | True: this contract provides terminal text, not a screenshot |
 | `controller`, `processAlive` | Collaboration/process state |
 | `mode`, `effectiveMode` | Configured and current agent behavior |
 
