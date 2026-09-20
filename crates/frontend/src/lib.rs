@@ -330,10 +330,6 @@ fn abort_pending(app: &AppHandle, state: &AppState, window: &str, session: &str)
     windows.finish_prepare(window);
 }
 
-fn get_defaults(state: &AppState) -> Value {
-    state.defaults.lock().clone()
-}
-
 /// The desktop app asks before a new agent connection joins. Ordinary tabs are open
 /// to every admitted connection, so this is where the owner consents. `"allow"` opts out.
 fn admission_policy(defaults: &Value) -> AdmissionPolicy {
@@ -597,6 +593,7 @@ fn profiles_test(_state: &AppState, profile: Profile) -> Result<Availability,Str
 fn arg<T: serde::de::DeserializeOwned>(args: &Value, key: &str) -> Result<T,String> {
     serde_json::from_value(args.get(key).cloned().unwrap_or(Value::Null)).map_err(|e|format!("{key}: {e}"))
 }
+fn out<T: serde::Serialize>(value: T) -> Result<Value,String> { serde_json::to_value(value).map_err(|e|e.to_string()) }
 fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Result<Value,String> {
     if let Some(result) = surface_commands::dispatch(state, name, &args) { return result; }
     if let Some(result) = extension_commands::dispatch(state, name, &args) { return result; }
@@ -604,7 +601,6 @@ fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Resul
         "automation_settings" => Ok(state.automation.settings()),
         "automation_save" => automation::save(state, arg(&args, "config")?),
         "automation_revoke" => { cancel_all_pending(state); state.automation.stop_all(); Ok(Value::Null) },
-        "automation_takeover" => serde_json::to_value(take(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
         "attach_output" => {
             let id: String = arg(&args, "session")?;
             {
@@ -621,37 +617,36 @@ fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Resul
         },
         "update_info" => Ok(json!({"version": env!("CARGO_PKG_VERSION"), "os": std::env::consts::OS, "arch": std::env::consts::ARCH})),
         "open_release" => updates::open(&arg::<String>(&args, "url")?).map(|_| Value::Null),
-        "get_defaults" => serde_json::to_value(get_defaults(state)).map_err(|e|e.to_string()),
         "pending_admissions" => Ok(json!(state.hub.pending_admissions().into_iter().map(|a| json!({"connId":a.conn_id,"agentId":a.agent_id})).collect::<Vec<_>>())),
         "admission_policy" => Ok(json!({"ask": state.hub.admission_policy() == AdmissionPolicy::Ask})),
         "set_admission" => set_admission(state, arg::<bool>(&args, "ask")?),
         "decide_admission" => decide_admission(state, arg::<u64>(&args, "connId")?, arg::<bool>(&args, "allow")?),
-        "set_defaults" => serde_json::to_value(set_defaults(state, arg::<Value>(&args, "defaults")?)?).map_err(|e|e.to_string()),
-        "agents" => serde_json::to_value(agents(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
-        "policy_rules" => serde_json::to_value(policy_rules(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
-        "diagnostics" => serde_json::to_value(diagnostics(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
-        "log" => serde_json::to_value(log(arg::<String>(&args, "msg")?)).map_err(|e|e.to_string()),
-        "input" => serde_json::to_value(input(state, arg::<String>(&args, "session")?, arg::<String>(&args, "data")?)?).map_err(|e|e.to_string()),
+        "set_defaults" => out(set_defaults(state, arg::<Value>(&args, "defaults")?)?),
+        "agents" => out(agents(state, arg::<String>(&args, "session")?)?),
+        "policy_rules" => out(policy_rules(state, arg::<String>(&args, "session")?)?),
+        "diagnostics" => out(diagnostics(state, arg::<String>(&args, "session")?)?),
+        "log" => out(log(arg::<String>(&args, "msg")?)),
+        "input" => out(input(state, arg::<String>(&args, "session")?, arg::<String>(&args, "data")?)?),
         "terminal_response" => { terminal_response(state, arg(&args, "session")?, arg(&args, "data")?)?; Ok(Value::Null) },
-        "resize" => serde_json::to_value(resize(state, arg::<String>(&args, "session")?, arg::<u16>(&args, "rows")?, arg::<u16>(&args, "cols")?)?).map_err(|e|e.to_string()),
-        "status" => serde_json::to_value(status(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
-        "take" => serde_json::to_value(take(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
-        "approve" => serde_json::to_value(approve(state, arg::<String>(&args, "session")?, arg::<String>(&args, "approvalId")?, arg::<String>(&args, "decision")?)?).map_err(|e|e.to_string()),
-        "cancel_exec" => serde_json::to_value(cancel_exec(state, arg::<String>(&args, "session")?, arg::<String>(&args, "execId")?)?).map_err(|e|e.to_string()),
-        "execute_now" => serde_json::to_value(execute_now(state, arg::<String>(&args, "session")?, arg::<String>(&args, "execId")?)?).map_err(|e|e.to_string()),
-        "set_mode" => serde_json::to_value(set_mode(state, arg::<String>(&args, "session")?, arg::<AgentMode>(&args, "mode")?)?).map_err(|e|e.to_string()),
-        "set_control_gate" => serde_json::to_value(set_control_gate(state, arg::<String>(&args, "session")?, arg::<bool>(&args, "ask")?)?).map_err(|e|e.to_string()),
-        "decide_control" => serde_json::to_value(decide_control(state, arg::<String>(&args, "session")?, arg::<String>(&args, "requestId")?, arg::<bool>(&args, "grant")?)?).map_err(|e|e.to_string()),
-        "accept_proposal" => serde_json::to_value(accept_proposal(state, arg::<String>(&args, "session")?, arg::<String>(&args, "proposalId")?)?).map_err(|e|e.to_string()),
-        "reject_proposal" => serde_json::to_value(reject_proposal(state, arg::<String>(&args, "session")?, arg::<String>(&args, "proposalId")?)?).map_err(|e|e.to_string()),
-        "hand_back" => serde_json::to_value(hand_back(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
-        "revoke_session_allow" => serde_json::to_value(revoke_session_allow(state, arg::<String>(&args, "session")?, arg::<String>(&args, "label")?)?).map_err(|e|e.to_string()),
-        "set_pacing" => serde_json::to_value(set_pacing(state, arg::<String>(&args, "session")?, arg::<Value>(&args, "patch")?)?).map_err(|e|e.to_string()),
-        "set_affordances" => serde_json::to_value(set_affordances(state, arg::<String>(&args, "session")?, arg::<Option<Vec<Affordance>>>(&args, "allow")?)?).map_err(|e|e.to_string()),
-        "policy_read" => serde_json::to_value(policy_read(state, arg::<String>(&args, "session")?)?).map_err(|e|e.to_string()),
-        "policy_write" => serde_json::to_value(policy_write(state, arg::<String>(&args, "session")?, arg::<String>(&args, "text")?)?).map_err(|e|e.to_string()),
-        "policy_test" => serde_json::to_value(policy_test(state, arg::<String>(&args, "session")?, arg::<String>(&args, "cmd")?)?).map_err(|e|e.to_string()),
-        "audit_tail" => serde_json::to_value(audit_tail(state, arg::<usize>(&args, "n")?)?).map_err(|e|e.to_string()),
+        "resize" => out(resize(state, arg::<String>(&args, "session")?, arg::<u16>(&args, "rows")?, arg::<u16>(&args, "cols")?)?),
+        "status" => out(status(state, arg::<String>(&args, "session")?)?),
+        "take" => out(take(state, arg::<String>(&args, "session")?)?),
+        "approve" => out(approve(state, arg::<String>(&args, "session")?, arg::<String>(&args, "approvalId")?, arg::<String>(&args, "decision")?)?),
+        "cancel_exec" => out(cancel_exec(state, arg::<String>(&args, "session")?, arg::<String>(&args, "execId")?)?),
+        "execute_now" => out(execute_now(state, arg::<String>(&args, "session")?, arg::<String>(&args, "execId")?)?),
+        "set_mode" => out(set_mode(state, arg::<String>(&args, "session")?, arg::<AgentMode>(&args, "mode")?)?),
+        "set_control_gate" => out(set_control_gate(state, arg::<String>(&args, "session")?, arg::<bool>(&args, "ask")?)?),
+        "decide_control" => out(decide_control(state, arg::<String>(&args, "session")?, arg::<String>(&args, "requestId")?, arg::<bool>(&args, "grant")?)?),
+        "accept_proposal" => out(accept_proposal(state, arg::<String>(&args, "session")?, arg::<String>(&args, "proposalId")?)?),
+        "reject_proposal" => out(reject_proposal(state, arg::<String>(&args, "session")?, arg::<String>(&args, "proposalId")?)?),
+        "hand_back" => out(hand_back(state, arg::<String>(&args, "session")?)?),
+        "revoke_session_allow" => out(revoke_session_allow(state, arg::<String>(&args, "session")?, arg::<String>(&args, "label")?)?),
+        "set_pacing" => out(set_pacing(state, arg::<String>(&args, "session")?, arg::<Value>(&args, "patch")?)?),
+        "set_affordances" => out(set_affordances(state, arg::<String>(&args, "session")?, arg::<Option<Vec<Affordance>>>(&args, "allow")?)?),
+        "policy_read" => out(policy_read(state, arg::<String>(&args, "session")?)?),
+        "policy_write" => out(policy_write(state, arg::<String>(&args, "session")?, arg::<String>(&args, "text")?)?),
+        "policy_test" => out(policy_test(state, arg::<String>(&args, "session")?, arg::<String>(&args, "cmd")?)?),
+        "audit_tail" => out(audit_tail(state, arg::<usize>(&args, "n")?)?),
         "cli_status" => Ok(agent_setup::cli_status()),
         "agent_integrations" => {
             let connected: Vec<String> = state.engines.lock().values().flat_map(|e| e.session().lock().agent_affordances().into_iter().map(|(_, id, _)| id)).collect();
@@ -661,11 +656,11 @@ fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Resul
         "agent_integration_remove" => { integrations::remove(&state.config_dir, state.integration_home.as_deref(), &arg::<String>(&args, "client")?)?; Ok(Value::Null) },
         "agent_integration_manual" => integrations::manual(&state.config_dir, &state.socket, &arg::<String>(&args, "client")?),
         "agent_configuration" => agent_setup::configuration(&state.config_dir, &state.socket),
-        "install_cli" => serde_json::to_value(agent_setup::install_cli(&state.config_dir)?).map_err(|e|e.to_string()),
-        "profiles_catalog" => serde_json::to_value(profiles_catalog(state)?).map_err(|e|e.to_string()),
-        "profiles_discover" => serde_json::to_value(profiles_discover(state)?).map_err(|e|e.to_string()),
-        "profiles_save" => serde_json::to_value(profiles_save(state, arg::<conn_core::profiles::Profiles>(&args, "config")?)?).map_err(|e|e.to_string()),
-        "profiles_test" => serde_json::to_value(profiles_test(state, arg::<conn_core::backend::Profile>(&args, "profile")?)?).map_err(|e|e.to_string()),
+        "install_cli" => out(agent_setup::install_cli(&state.config_dir)?),
+        "profiles_catalog" => out(profiles_catalog(state)?),
+        "profiles_discover" => out(profiles_discover(state)?),
+        "profiles_save" => out(profiles_save(state, arg::<conn_core::profiles::Profiles>(&args, "config")?)?),
+        "profiles_test" => out(profiles_test(state, arg::<conn_core::backend::Profile>(&args, "profile")?)?),
         _ => Err(format!("Unknown frontend command: {name}")),
     }
 }
