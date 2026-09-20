@@ -64,7 +64,7 @@ Reloading or disconnecting the browser ends its live sessions. Test with disposa
 | `media/demo` | Film production: recording fixtures and Remotion compositions |
 | `docs` | User guides, protocol, architecture, validation, releases |
 
-The repository is one Cargo workspace and one npm workspace, each with a single lockfile at the root. `cargo test` covers every crate except the desktop shell, which needs the platform webview toolchain. `npm ci` inside `frontends/tauri`, `site` or `media/demo` installs only that project.
+The repository is one Cargo workspace and one npm workspace, each with a single lockfile at the root. `cargo test` covers every crate except the desktop shell, which needs the platform webview toolchain. `npm ci` at the repository root installs every project. Inside `frontends/tauri`, `site` or `media/demo` it installs only that project and clears the others' `node_modules`, which is what CI and the site deployment want; when you work on more than one project, install from the root.
 
 Read the relevant [architecture](docs/architecture.md), [protocol](docs/protocol.md), [policy](docs/policy.md), or [backend](docs/backends.md) guide before changing its contract.
 
