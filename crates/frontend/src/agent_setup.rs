@@ -157,7 +157,7 @@ fn file_hash(path: &Path) -> Result<String, String> {
         }
         digest.update(&buffer[..n]);
     }
-    Ok(format!("{:x}", digest.finalize()))
+    Ok(digest.finalize().iter().map(|b| format!("{b:02x}")).collect())
 }
 
 #[cfg(any(target_os = "linux", test))]

@@ -27,7 +27,7 @@ impl Drop for SetupLock {
     }
 }
 fn hash(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
 }
 #[derive(Clone, Serialize, Deserialize)]
 struct Registration {
