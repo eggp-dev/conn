@@ -65,16 +65,9 @@ https://github.com/user-attachments/assets/4f06180c-6a2c-4c10-99e1-7941db86470b
 
 에이전트가 실패하는 테스트를 고칩니다. 내가 키보드를 잡고 실패하는 경계 조건을 하나 추가한 뒤, 터미널을 읽고 이어가라고 말합니다. 62초 영상입니다. [촬영 설명](docs/demo-test-repair.ko.md)
 
-## v0.8.0에서 달라진 점
-
-- 창을 최소화했거나 다른 앱 뒤에 있거나 다른 탭을 보고 있어도, 에이전트는 공유된 세션을 계속 읽고 작업합니다.
-- 새 에이전트 연결은 **허용**을 누를 때까지 대기합니다. **설정 → 에이전트**에서 이 확인을 끌 수 있습니다.
-- 제어권은 한 번에 한 탭에만 주어지고, 내가 입력하면 즉시 돌아옵니다.
-
-앱을 업데이트한 뒤 MCP 클라이언트도 함께 재시작하세요. [변경 이력](CHANGELOG.md) · [제품 계약](docs/PRD.ko.md) · [확장 안내](docs/extensions.ko.md)
-
 ## 더 알아보기
 
+- [변경 이력](CHANGELOG.md) · [제품 계약](docs/PRD.ko.md) · [확장 안내](docs/extensions.ko.md). 앱을 업데이트한 뒤에는 MCP 클라이언트도 재시작하세요.
 - [이전 영상: 에이전트가 엉뚱한 폴더에서 시작하면 내가 고칩니다](docs/demo.ko.md)
 - [협업 이야기: 같은 터미널에서의 작은 보정](docs/collaboration-story.ko.md)
 - [FAQ: 제어권·SSH·암호·기록](docs/faq.ko.md)
