@@ -4,7 +4,7 @@
 
 - Observation belongs to an explicitly shared shell session, independent of focus,
   minimization, other tabs, settings panels or renderer heartbeat.
-- Core parses PTY output into the current terminal grid. Snapshots use
+- Core parses PTY output into the current terminal grid. Snapshot and completion use
   that single projection. Raw input, scrollback and process memory are excluded.
 - Human input preempts control. Sharing revocation, disconnect, process exit, leases,
   policy and approvals retain their existing enforcement.
