@@ -132,17 +132,6 @@ fn socket_identity_cannot_escalate_and_private_candidates_do_not_disclose_screen
 }
 
 #[test]
-fn completion_acceptance_is_bound_to_grid_and_cannot_execute() {
-    let mut h=Harness::new();h.session.pty_output(b"$ echo");
-    let f=h.session.authoritative_surface().unwrap();
-    assert!(h.session.accept_completion(&f.surface_id,f.generation,f.revision,"hello\r").is_err());
-    h.session.accept_completion(&f.surface_id,f.generation,f.revision,"hello").unwrap();
-    assert_eq!(h.pty_str(),"hello");
-    h.session.pty_output(b"hello");
-    assert!(h.session.accept_completion(&f.surface_id,f.generation,f.revision,"stale").is_err());
-}
-
-#[test]
 fn explicit_switch_recovers_from_a_closed_or_private_binding() {
     for close_old in [true,false] {
         let old=Arc::new(parking_lot::Mutex::new(Harness::new().session));

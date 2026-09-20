@@ -594,19 +594,6 @@ impl Session {
             && !self.external_origin && self.authority.controller().is_human()
     }
 
-    /// Completion insertion is a human acceptance, not a second unchecked writer.
-    pub fn accept_completion(&mut self, surface_id: &str, generation: u64, revision: u64, text: &str) -> Result<(), SessionError> {
-        let frame = self.authoritative_surface()?;
-        if frame.surface_id != surface_id || frame.generation != generation || frame.revision != revision {
-            return Err(SessionError::SurfaceUnavailable);
-        }
-        if text.len() > 8192 || text.chars().any(char::is_control) {
-            return Err(SessionError::InvalidInput("completion must be bounded text without execution controls".into()));
-        }
-        self.human_input(text.as_bytes());
-        Ok(())
-    }
-
     /// Current terminal grid derived exclusively from PTY output. Window focus,
     /// renderer heartbeats and scrollback position never authorize participation.
     pub fn authoritative_surface(&self) -> Result<SurfaceFrame, SessionError> {
