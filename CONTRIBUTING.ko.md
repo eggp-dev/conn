@@ -64,7 +64,7 @@ npm run test:browser
 | `media/demo` | 영상 제작: 촬영 픽스처와 Remotion 컴포지션 |
 | `docs` | 사용법, 프로토콜, 아키텍처, 검증, 릴리스 |
 
-저장소는 Cargo 워크스페이스 하나와 npm 워크스페이스 하나로 구성되며, lockfile은 각각 루트에 하나씩 있습니다. `cargo test`는 플랫폼 웹뷰 도구가 필요한 데스크톱 셸을 제외한 모든 크레이트를 검사합니다. `frontends/tauri`, `site`, `media/demo` 안에서 `npm ci`를 실행하면 해당 프로젝트만 설치합니다.
+저장소는 Cargo 워크스페이스 하나와 npm 워크스페이스 하나로 구성되며, lockfile은 각각 루트에 하나씩 있습니다. `cargo test`는 플랫폼 웹뷰 도구가 필요한 데스크톱 셸을 제외한 모든 크레이트를 검사합니다. 저장소 루트에서 `npm ci`를 실행하면 모든 프로젝트를 설치합니다. `frontends/tauri`, `site`, `media/demo` 안에서 실행하면 해당 프로젝트만 설치하고 다른 프로젝트의 `node_modules`는 비웁니다. CI와 사이트 배포에는 이 동작이 맞지만, 여러 프로젝트를 함께 작업할 때는 루트에서 설치하세요.
 
 계약을 변경하기 전에 관련 [아키텍처](docs/architecture.md), [프로토콜](docs/protocol.md), [정책](docs/policy.md), [백엔드](docs/backends.md) 문서를 읽어 주세요.
 
