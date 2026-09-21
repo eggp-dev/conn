@@ -13,6 +13,7 @@ import { headHtml, jsonLd, socialImage } from "../seo.mjs";
 import { filmPublished, origin, repository } from "../site.config.mjs";
 import InstallCommand from "./InstallCommand.astro";
 import Story from "./Story.astro";
+import Analytics from "@vercel/analytics/astro";
 
 interface Props {
   lang: Lang;
@@ -104,10 +105,7 @@ const structured = [
     <meta name="twitter:image" content={social.url} />
     {structured.map((data) => <script type="application/ld+json" set:html={jsonLd(data)} />)}
     <Fragment set:html={headHtml()} />
-    <script>
-      import { inject } from '@vercel/analytics';
-      inject();
-    </script>
+    <Analytics />
   </head>
   <body>
     <header class="nav">
