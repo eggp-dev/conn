@@ -8,6 +8,10 @@
 //! talks to the outside world through two byte sinks (PTY in, human output out) and
 //! `EventSink`s registered per connection.
 
+mod participation;
+mod pending_work;
+use participation::Participation;
+
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::sync::{Arc, Mutex};
@@ -343,6 +347,8 @@ pub struct Status {
     pub size: Size,
     pub pending: Vec<ApprovalRequest>,
     pub scheduled: Option<ScheduledExec>,
+    #[serde(rename = "scheduledRemainingMs")]
+    pub scheduled_remaining_ms: Option<u64>,
     #[serde(rename = "sessionAllows")]
     pub session_allows: Vec<String>,
     #[serde(rename = "policyPath")]
@@ -355,7 +361,7 @@ pub struct Status {
     #[serde(rename = "affordanceMask")]
     pub affordance_mask: Option<Vec<Affordance>>,
     pub mode: AgentMode,
-    /// Effective mode; unobserved sessions have no input authority.
+    /// Effective mode is independent of window focus and observation.
     #[serde(rename = "effectiveMode")]
     pub effective_mode: AgentMode,
     pub attended: bool,
@@ -417,11 +423,9 @@ type ParticipationListener = Box<dyn Fn(Option<&HashSet<ConnId>>) + Send + Sync>
 pub struct Session {
     // Origin survives participation transitions. Only native owners change sharing.
     external_origin: bool,
-    shared: bool,
-    participants: Option<HashSet<ConnId>>,
+    participation: Participation,
     participation_listener: Option<ParticipationListener>,
     surface_generation: u64,
-    participation_generation: u64,
     output_seq: u64,
     surface_id: String,
     external_writer_active: bool,
@@ -514,11 +518,9 @@ impl Session {
     fn with_origin(cfg: SessionConfig, external_private: bool) -> Self {
         Self {
             external_origin: external_private,
-            shared: !external_private,
-            participants: if external_private { Some(HashSet::new()) } else { None },
+            participation: Participation::new(external_private),
             participation_listener: None,
             surface_generation: 1,
-            participation_generation: 1,
             output_seq: 0,
             surface_id: uuid::Uuid::new_v4().to_string(),
             external_writer_active: external_private,
@@ -570,17 +572,17 @@ impl Session {
         }
     }
 
-    pub fn is_private(&self) -> bool { !self.shared }
+    pub fn is_private(&self) -> bool { !self.participation.shared }
     pub fn external_origin(&self) -> bool { self.external_origin }
     pub fn surface_generation(&self) -> u64 { self.surface_generation }
-    pub fn participation_generation(&self) -> u64 { self.participation_generation }
+    pub fn participation_generation(&self) -> u64 { self.participation.generation }
     pub fn output_seq(&self) -> u64 { self.output_seq }
     /// Native owner installs a log at the moment sharing is enabled, never at external startup.
-    pub fn activate_shared_audit(&mut self, audit: Audit) { audit.set_enabled(self.shared); self.audit = audit; }
+    pub fn activate_shared_audit(&mut self, audit: Audit) { audit.set_enabled(self.participation.shared); self.audit = audit; }
 
     pub fn set_output_frame_sink(&mut self, sink: Option<OutputFrameSink>) { self.output_frame_sink = sink; }
     pub fn participant_allowed(&self, conn: ConnId) -> bool {
-        self.shared && self.participants.as_ref().is_none_or(|ids| ids.contains(&conn))
+        self.participation.allows(conn)
     }
 
     pub fn review_required(&self) -> bool {
@@ -589,7 +591,7 @@ impl Session {
     }
 
     pub fn completion_prompt_ready(&self) -> bool {
-        self.shared && self.process_alive && self.shell_integration.state == "active" && self.shell_command.is_none()
+        self.participation.shared && self.process_alive && self.shell_integration.state == "active" && self.shell_command.is_none()
             && self.shell_prompt_confirmed && !self.shell_submission_inflight
             && !self.external_origin && self.authority.controller().is_human()
     }
@@ -606,75 +608,6 @@ impl Session {
             cursor: self.screen.visible_cursor(), screen: self.screen.rows(),
             alternate_screen: self.screen.alternate_screen(),
         })
-    }
-
-    /// Only the local owner may add/remove agent participation. The PTY is untouched.
-    pub fn set_shared(&mut self, shared: bool) -> Result<(), SessionError> {
-        self.set_shared_with_agents(shared, Vec::new())
-    }
-
-    /// Host-only catalog invalidation. The listener must not lock any session.
-    pub(crate) fn set_participation_listener(&mut self, listener: ParticipationListener) {
-        self.participation_listener = Some(listener);
-    }
-
-    pub fn set_shared_with_agents(&mut self, shared: bool, agents: Vec<ConnId>) -> Result<(), SessionError> {
-        if agents.len() > 64 { return Err(SessionError::InvalidInput("at most 64 participants".into())); }
-        let selected: HashSet<_> = agents.into_iter().collect();
-        if !self.process_alive { return Err(SessionError::ProcessExited); }
-        if self.shared == shared && self.participants.as_ref() == Some(&selected) { return Ok(()); }
-        if shared && (self.input.has_pending() || self.human_input_pending) { return Err(SessionError::InputPending); }
-        let affected = if self.shared && self.participants.is_none() {
-            None
-        } else {
-            let mut ids = if self.shared { self.participants.clone().unwrap_or_default() } else { HashSet::new() };
-            if shared { ids.extend(selected.iter().copied()); }
-            Some(ids)
-        };
-        // Revocation cannot be held hostage by a partial agent write. Preserve the
-        // physical input for the owner instead of guessing a clear key in a TUI.
-        let unfinished_agent_input = self.input.has_pending();
-        self.revoke_external();
-        self.cancel_agent_work("sharing_changed");
-        self.human_input_pending |= unfinished_agent_input && self.input.has_pending();
-        if !shared { self.audit.record("human", "sharing_stopped", json!({ "generation": self.surface_generation })); }
-        self.audit.set_enabled(shared);
-        self.shared = shared;
-        self.participation_generation = self.participation_generation.saturating_add(1);
-        self.participants = Some(selected);
-        self.surface_generation = self.surface_generation.saturating_add(1);
-        self.input.reset();
-        self.shell_submissions.clear();
-        self.shell_command = None;
-        self.shell_prompt_confirmed = false;
-        self.shell_recording_ready = false;
-        self.shell_recording_armed = false;
-        self.shell_human_input = false;
-        self.shell_agent_input = false;
-        self.last_agent = None;
-        self.last_agent_cmd = None;
-        self.attention_request = None;
-        if shared { self.audit.record("human", "sharing_started", json!({ "generation": self.surface_generation })); }
-        self.broadcast(ServerEvent::SharingChanged { shared, generation: self.surface_generation });
-        self.notify_tools_changed();
-        // New participants have no session subscription yet; removed participants'
-        // session events are deliberately discarded by the transport's ACL guard.
-        if let Some(listener) = &self.participation_listener { listener(affected.as_ref()); }
-        Ok(())
-    }
-
-    fn cancel_agent_work(&mut self, reason: &str) {
-        self.cancel_scheduled_if(|_| true, reason);
-        self.reject_proposal_if(|_| true, reason);
-        let ids: Vec<_> = self.approvals.pending().into_iter().map(|a| a.id.clone()).collect();
-        for id in ids { self.finish_approval(&id, ApprovalState::Denied, reason); }
-        let ids: Vec<_> = self.control_requests.iter().filter(|r| r.state == ControlRequestState::Pending).map(|r| r.request_id.clone()).collect();
-        for id in ids { self.finish_control_request(&id, ControlRequestState::Denied); }
-        if let Some(lease) = self.authority.revoke() {
-            let ev = ServerEvent::ControlRevoked { lease: lease.label(), agent_id: lease.agent_id, reason: RevokeReason::Taken };
-            self.notify(lease.conn, ev.clone());
-            self.broadcast(ev);
-        }
     }
 
     pub(crate) fn shell_integration_starting(&mut self) {
@@ -696,7 +629,7 @@ impl Session {
 
     fn shell_submission(&mut self, actor: &str, command: &str) -> Option<String> {
         self.shell_agent_input = true;
-        self.shell_recording_armed |= self.shared && self.shell_recording_ready && self.shell_prompt_confirmed;
+        self.shell_recording_armed |= self.participation.shared && self.shell_recording_ready && self.shell_prompt_confirmed;
         if self.is_private() || self.shell_integration.state != "active" || self.shell_command.is_some() { return None; }
         let id = uuid::Uuid::new_v4().to_string();
         if self.shell_submissions.len() >= 16 { self.shell_submissions.remove(0); }
@@ -710,14 +643,14 @@ impl Session {
         // shell's foreground program without retaining its command or arguments.
         let matching_end = kind == "end" && self.shell_foreground_sequence.is_some()
             && self.shell_foreground_sequence == text.parse::<u64>().ok();
-        let record_start = self.shared && self.shell_recording_ready && self.shell_recording_armed;
+        let record_start = self.participation.shared && self.shell_recording_ready && self.shell_recording_armed;
         match kind {
             "ready" => {
                 self.shell_prompt_confirmed = !self.shell_submission_inflight;
                 self.shell_integration.state = "active".into();
                 self.shell_integration.shell = Some(text.into());
                 self.shell_integration.reason = None;
-                self.shell_recording_ready = self.shared && self.shell_prompt_confirmed;
+                self.shell_recording_ready = self.participation.shared && self.shell_prompt_confirmed;
             }
             "start" => {
                 self.shell_foreground_sequence = Some(sequence);
@@ -729,7 +662,7 @@ impl Session {
                 self.shell_foreground_sequence = None;
                 self.shell_submission_inflight = false;
                 self.shell_prompt_confirmed = true;
-                self.shell_recording_ready = self.shared && self.shell_integration.state == "active";
+                self.shell_recording_ready = self.participation.shared && self.shell_integration.state == "active";
                 self.shell_recording_armed = false;
             }
             "gap" | "unavailable" => {
@@ -901,14 +834,14 @@ impl Session {
     fn notify(&self, conn: ConnId, ev: ServerEvent) {
         if let Some(c) = self.conns.get(&conn) {
             if c.kind == ConnKind::Agent && !self.participant_allowed(conn) { return; }
-            c.sink.send_scoped(ev, self.participation_generation);
+            c.sink.send_scoped(ev, self.participation.generation);
         }
     }
 
     fn notify_tools_changed(&self) {
         for c in self.conns.values() {
             if c.kind == ConnKind::Agent {
-                c.sink.send_scoped(ServerEvent::ToolsChanged, self.participation_generation);
+                c.sink.send_scoped(ServerEvent::ToolsChanged, self.participation.generation);
             }
         }
     }
@@ -917,7 +850,7 @@ impl Session {
     fn broadcast(&self, ev: ServerEvent) {
         for c in self.conns.values() {
             if c.kind == ConnKind::Frontend {
-                c.sink.send_scoped(ev.clone(), self.participation_generation);
+                c.sink.send_scoped(ev.clone(), self.participation.generation);
             }
         }
     }
@@ -980,14 +913,7 @@ impl Session {
             self.broadcast(ServerEvent::ControlRevoked { lease: lease.label(), agent_id: lease.agent_id, reason: RevokeReason::Disconnected });
             self.notify_tools_changed();
         }
-        self.cancel_scheduled_if(|s| s.conn == conn, "agent_disconnected");
-        self.reject_proposal_if(|p| p.conn == conn, "agent_disconnected");
-        for id in self.control_requests.iter().filter(|r| r.conn == conn && r.state == ControlRequestState::Pending).map(|r| r.request_id.clone()).collect::<Vec<_>>() {
-            self.finish_control_request(&id, ControlRequestState::Denied);
-        }
-        for id in self.approvals.pending_for_conn(conn) {
-            self.finish_approval(&id, ApprovalState::Denied, "agent_disconnected");
-        }
+        self.cancel_pending_work(Some(conn), "agent_disconnected");
         if let Some(c) = self.conns.remove(&conn) {
             if c.kind == ConnKind::Agent {
                 self.audit.record(&name, "disconnect", json!({ "conn": conn }));
@@ -1050,7 +976,7 @@ impl Session {
     /// Revoke the agent lease without typing anything (`conn take`, frontend button).
     pub fn human_take(&mut self) -> Option<String> {
         self.revoke_external();
-        self.cancel_scheduled_if(|_| true, "taken");
+        self.cancel_pending_work(None, "taken");
         let lease = self.authority.revoke()?;
         let ev = ServerEvent::ControlRevoked { lease: lease.label(), agent_id: lease.agent_id.clone(), reason: RevokeReason::Taken };
         self.notify(lease.conn, ev.clone());
@@ -1082,14 +1008,11 @@ impl Session {
         self.finish_shell_command(None);
         self.revoke_external();
         self.process_alive = false;
-        self.cancel_scheduled_if(|_| true, "process_exited");
+        self.cancel_pending_work(None, "process_exited");
         if let Some(lease) = self.authority.revoke() {
             let ev = ServerEvent::ControlRevoked { lease: lease.label(), agent_id: lease.agent_id, reason: RevokeReason::ProcessExited };
             self.notify(lease.conn, ev.clone());
             self.broadcast(ev);
-        }
-        for a in self.approvals.pending().iter().map(|a| a.id.clone()).collect::<Vec<_>>() {
-            self.finish_approval(&a, ApprovalState::Denied, "process_exited");
         }
         self.notify_tools_changed();
         self.broadcast(ServerEvent::ProcessExited { exit_code });
@@ -1175,14 +1098,7 @@ impl Session {
     /// tab: nothing stays held or queued here by an agent that has left.
     pub fn agent_left_tab(&mut self, conn: ConnId) {
         if self.is_private() { return; }
-        self.cancel_scheduled_if(|s| s.conn == conn, "agent_left_tab");
-        self.reject_proposal_if(|p| p.conn == conn, "agent_left_tab");
-        for id in self.control_requests.iter().filter(|r| r.conn == conn && r.state == ControlRequestState::Pending).map(|r| r.request_id.clone()).collect::<Vec<_>>() {
-            self.finish_control_request(&id, ControlRequestState::Denied);
-        }
-        for id in self.approvals.pending_for_conn(conn) {
-            self.finish_approval(&id, ApprovalState::Denied, "agent_left_tab");
-        }
+        self.cancel_pending_work(Some(conn), "agent_left_tab");
         if let Some(lease) = self.authority.revoke_if_held_by(conn) {
             self.audit.record(&lease.agent_id, "lease_released", json!({ "lease": lease.label(), "reason": "left_tab" }));
             self.broadcast(ServerEvent::ControlRevoked { lease: lease.label(), agent_id: lease.agent_id, reason: RevokeReason::Released });
@@ -1416,6 +1332,8 @@ impl Session {
     }
 
     /// Give control back to the agent that last held it (human action).
+    pub(crate) fn controller_conn(&self) -> Option<ConnId> { self.authority.controller().lease().map(|lease| lease.conn) }
+
     pub fn hand_back(&mut self) -> Result<LeaseInfo, SessionError> {
         let (conn, agent_id) = self.last_agent.clone().ok_or_else(|| SessionError::NotFound("no previous agent".into()))?;
         if !self.conns.contains_key(&conn) {
@@ -1440,16 +1358,13 @@ impl Session {
         self.mode = mode;
         match mode {
             AgentMode::Observe => {
-                self.reject_proposal_if(|_| true, "mode_changed");
-                self.cancel_scheduled_if(|_| true, "mode_changed");
+                self.cancel_pending_work(None, "mode_changed");
                 if let Some(lease) = self.authority.revoke() {
                     let ev = ServerEvent::ControlRevoked { lease: lease.label(), agent_id: lease.agent_id, reason: RevokeReason::Taken };
                     self.notify(lease.conn, ev.clone());
                     self.broadcast(ev);
                 }
-                for id in self.control_requests.iter().filter(|r| r.state == ControlRequestState::Pending).map(|r| r.request_id.clone()).collect::<Vec<_>>() {
-                    self.finish_control_request(&id, ControlRequestState::Denied);
-                }
+
             }
             AgentMode::Copilot => {
                 self.cancel_scheduled_if(|_| true, "mode_changed");
@@ -1467,7 +1382,7 @@ impl Session {
     fn notify_mode_changed(&self) {
         let ev = ServerEvent::ModeChanged { mode: self.mode, effective_mode: self.effective_mode() };
         self.broadcast(ev.clone());
-        for c in self.conns.values().filter(|c| c.kind == ConnKind::Agent) { c.sink.send_scoped(ev.clone(), self.participation_generation); }
+        for c in self.conns.values().filter(|c| c.kind == ConnKind::Agent) { c.sink.send_scoped(ev.clone(), self.participation.generation); }
     }
 
     pub fn mode(&self) -> AgentMode {
@@ -1608,7 +1523,7 @@ impl Session {
     pub fn agent_release_control(&mut self, conn: ConnId) -> Result<(), SessionError> {
         self.require_participant(conn)?;
         let lease = self.authority.revoke_if_held_by(conn).ok_or(AuthorityError::NotController)?;
-        self.cancel_scheduled_if(|s| s.conn == conn, "released");
+        self.cancel_pending_work(Some(conn), "released");
         self.audit.record(&lease.agent_id, "lease_released", json!({ "lease": lease.label() }));
         self.broadcast(ServerEvent::ControlRevoked { lease: lease.label(), agent_id: lease.agent_id, reason: RevokeReason::Released });
         self.notify_tools_changed();
@@ -2016,7 +1931,7 @@ impl Session {
         for id in self.control_requests.iter().filter(|r| r.state == ControlRequestState::Pending && now.duration_since(r.created) >= ttl).map(|r| r.request_id.clone()).collect::<Vec<_>>() {
             self.finish_control_request(&id, ControlRequestState::Expired);
         }
-        let surface_ready = self.shared;
+        let surface_ready = self.participation.shared;
         if let Some(s) = &mut self.scheduled {
             if surface_ready && s.state == ExecState::Scheduled && s.due <= now {
                 s.state = ExecState::Executed;
@@ -2047,11 +1962,11 @@ impl Session {
         connected_agents.dedup();
         Status {
             shell_integration: self.shell_integration.clone(),
-            shared: self.shared,
+            shared: self.participation.shared,
             external_origin: self.external_origin,
             surface_generation: self.surface_generation,
             output_seq: self.output_seq,
-            surface_available: self.shared,
+            surface_available: self.participation.shared,
             completion_prompt_ready: self.completion_prompt_ready(),
             input_pending: self.human_input_pending || self.input.has_pending(),
             external_input_available: self.external_writer_active(),
@@ -2064,6 +1979,7 @@ impl Session {
             size: self.screen.size(),
             pending: self.approvals.pending().into_iter().cloned().collect(),
             scheduled: self.scheduled_exec().cloned(),
+            scheduled_remaining_ms: self.scheduled_exec().map(|s| s.due.saturating_duration_since(Instant::now()).as_millis() as u64),
             session_allows: self.policy.session_allows(),
             policy_path: self.policy.path().map(|p| p.display().to_string()),
             connected_agents,

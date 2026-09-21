@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolveReview } from "../lib/collaboration/review.svelte";
   import { DOCK_MOTION_MS, dockOffsetFrames, reducedMotion } from "../lib/motion";
   import { appShortcut, shortcutKey } from "../lib/shortcuts";
   import { onMount } from "svelte";
@@ -85,7 +86,7 @@
       if (!!tb.shared && tb.approval) {
         const map: Record<string, string> = { a: "grant", y: "grant", d: "deny", n: "deny", "\x1b": "deny", A: "allow_session" };
         const d = data === "A" && tb.reviewRequired ? undefined : map[data];
-        if (d) { cmd("approve", { session, approvalId: tb.approval.id, decision: d }); return; }
+        if (d) { void resolveReview(session, tb.approval.id, d); return; }
       }
       if (!!tb.shared && tb.grace) {
         if (data === "\r") { cmd("execute_now", { session, execId: tb.grace.execId }); return; }

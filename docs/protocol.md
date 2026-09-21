@@ -168,3 +168,18 @@ view and take a fresh snapshot.
 not another public socket role. Only the human owner may transition its private session
 to shared participation. [Native extensions](extensions.md) are declarative themes; they
 cannot call owner operations through agent IPC either.
+
+## Owner bridge additions (unreleased; unavailable on the agent socket)
+
+- `admission_snapshot`: `{revision,pending}`. Admission events carry the same app-wide revision;
+  request identity is the live `connId`. UI reconciliation discards stale per-connection events.
+- `sharing_state({session})`: `{revision,participants}` read together under the Session lock.
+- `set_sharing({session,shared,connectionIds,expectedRevision?})`: a stale participation revision
+  returns `sharing_changed` before external-writer revocation. New UI calls always send it; existing
+  owner calls and the `sharing_participants` array result remain compatible.
+- Full owner status includes `scheduledRemainingMs` for recovering a missed Grace event. Agent
+  status remains limited; these owner commands do not become MCP tools.
+
+한국어: 위 API는 앱 소유자 경로에만 추가되며 에이전트 소켓에서는 사용할 수 없습니다.
+연결 승인과 참여 선택은 각각의 revision으로 경합을 처리합니다. 오래된 공유 선택은 외부 입력을
+회수하기 전에 거절하며, UI는 다시 불러온 선택을 사용자가 확인한 뒤 적용하도록 합니다.

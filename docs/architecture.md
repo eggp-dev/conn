@@ -29,6 +29,17 @@ flowchart LR
 - Public IPC is an agent endpoint. MCP does not decide permission; core checks it
   for every request. The native owner bridge is not available through IPC.
 
+## Collaboration services (unreleased)
+
+`ConnectionRegistry` owns app admission and live IDs; `Hub` coordinates authority across sessions.
+`Session` owns participation and pending-work cleanup under its existing lock. Protocol parsing and
+agent operations are separate modules. The owner sharing service fences external delivery and commits
+only after input, selection revision and history preflight succeed.
+
+The UI has separate app-admission and session-event contracts. Shared reducers reconcile snapshots
+and events; decision actions supply explicit session/request IDs to reusable cards, keyboard and
+palette commands. See [ownership, lock order and validation](collaboration-refactor-results.md).
+
 ## Frame identity and freshness
 
 A grid revision identifies `surfaceId`, `generation`, `revision`, `outputSeq`,

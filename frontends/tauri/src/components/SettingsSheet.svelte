@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AdmissionRequest from "./AdmissionRequest.svelte";
   import ExtensionsPane from "./ExtensionsPane.svelte";
   import { selectTheme } from "../lib/extensions.svelte";
   import AutomationPane from "./AutomationPane.svelte";
@@ -30,13 +31,13 @@
     siblings.forEach(el => el.setAttribute("inert", ""));
     return () => siblings.forEach((el, i) => { if (!previous[i]) el.removeAttribute("inert"); });
   });
-  const categories = $derived(NAV.filter(id => !!cur().shared || !["agents", "policy", "pacing"].includes(id)));
+  const categories = $derived(NAV.filter(id => !!cur().shared || !["policy", "pacing"].includes(id)));
   $effect(() => { if (!categories.includes(st.settingsTab as typeof NAV[number])) st.settingsTab = categories[0]; });
   $effect(() => { queueMicrotask(() => navigation?.querySelector<HTMLButtonElement>('[aria-current="page"]')?.focus()); });
   // ---- scope: this tab or all tabs; plus stored defaults for new tabs ----
   let scope = $state<"tab" | "all">("tab");
   const sharedTabs = $derived(st.order.filter(id => tab(id)?.statusReady && !!tab(id)?.shared));
-  const privateSection = $derived(!cur().shared && ["agents", "policy", "pacing"].includes(st.settingsTab));
+  const privateSection = $derived(!cur().shared && ["policy", "pacing"].includes(st.settingsTab));
   async function apply(name: string, args: Record<string, unknown>) {
     if (!cur().shared) return;
     if (name === "set_mode") {
@@ -190,6 +191,7 @@
     <span class="title">{t("s.title")}</span>
     <button class="btn ghost" onclick={close}>{t("close")} <kbd>esc</kbd></button>
   </header>
+  {#if st.admissions.length}<div class="application-requests"><AdmissionRequest /></div>{/if}
   {#if pendingAction}<div class="discard" role="alert"><span>{t("s.discardQuestion")}</span><button class="btn ghost" onclick={() => pendingAction = null}>{t("cancel")}</button><button class="btn" onclick={async () => { const action = pendingAction; if (policyDirty) await loadPolicy(); pendingAction = null; profileDirty = false; policyDirty = false; action?.(); }}>{t("s.discard")}</button></div>{/if}
   <div class="body">
     <nav bind:this={navigation} class="category-list" onkeydown={(e) => { if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return; const buttons = Array.from(e.currentTarget.querySelectorAll("button")); const index = buttons.indexOf(document.activeElement as HTMLButtonElement); e.preventDefault(); const next = e.key === "Home" ? 0 : e.key === "End" ? buttons.length - 1 : (index + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length; buttons[next]?.focus(); }} aria-label={t("s.title")}>
@@ -209,6 +211,7 @@
       {:else if st.settingsTab === "agents"}
         <details class="advanced"><summary>{t("s.sharing")}</summary><p class="muted">{t("privacy.sharing")}</p></details>
         <AgentConnections />
+        <label class="row"><input type="checkbox" checked={admissionAsk} onchange={(e) => setAdmission((e.target as HTMLInputElement).checked)} /> <span>{t("admission.setting")} <em class="muted">{t("admission.setting.desc")}</em></span></label>
         <details class="agent-setup"><summary>{t("agents.other")}</summary>
           <h3>{t("s.connect.title")}</h3>
           <p class="muted">{t("s.connect.hint")}</p>
@@ -229,6 +232,7 @@
             </details>
           {/if}
         </details>
+        {#if cur().shared}
         <h3>{t("mode")}</h3>
         <div class="scope-row"><label>{t("s.applyTo")} <select bind:value={scope}><option value="tab">{t("s.currentTab")}</option><option value="all">{t("s.scope.all")}</option></select></label><details><summary>{t("s.defaults")}</summary><button class="btn ghost" onclick={saveDefaults}>{t("s.defaults.use")}</button></details></div>
         <div class="seg">
@@ -237,7 +241,6 @@
           {/each}
         </div>
         <label class="row"><input type="checkbox" checked={cur().gate} onchange={(e) => apply("set_control_gate", { ask: (e.target as HTMLInputElement).checked })} /> <span>{t("gate")} <em class="muted">{t("gate.desc")}</em></span></label>
-        <label class="row"><input type="checkbox" checked={admissionAsk} onchange={(e) => setAdmission((e.target as HTMLInputElement).checked)} /> <span>{t("admission.setting")} <em class="muted">{t("admission.setting.desc")}</em></span></label>
 
 <details class="advanced"><summary>{t("s.advancedPermissions")}</summary>
         <div class="presets">
@@ -270,6 +273,7 @@
         {/if}
 
         </details>
+        {/if}
       {:else if st.settingsTab === "policy"}
         <h3>{t("s.policy.test")} <em class="muted">{t("s.policy.test.hint")}</em></h3>
         <div class="test">
@@ -395,6 +399,7 @@
 </aside>
 
 <style>
+  .application-requests { flex-shrink:0; max-height:35%; overflow:auto; }
   .apply-note { font-size: 11px; margin: -8px 0 14px; }
   .discard { padding: 10px 16px; display: flex; gap: 8px; align-items: center; background: var(--surface2); font-size: 12px; flex-wrap: wrap; }
   .discard span { flex: 1; }

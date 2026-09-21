@@ -52,16 +52,11 @@ is not claimed by artifact signature checks.
 
 ## Native validation and remaining coverage
 
-The actual Apple Silicon development app passed the join prompt, reading and writing
-while minimized, unfocused or on another tab, hidden/masked synthetic authentication,
-AppleScript launch, same-SSH sharing, late external writes being refused and the
-one-lease-per-connection rule. A Linux run against a real OpenSSH server found no
-credential in snapshots, replies or saved data after sharing. See the
-[macOS acceptance report]({repository}/blob/{tag}/docs/shared-surface-macos-validation-results.md).
-Native WebKit completion fixtures passed; a real OpenAI request remains unverified.
-The real-user provider path stays opt-in. Development-app checks are separate from
-this release's CI signing/notarization and updater artifact-signature verification.
-Windows interactive GUI and full installed-app upgrades remain unverified.
+Validation coverage is recorded per version in the changelog and linked reports.
+CI builds, scripting-dictionary checks, signing and notarization are separate from
+interactive testing of an installed app. Previous development-app results do not
+establish that every native interaction works in this build. Windows interactive
+GUI and full installed-app upgrades remain unverified.
 
 AppleScript is disabled by default. Enable it for selected local profiles in Settings
 and consult the [automation guide]({repository}/blob/{tag}/docs/external-automation.md).
@@ -109,7 +104,7 @@ not that the command completed successfully. Start with a disposable project.
 Read the [security model]({repository}/blob/{tag}/docs/security.md) and
 [report security issues privately]({repository}/security/advisories/new).
 
-한국어: AppleScript는 기본적으로 꺼져 있습니다. 실제 Mac 개발 앱의 인증·공유·제어 전환을 검증했으며 배포 파일 서명·공증과는 구분합니다. Windows GUI와 모든 플랫폼의 실제 설치 상태 업그레이드, 실제 OpenAI 호출은 추가 검증 대상입니다.
+한국어: AppleScript는 기본적으로 꺼져 있습니다. 버전별 검증 범위는 변경 기록과 연결된 보고서를 확인하세요. CI 빌드·스크립팅 사전·서명·공증 검증은 설치된 앱의 대화형 검증과 별개이며, 이전 개발 앱의 결과가 이번 배포판의 모든 동작을 보장하지 않습니다.
 이 릴리스는 프리뷰입니다. 명령은 사용자 계정 권한으로 실행되며, 승인 기능은
 운영체제 샌드박스가 아닙니다. 실행 기록은 입력 전달을 뜻하며 명령의 성공을 보장하지
 않습니다. macOS 앱·내장 CLI·별도 CLI는 Developer ID로 서명하며 hardened runtime과
