@@ -109,9 +109,10 @@ npm run test:collaboration
 npm run test:collaboration:harness
 ```
 
-브라우저 검사는 `agent-browser` 0.24.1과 해당 브라우저 설치가 필요하다. 새 CI 작업은 고정한
-도구를 저장소 밖에 설치한다. 두 브라우저 흐름을 Required checks에 연결했다. 아직 push하지
-않은 작업 트리이므로 원격 CI 실행 결과는 없다.
+브라우저 검사는 잠금 파일에 고정한 Playwright를 사용한다. `frontends/tauri`에서
+`npx playwright install chromium`을 먼저 실행한다. CI도 같은 브라우저를 설치하며 두 흐름을
+Required checks에 포함한다. 초기 CLI 방식은 CI에서 CDP 연결이 끊겨, 배포 준비 중 지속적인
+드라이버와 명시적인 전환 완료 대기로 바꿨다. 검증 항목은 유지했다.
 
 ## 남은 네이티브 인수 검증
 

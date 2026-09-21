@@ -164,11 +164,9 @@ jobs:
         if: inputs.ref == ''
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Install pinned browser test tooling outside the workspace
-        run: |
-          npm install --prefix "$RUNNER_TEMP/conn-browser-tools" --no-save agent-browser@0.24.1
-          echo "$RUNNER_TEMP/conn-browser-tools/node_modules/.bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/conn-browser-tools/node_modules/.bin/agent-browser" install --with-deps
+      - name: Install the lockfile-pinned test browser
+        run: npx playwright install chromium --with-deps
+        working-directory: frontends/tauri
       - run: cargo build --locked -p conn-browser-harness
       - run: npm run test:collaboration
         working-directory: frontends/tauri

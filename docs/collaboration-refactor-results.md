@@ -117,9 +117,10 @@ npm run test:collaboration
 npm run test:collaboration:harness
 ```
 
-Browser checks require `agent-browser` 0.24.1 and its browser installation. Their CI job installs this
-pinned tooling outside the repository. Both browser flows are included in Required checks; remote CI
-has not been run from this unpushed working tree.
+Browser checks use the lockfile-pinned Playwright driver. Run `npx playwright install chromium`
+from `frontends/tauri` first. CI installs the matching browser and includes both flows in Required
+checks. The initial CLI-based runner lost CDP connections in CI; the release preparation switched
+to a persistent driver and explicit transition-completion waits without dropping assertions.
 
 ## Remaining native acceptance
 
