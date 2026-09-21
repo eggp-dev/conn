@@ -1,4 +1,10 @@
 <script lang="ts">
+  import { Reconciler } from "./lib/collaboration/reconcile";
+  import { applySessionSnapshot, applySessionEvent, type SessionSnapshot } from "./lib/collaboration/session";
+  import { Admissions } from "./lib/collaboration/admissions";
+  import { admissionSnapshot } from "./lib/collaboration/api";
+  import { resolveReview } from "./lib/collaboration/review.svelte";
+  import { resolveControl } from "./lib/collaboration/control.svelte";
   import { appShortcut, shortcutKey, shortcutLabel } from "./lib/shortcuts";
   import { refreshExtensions, selectTheme } from "./lib/extensions.svelte";
   import { refreshProfiles } from "./lib/profiles.svelte";
@@ -22,7 +28,7 @@
   import HandoffWash from "./components/HandoffWash.svelte";
   import { recordTimeline, savedTimelines } from "./lib/timeline";
   import { invoke, listen } from "./lib/transport";
-  import { cmd, changeMode, onEvent, onTabOpened, onAdmission, log, TOOL_PRESETS, type Pacing } from "./lib/bridge";
+  import { cmd, changeMode, onEvent, onTabOpened, onAdmission, log, TOOL_PRESETS } from "./lib/bridge";
   import { st, cur, tab, tabIndex, newTab, toast, announce, type TabState } from "./lib/store.svelte";
   import { THEMES, agentColor } from "./lib/themes";
   import { t as tr, tabName, fmtMs, setLang, LANGS, i18n } from "./lib/i18n.svelte";
@@ -38,12 +44,6 @@
     t.wash = { ...(terms[t.id]?.cursorCenter() ?? { x: 4, y: 8 }), color, out, key: ++washSeq };
     setTimeout(() => { if (t.wash?.key === washSeq) t.wash = null; }, 1300);
   }
-  function setController(t: TabState, kind: "human" | "agent", agentId?: string) {
-    const was = t.controller.type;
-    t.controller = { type: kind, agentId };
-    if (kind === "agent") { t.handback = false; if (was !== "agent" && t.id === st.active) wash(t, agentColor(agentId), false); }
-    else { t.grace = null; t.proposal = null; if (was === "agent" && t.id === st.active) wash(t, agentColor(t.lastAgent?.agentId), true); }
-  }
   function showHandback(t: TabState) {
     if (!t.lastAgent) return;
     t.handback = true;
@@ -53,40 +53,11 @@
   const typingTimers: Record<string, number> = {};
 
   // ---- tabs ----
-  async function syncStatus(id: string) {
-    const t = tab(id); if (!t) return;
-    const s = await invoke<any>("status", { session: id });
-    t.shared = s.shared === true;
-    t.externalOrigin = s.externalOrigin === true;
-    t.surfaceAvailable = s.surfaceAvailable === true;
-    t.inputPending = s.inputPending === true;
-    t.externalStarting = s.externalStarting === true;
-    t.externalInputAvailable = s.externalInputAvailable === true;
-    if (!t.shared) {
-      t.profileId = s.profileId ?? null; t.profileName = s.profileName ?? null;
-      t.title = s.profileName || (t.externalOrigin ? tr("private.title") : t.title);
-      t.processAlive = !!s.processAlive; t.attended = !!s.attended;
-      t.timeline.recording = false; t.controller = { type: "human" };
-      t.agents = []; t.lastAgent = null; t.openedBy = null;
-      t.approval = null; t.ctlReq = null; t.proposal = null; t.grace = null; t.attention = null;
-      t.handback = false; t.typing = false;
-      t.statusReady = true;
-      return;
-    }
-    t.timeline.recording = true;
-    if (!t.profileId && s.profileName) t.title = s.profileName;
-    t.profileId = s.profileId ?? null; t.profileName = s.profileName ?? null; t.reviewRequired = !!s.reviewRequired;
-    t.mode = s.mode; t.effectiveMode = s.effectiveMode ?? s.mode; t.gate = !!s.controlGate; t.allows = s.sessionAllows ?? []; t.mask = s.affordanceMask ?? null; t.agents = s.connectedAgents ?? [];
-    t.pacing = s.pacing; t.attended = !!s.attended; t.processAlive = !!s.processAlive;
-    t.attention = s.attentionRequest ? { agentId: s.attentionRequest.agentId, reason: s.attentionRequest.reason } : null;
-    t.openedBy = s.openedBy ?? null;
-    if (s.lastAgent) t.lastAgent = { agentId: s.lastAgent.agentId, connected: s.lastAgent.connected, lastCmd: s.lastAgent.lastCmd ?? undefined };
-    t.controller = s.controller.type === "agent" ? { type: "agent", agentId: s.controller.agentId } : { type: "human" };
-    t.approval = s.pending?.length ? { id: s.pending[0].id, agentId: s.pending[0].agentId, cmd: s.pending[0].cmd, label: s.pending[0].label, at: Date.now(), intent: s.pending[0].intent ?? undefined, analysis: s.pending[0].analysis ?? undefined } : null;
-    t.proposal = s.proposal ? { id: s.proposal.proposalId, agentId: s.proposal.agentId, text: s.proposal.text, ready: s.proposal.state === "ready", intent: s.proposal.intent ?? undefined } : null;
-    t.ctlReq = s.controlRequests?.length ? { id: s.controlRequests[0].requestId, agentId: s.controlRequests[0].agentId, reason: s.controlRequests[0].reason, originalRequest: s.controlRequests[0].originalRequest } : null;
-    t.statusReady = true;
-  }
+  const sessions = new Reconciler(
+    (id: string) => invoke<SessionSnapshot>("status", { session: id }),
+    (id, snapshot) => { const current = tab(id); if (current) applySessionSnapshot(current, snapshot, tr("private.title")); },
+  );
+  const syncStatus = (id: string) => sessions.sync(id);
   function addTab(id: string) {
     st.tabSeq += 1;
     st.tabs[id] = newTab(id, st.tabSeq);
@@ -130,17 +101,19 @@
   // the things to answer right now and sort first.
   const actions = $derived.by((): Action[] => {
     const c = cur();
+    const approval = c.approval;
+    const control = c.ctlReq;
     const holder = c.controller.type === "agent" ? c.controller.agentId ?? "agent" : c.lastAgent?.agentId ?? "agent";
     const lang = i18n.lang; void lang;
     const all: Action[] = [
       { id: "sharing", group: "view", label: tr(c.shared ? "sharing.manage" : "sharing.start"), aliases: ["share", "private", "공유", "비공유"], run: () => { st.sharingOpen = true; } },
       { id: "take", group: "conn", now: c.controller.type === "agent", label: tr("a.take"), hint: tr("a.take.hint"), aliases: ["take", "revoke", "회수", "뺏기", "제어권"], run: () => cmd("take"), when: () => cur().controller.type === "agent" },
       { id: "handback", group: "conn", now: c.handback, label: tr("a.handback", { agent: holder }), keys: shortcutLabel("⌘⏎"), aliases: ["hand back", "give back", "되돌려주기", "다시"], run: () => chip?.handBack(), when: () => !!cur().lastAgent && cur().controller.type === "human" },
-      { id: "approve", group: "approval", now: true, label: tr("a.approve", { label: c.approval?.label ?? "" }), hint: c.approval?.cmd, keys: "a", aliases: ["approve", "grant", "승인"], run: () => cur().approval && cmd("approve", { approvalId: cur().approval!.id, decision: "grant" }), when: () => !!cur().approval },
-      { id: "deny", group: "approval", now: true, danger: true, label: tr("a.deny", { label: c.approval?.label ?? "" }), keys: "d", aliases: ["deny", "거부"], run: () => cur().approval && cmd("approve", { approvalId: cur().approval!.id, decision: "deny" }), when: () => !!cur().approval },
-      { id: "allow-session", group: "approval", now: true, label: tr("a.allow_session", { label: c.approval?.label ?? "" }), keys: "A", aliases: ["allow", "session", "세션 허용"], run: () => cur().approval && cmd("approve", { approvalId: cur().approval!.id, decision: "allow_session" }), when: () => !!cur().approval && !cur().reviewRequired },
-      { id: "ctl-grant", group: "conn", now: true, label: tr("a.ctl.grant", { agent: c.ctlReq?.agentId ?? "" }), hint: c.ctlReq?.reason, aliases: ["allow", "grant", "허용"], run: () => cur().ctlReq && cmd("decide_control", { requestId: cur().ctlReq!.id, grant: true }), when: () => !!cur().ctlReq },
-      { id: "ctl-deny", group: "conn", now: true, danger: true, label: tr("a.ctl.deny", { agent: c.ctlReq?.agentId ?? "" }), aliases: ["deny", "거부"], run: () => cur().ctlReq && cmd("decide_control", { requestId: cur().ctlReq!.id, grant: false }), when: () => !!cur().ctlReq },
+      { id: "approve", group: "approval", now: true, label: tr("a.approve", { label: c.approval?.label ?? "" }), hint: c.approval?.cmd, keys: "a", aliases: ["approve", "grant", "승인"], run: () => approval && resolveReview(c.id, approval.id, "grant"), when: () => !!cur().approval },
+      { id: "deny", group: "approval", now: true, danger: true, label: tr("a.deny", { label: c.approval?.label ?? "" }), keys: "d", aliases: ["deny", "거부"], run: () => approval && resolveReview(c.id, approval.id, "deny"), when: () => !!cur().approval },
+      { id: "allow-session", group: "approval", now: true, label: tr("a.allow_session", { label: c.approval?.label ?? "" }), keys: "A", aliases: ["allow", "session", "세션 허용"], run: () => approval && resolveReview(c.id, approval.id, "allow_session"), when: () => !!cur().approval && !cur().reviewRequired },
+      { id: "ctl-grant", group: "conn", now: true, label: tr("a.ctl.grant", { agent: c.ctlReq?.agentId ?? "" }), hint: c.ctlReq?.reason, aliases: ["allow", "grant", "허용"], run: () => control && resolveControl({ session: c.id, requestId: control.id }, "grant"), when: () => !!cur().ctlReq },
+      { id: "ctl-deny", group: "conn", now: true, danger: true, label: tr("a.ctl.deny", { agent: c.ctlReq?.agentId ?? "" }), aliases: ["deny", "거부"], run: () => control && resolveControl({ session: c.id, requestId: control.id }, "deny"), when: () => !!cur().ctlReq },
       ...st.order.map((id, i) => {
         const tb = tab(id)!;
         const flags = [tb.approval ? tr("badge.approval") : "", tb.proposal?.ready ? tr("badge.proposal", { agent: tb.proposal.agentId }) : "", tb.attention ? tr("badge.knock", { agent: tb.attention.agentId }) : "", tb.controller.type === "agent" ? tr("conn.agent", { agent: tb.controller.agentId ?? "" }) : ""].filter(Boolean).join(" · ");
@@ -164,8 +137,8 @@
       ...(["profiles", "agents", "automation", "policy", "pacing", "appearance", "extensions", "diagnostics"] as const).map((tb) => ({ id: `settings-${tb}`, group: "settings", label: tr("a.settings", { tab: tr(`s.nav.${tb}`) }), keys: shortcutLabel("⌘,"), aliases: ["settings", "설정", tb], run: () => openSettings(tb) })),
       { id: "connect-agent", group: "setup", label: tr("s.connect.copy"), aliases: ["connect", "mcp", "codex", "cli", "agent", "에이전트", "연결", "설정 복사"], run: () => openSettings("agents") },
     ];
-    return !c.shared ? all.filter(action => !["conn", "approval", "mode", "agents", "pacing", "setup"].includes(action.group)
-      && !["center", "timeline", "settings-agents", "settings-policy", "settings-pacing"].includes(action.id)) : all;
+    return !c.shared ? all.filter(action => !["conn", "approval", "mode", "agents", "pacing"].includes(action.group)
+      && !["center", "timeline", "settings-policy", "settings-pacing"].includes(action.id)) : all;
   });
 
   // Typed arguments: "grace 3s", "유예 3초", "tab 2", "font 14", "theme paper".
@@ -181,7 +154,7 @@
 
   let dockHeight = $state(0);
   let timelineHeight = $state(0);
-  const dockSpace = $derived(cur().shared ? dockHeight : 0);
+  const dockSpace = $derived(dockHeight);
   const timelineSpace = $derived(!cur().shared || !st.timelineOpen || !timelineHeight ? 0 : timelineHeight + 10);
   function onKey(e: KeyboardEvent) {
     if (!appShortcut(e)) {
@@ -215,11 +188,27 @@
     return () => mq.removeEventListener("change", apply);
   });
 
-  onMount(async () => {
-    const connectionListener = listen<{ connected: boolean }>("ss:connection", ({payload}) => { st.backendOnline = payload.connected; });
+  onMount(() => {
+    let disposed = false;
+    let statusTimer: ReturnType<typeof setInterval> | undefined;
+    let admissions = new Admissions();
+    let reconciling = false;
+    async function reconcileAdmissions() {
+      if (reconciling) return;
+      reconciling = true;
+      const current = admissions;
+      try { const snapshot = await admissionSnapshot(); if (!disposed && current === admissions) { current.snapshot(snapshot); st.admissions = current.requests; } }
+      catch { /* Keep actionable requests during a temporary transport failure. */ }
+      finally { reconciling = false; }
+    }
+    const admissionTimer = setInterval(reconcileAdmissions, 2500);
+    const connectionListener = listen<{ connected: boolean }>("ss:connection", ({payload}) => {
+      st.backendOnline = payload.connected;
+      if (payload.connected) { admissions = new Admissions(); void reconcileAdmissions(); }
+    });
     const admissionListener = onAdmission((p) => {
-      st.admissions = st.admissions.filter(a => a.connId !== p.connId);
-      if (p.state === "pending") { st.admissions = [...st.admissions, { connId: p.connId, agentId: p.agentId }]; announce(tr("admission.announce", { agent: p.agentId }), agentColor(p.agentId), "attention", 3200); }
+      admissions.event(p); st.admissions = admissions.requests;
+      if (p.state === "pending") { announce(tr("admission.announce", { agent: p.agentId }), agentColor(p.agentId), "attention", 3200); }
     });
     const tabListener = onTabOpened(async (p) => {
       // Agent tabs stay in the background; an explicit external-launch request may select its new tab.
@@ -245,23 +234,22 @@
       }
     });
     const eventListener = onEvent((ev) => {
-      const t = ev.session ? tab(ev.session) : cur();
+      sessions.changed(ev.session);
+      const t = tab(ev.session);
       if (!t || !t.statusReady) return;
+      const previousController = t.controller.type;
+      const proposalWasReady = t.proposal?.ready;
+      applySessionEvent(t, ev);
+      if (previousController !== t.controller.type && t.id === st.active) {
+        wash(t, agentColor(t.controller.agentId ?? t.lastAgent?.agentId), t.controller.type === "human");
+      }
       if (ev.event === "sharing_changed") {
         recordTimeline(t.timeline, ev);
-        t.shared = ev.shared === true;
-        t.surfaceAvailable = false;
-        t.approval = null; t.ctlReq = null; t.proposal = null; t.grace = null; t.handback = false;
-        setController(t, "human");
         if (!t.shared) st.timelineOpen = false;
-        void syncStatus(t.id);
+        void syncStatus(t.id).catch(() => {});
         return;
       }
-      if (!t.shared) {
-        if (ev.event === "process_exited") t.processAlive = false;
-        if (ev.event === "attention_changed") t.attended = !!ev.attended;
-        return;
-      }
+      if (!t.shared) return;
       recordTimeline(t.timeline, ev);
       const here = t.id === st.active;
       const where = here ? "" : tabName(tabIndex(t.id));
@@ -269,14 +257,10 @@
       const sfx = where ? ` · ${where}` : "";
       switch (ev.event) {
         case "control_granted": {
-          const prev = t.lastAgent; t.lastAgent = { agentId: ev.agentId, connected: true, lastCmd: prev && prev.agentId === ev.agentId ? prev.lastCmd : undefined };
-          setController(t, "agent", ev.agentId); t.ctlReq = null;
-
-          announce(W("conn.agent", { agent: ev.agentId }), agentColor(ev.agentId), "conn", 2600, ev.reason);
+          announce(W("conn.agent", { agent: ev.agentId }), agentColor(ev.agentId), "conn", 2600, ev.reason ?? undefined);
           break;
         }
         case "control_revoked":
-          setController(t, "human");
           if (ev.reason === "human_input" || ev.reason === "taken") showHandback(t);
 
           {
@@ -286,13 +270,11 @@
           }
           break;
         case "control_handed_back": announce(tr("conn.again", { agent: ev.agentId }), agentColor(ev.agentId), "conn", 1800); break;
-        case "control_requested": t.ctlReq = { id: ev.request.requestId, agentId: ev.request.agentId, reason: ev.request.reason, originalRequest: ev.request.originalRequest }; announce(W("conn.asks", { agent: ev.request.agentId }), agentColor(ev.request.agentId), "conn", 3000, ev.request.reason); break;
-        case "control_request_resolved": if (t.ctlReq?.id === ev.requestId) t.ctlReq = null; break;
-        case "attention_requested": t.attention = { agentId: ev.agentId, reason: ev.reason }; announce(tr("attention.asks", { agent: ev.agentId, where: tabName(tabIndex(t.id)) }), agentColor(ev.agentId), "attention", 3200, ev.reason); break;
+        case "control_requested": announce(W("conn.asks", { agent: ev.request.agentId }), agentColor(ev.request.agentId), "conn", 3000, ev.request.reason ?? undefined); break;
+        case "attention_requested": announce(tr("attention.asks", { agent: ev.agentId, where: tabName(tabIndex(t.id)) }), agentColor(ev.agentId), "attention", 3200, ev.reason ?? undefined); break;
         case "tab_opened":
           // An agent opened this tab. Your view stays where it is; the tab knocks so
           // you can decide to look. Its access follows participation and control.
-          t.openedBy = ev.agentId; t.attention = { agentId: ev.agentId, reason: ev.reason };
 
           announce(tr("tab.opened.by", { agent: ev.agentId, where: tabName(tabIndex(t.id)) }), agentColor(ev.agentId), "attention", 3200, ev.reason ?? tr("tab.opened.hint"));
           break;
@@ -304,55 +286,45 @@
             announce(tr("agent.moved.to", { agent: ev.agentId, where: tabName(tabIndex(ev.to)) }), agentColor(ev.agentId), "info", 2200);
           }
           break;
-        case "attention_changed": t.attended = !!ev.attended; if (ev.attended) t.attention = null; break;
         case "agent_input":
           t.typing = true; if (typingTimers[t.id]) clearTimeout(typingTimers[t.id]); typingTimers[t.id] = window.setTimeout(() => (t.typing = false), 500);
           break;
         case "proposal_changed": {
-          const becameReady = ev.proposal.state === "ready" && !(t.proposal?.ready);
-          t.proposal = { id: ev.proposal.proposalId, agentId: ev.proposal.agentId, text: ev.proposal.text, ready: ev.proposal.state === "ready", intent: ev.proposal.intent ?? undefined };
+          const becameReady = ev.proposal.state === "ready" && !proposalWasReady;
           // A proposal waiting on another tab is a knock: you decide there, it cannot run itself.
           if (becameReady && !here) announce(tr("proposal.waiting", { agent: ev.proposal.agentId, where }), agentColor(ev.proposal.agentId), "attention", 3200, ev.proposal.intent ?? ev.proposal.text);
           break;
         }
         case "proposal_resolved": {
-          if (t.proposal?.id === ev.proposalId) t.proposal = null;
-          if (ev.state === "executed") { if (t.lastAgent) t.lastAgent.lastCmd = ev.cmd; }
           if (ev.state === "denied") { toast(tr("policy.blocked", { cmd: ev.cmd }), "danger"); }
           if (ev.state === "rejected") { toast(tr("proposal.rejected"), "warn"); }
           break;
         }
         case "approval_requested":
-          t.approval = { id: ev.request.id, agentId: ev.request.agentId, cmd: ev.request.cmd, label: ev.request.label, at: Date.now(), intent: ev.request.intent ?? undefined, analysis: ev.request.analysis ?? undefined };
           announce(W("approval.needed", { agent: ev.request.agentId }), "var(--warn)", "approval", 3000, `${ev.request.label}${ev.request.intent ? " · " + ev.request.intent : " · " + ev.request.cmd}`);
           break;
         case "approval_resolved":
 
-          if (t.approval?.id === ev.approvalId) t.approval = null;
           toast(`${ev.state} (${ev.by})${sfx}`, ev.state === "granted" ? "ok" : "danger");
-          invoke<any>("status", { session: t.id }).then((s) => (t.allows = s.sessionAllows ?? []));
+          void syncStatus(t.id).catch(() => {});
           break;
-        case "session_allows_changed": t.allows = ev.allows; break;
-        case "exec_scheduled": t.grace = { execId: ev.execId, cmd: ev.cmd, ms: ev.graceMs, start: performance.now(), intent: ev.intent ?? undefined }; break;
         case "exec_cancelled":
-          t.grace = null; toast(tr("exec.cancelled", { reason: ev.reason }) + sfx, "warn"); break;
+          toast(tr("exec.cancelled", { reason: ev.reason }) + sfx, "warn"); break;
         case "agent_exec":
-          t.grace = null; if (t.lastAgent) t.lastAgent.lastCmd = ev.cmd;
 
           if (String(ev.policy).startsWith("deny")) { t.policyBlockedUntil = performance.now() + 2400; toast(tr("policy.blocked", { cmd: ev.cmd }) + sfx, "danger"); }
           break;
-        case "process_exited": t.processAlive = false; setController(t, "human"); announce(tr("shell.exited") + sfx, "var(--danger)", "warn"); break;
-        case "pacing_changed": t.pacing = ev.pacing as Pacing; break;
-        case "mode_changed": t.mode = ev.mode; t.effectiveMode = ev.effectiveMode ?? ev.mode; break;
-        case "control_gate_changed": t.gate = !!ev.ask; break;
-        case "affordance_mask_changed": t.mask = ev.allow; break;
+        case "process_exited": announce(tr("shell.exited") + sfx, "var(--danger)", "warn"); break;
       }
     });
-    try {
+    void (async () => { try {
       await Promise.all([connectionListener, admissionListener, tabListener, abortListener, eventListener]);
+      if (disposed) return;
+      await reconcileAdmissions();
       await refreshProfiles();
       await refreshExtensions().catch(() => {});
       const info = await invoke<{ socket: string; session: string | null; sessions: string[]; externalPending?: boolean }>("start", { rows: 24, cols: 80 });
+      if (disposed) return;
       st.socket = info.socket ?? "";
       for (const id of info.sessions) if (!tab(id)) addTab(id);
       st.active = info.session ?? "";
@@ -368,16 +340,20 @@
         }
       }
       // A window opened later, or a reload, must still see who is waiting.
-      try { st.admissions = await invoke<{ connId: number; agentId: string }[]>("pending_admissions"); } catch {}
+      await reconcileAdmissions();
       st.backendOnline = true;
       await tick();
       await invoke("ui_ready");
       setTimeout(() => { terms[st.active]?.refit(); focusTerm(); }, 50);
-      setInterval(async () => { for (const id of st.order) { try { const s = await invoke<any>("status", { session: id }); const t = tab(id); if (t) { t.processAlive = !!s.processAlive; t.externalStarting = s.externalStarting === true; t.externalInputAvailable = s.externalInputAvailable === true; t.shared = s.shared === true; t.surfaceAvailable = s.surfaceAvailable === true; t.inputPending = s.inputPending === true; if (t.shared) t.agents = s.connectedAgents ?? []; } } catch {} } }, 5000);
+      statusTimer = setInterval(() => { for (const id of st.order) void syncStatus(id).catch(() => {}); }, 5000);
     } catch (e) {
       st.settingsTab = "profiles"; st.settingsOpen = true;
       log(`start failed: ${e}`); toast(tr("engine.failed", { err: String(e) }), "danger");
-    }
+    } })();
+    return () => {
+      disposed = true; sessions.dispose(); clearInterval(admissionTimer); clearInterval(statusTimer);
+      for (const listener of [connectionListener, admissionListener, tabListener, abortListener, eventListener]) void listener.then(unlisten => unlisten());
+    };
   });
 </script>
 
@@ -393,8 +369,8 @@
   {/if}
   <TabStrip onselect={select} onclose={closeTab} onnew={openTab} onsettings={() => openSettings(st.settingsTab)} onpalette={() => { st.settingsOpen = false; st.centerOpen = false; st.paletteOpen = true; }} ontimeline={() => { st.timelineOpen = !st.timelineOpen; }} />
   {#if st.active}<Island onopen={() => { st.paletteOpen = false; st.centerOpen = !st.centerOpen; }} />{/if}
+  <div class="interaction-dock" bind:clientHeight={dockHeight}>{#if !st.settingsOpen}<AdmissionRequest />{/if}{#if cur().shared}<ControlRequest /><Hold /><Ghost /><GraceBar /><HandbackChip bind:this={chip} />{/if}</div>
   {#if !!cur().shared}
-  <div class="interaction-dock" bind:clientHeight={dockHeight}><AdmissionRequest /><ControlRequest /><Hold /><Ghost /><GraceBar /><HandbackChip bind:this={chip} /></div>
   <Timeline bind:height={timelineHeight} />
   {/if}
   <Toasts />

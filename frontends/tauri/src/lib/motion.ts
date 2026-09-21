@@ -4,6 +4,9 @@ import { cubicIn, cubicOut } from "svelte/easing";
 /** Conn dock motion: reserve layout once, animate only the rendered surface. */
 export const DOCK_MOTION_MS = 320;
 export const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+export function decisionReveal(node: HTMLElement) {
+  return fly(node, { y: -10, duration: reducedMotion() ? 0 : 180 });
+}
 export function dockReveal(node: HTMLElement) {
   return fly(node, { duration: reducedMotion() ? 0 : DOCK_MOTION_MS, easing: cubicOut, y: node.getBoundingClientRect().height + 10, opacity: 1 });
 }

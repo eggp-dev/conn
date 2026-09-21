@@ -1,56 +1,67 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { fade } from "svelte/transition";
-  import { cmd } from "../lib/bridge";
+  import { sharingSnapshot, setSharing, failureKey } from "../lib/collaboration/api";
+  import type { Participant } from "../lib/collaboration/contracts";
   import { cur, st, toast } from "../lib/store.svelte";
   import { t } from "../lib/i18n.svelte";
   let { onclose }: { onclose: () => void } = $props();
   const session = st.active;
   let dialog:HTMLDivElement;
-  let participants = $state<{connId:number;agentId:string;selected?:boolean}[]>([]);
+  let participants = $state<Participant[]>([]);
   let selected = $state<number[]>([]);
   let loading = $state(true);
   let busy = $state(false);
   let error = $state("");
+  let loadError = $state("");
+  let revision = $state<number | null>(null);
+  let stale = $state(false);
+  let reloadSelection = $state<() => Promise<void>>(async () => {});
   onMount(() => {
     dialog?.focus();
     let disposed = false;
     let refreshing = false;
     let initialized = false;
-    async function refresh() {
+    async function refresh(reset = false) {
       if (refreshing || busy) return;
       refreshing = true;
       try {
-        const next = await cmd<typeof participants>("sharing_participants", { session });
+        const snapshot = await sharingSnapshot(session);
+        const next = snapshot.participants;
         if (disposed) return;
         // Keep the owner's edits; never select new agents automatically. The
         // saved selection loads once, even when the first attempt failed.
-        selected = initialized
+        selected = initialized && !reset
           ? selected.filter(id => next.some(p => p.connId === id))
           : next.filter(p => p.selected).map(p => p.connId);
         initialized = true;
+        if (revision === null || reset) revision = snapshot.revision;
+        stale = snapshot.revision !== revision;
+        if (reset) error = "";
         participants = next;
-        error = "";
+        loadError = "";
       } catch {
-        if (!disposed) error = t("sharing.loadFailed");
+        if (!disposed) loadError = t("sharing.loadFailed");
       } finally {
         refreshing = false;
         if (!disposed) loading = false;
       }
     }
+    reloadSelection = () => refresh(true);
     void refresh();
     const timer = setInterval(refresh, 1000);
     return () => { disposed = true; clearInterval(timer); };
   });
   async function apply(shared: boolean) {
+    if (busy || revision === null || stale) return;
     if (shared && selected.length === 0) return;
     busy = true; error = "";
     try {
-      const status = await cmd<{inputPending?:boolean}>("set_sharing", { session, shared, connectionIds: shared ? selected : [] });
-      if (st.tabs[session]) st.tabs[session].inputPending = status.inputPending === true;
+      const status = await setSharing(session, shared, shared ? selected : [], revision);
+      if (st.tabs[session]) Object.assign(st.tabs[session], { shared: status.shared, inputPending: status.inputPending, externalInputAvailable: status.externalInputAvailable });
       toast(t(status.inputPending ? "sharing.pendingInput" : shared ? "sharing.started" : "sharing.stopped"), status.inputPending ? "" : "ok");
       onclose();
-    } catch { error = t("sharing.failed"); }
+    } catch (cause) { error = t(failureKey(cause)); if (String(cause).includes('sharing_changed')) stale = true; }
     finally { busy = false; }
   }
   function key(e: KeyboardEvent) {
@@ -71,16 +82,18 @@
     {#if cur().inputPending}<p class="muted">{t("sharing.pendingInput")}</p>{/if}
     <fieldset><legend>{t("sharing.participants")}</legend>
       {#if loading}<p class="muted">{t("sharing.loading")}</p>
-      {:else if !participants.length}<p class="muted">{t("sharing.empty")}</p>
+      {:else if !participants.length}<p class="muted">{t(st.admissions.length ? "sharing.awaiting" : "sharing.empty")}</p>{#if st.admissions.length}<button class="btn" onclick={onclose}>{t("sharing.reviewConnections")}</button>{/if}
       {:else}{#each participants as p (p.connId)}
-        <label><input type="checkbox" bind:group={selected} value={p.connId} /><span>{p.agentId}</span><small class="muted">#{p.connId}</small></label>
+        <label><input type="checkbox" bind:group={selected} value={p.connId} disabled={busy} /><span>{p.agentId}</span><small class="muted">#{p.connId}</small></label>
       {/each}{/if}
     </fieldset>
+    {#if loadError}<p role="alert" class="error">{loadError}</p>{/if}
     {#if error}<p role="alert" class="error">{error}</p>{/if}
+    {#if stale}<p role="status" class="muted">{t("sharing.changed")}</p><button class="btn" disabled={busy} onclick={reloadSelection}>{t("sharing.reload")}</button>{/if}
   </div>
   <footer>
-    {#if cur().shared}<button class="btn ghost" disabled={busy} onclick={() => apply(false)}>{t("sharing.stop")}</button>{/if}
-    <span></span><button class="btn" disabled={busy || loading || selected.length === 0} onclick={() => apply(true)}>{t(cur().shared ? "sharing.apply" : "sharing.start")}</button>
+    {#if cur().shared}<button class="btn ghost" disabled={busy || stale || revision === null} onclick={() => apply(false)}>{t("sharing.stop")}</button>{/if}
+    <span></span><button class="btn" disabled={busy || loading || stale || revision === null || selected.length === 0} onclick={() => apply(true)}>{t(cur().shared ? "sharing.apply" : "sharing.start")}</button>
   </footer>
 </div>
 <style>

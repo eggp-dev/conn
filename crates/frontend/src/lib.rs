@@ -516,7 +516,7 @@ fn set_control_gate(state: &AppState, session: String, ask: bool) -> Result<(), 
 }
 
 fn decide_control(state: &AppState, session: String, request_id: String, grant: bool) -> Result<Value, String> {
-    engine(&state, &session)?.session().lock().decide_control(&request_id, grant).map(|r| serde_json::to_value(r).unwrap()).map_err(|e| e.to_string())
+    state.hub.decide_control(&session, &request_id, grant).map(|r| serde_json::to_value(r).unwrap()).map_err(|e| e.to_string())
 }
 
 fn accept_proposal(state: &AppState, session: String, proposal_id: String) -> Result<Value, String> {
@@ -528,7 +528,7 @@ fn reject_proposal(state: &AppState, session: String, proposal_id: String) -> Re
 }
 
 fn hand_back(state: &AppState, session: String) -> Result<Value, String> {
-    engine(&state, &session)?.session().lock().hand_back().map(|r| serde_json::to_value(r).unwrap()).map_err(|e| e.to_string())
+    state.hub.hand_back(&session).map(|r| serde_json::to_value(r).unwrap()).map_err(|e| e.to_string())
 }
 
 fn revoke_session_allow(state: &AppState, session: String, label: String) -> Result<bool, String> {
@@ -612,6 +612,7 @@ fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Resul
             Ok(Value::Null)
         },
         "open_release" => updates::open(&arg::<String>(&args, "url")?).map(|_| Value::Null),
+        "admission_snapshot" => Ok(json!(state.hub.admission_snapshot())),
         "pending_admissions" => Ok(json!(state.hub.pending_admissions().into_iter().map(|a| json!({"connId":a.conn_id,"agentId":a.agent_id})).collect::<Vec<_>>())),
         "admission_policy" => Ok(json!({"ask": state.hub.admission_policy() == AdmissionPolicy::Ask})),
         "set_admission" => set_admission(state, arg::<bool>(&args, "ask")?),

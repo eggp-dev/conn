@@ -413,3 +413,53 @@ fn real_ssh_login_injected_by_a_launcher_stays_secret_after_sharing() {
     assert!(agent.call("snapshot",json!({"session":id})).is_err());
     h.shutdown();
 }
+
+#[test]
+fn failed_sharing_preserves_external_handle_and_accepts_later_input() {
+    let (_tmp,h)=harness(); ready(&h); enable(&h);
+    let handle=open(&h); let id=physical(&h,&handle);
+    let session=h.state.hub.get(&id).unwrap();
+    // Incomplete external input triggers the existing preflight guard.
+    session.lock().write_external(b"echo fixture").unwrap();
+    let before=session.lock().status();
+    let error=h.invoke("set_sharing",json!({"session":id,"shared":true,"connectionIds":[]})).unwrap_err();
+    assert_eq!(error,"input_pending");
+    assert!(h.state.automation.bindings.lock().contains_key(&handle));
+    let after=session.lock().status();
+    assert!(!after.shared && after.external_input_available);
+    assert_eq!(after.surface_generation,before.surface_generation);
+    let write=h.automate(caller(),"session.write",json!({"session":handle,"text":" continued","newline":true})).unwrap();
+    assert_eq!(done(&h,write.as_str().unwrap())["state"],"delivered");
+    h.shutdown();
+}
+
+#[test]
+fn history_preparation_failure_does_not_revoke_external_input() {
+    let (_tmp,h)=harness(); ready(&h); enable(&h); let handle=open(&h);let id=physical(&h,&handle);
+    // Force only the new sharing resource open to fail.
+    let audit=h.state.config_dir.join("audit.jsonl");
+    if audit.exists() { std::fs::remove_file(&audit).unwrap(); }
+    std::fs::create_dir(&audit).unwrap();
+    assert_eq!(h.invoke("set_sharing",json!({"session":id,"shared":true,"connectionIds":[]})).unwrap_err(),"history_unavailable");
+    assert!(h.state.hub.get(&id).unwrap().lock().external_writer_active());
+    assert!(h.state.automation.bindings.lock().contains_key(&handle));h.shutdown();
+}
+
+#[test]
+fn stale_sharing_selection_cannot_overwrite_a_newer_owner_decision() {
+    let (_tmp,h)=harness(); ready(&h); enable(&h);
+    let handle=open(&h); let id=physical(&h,&handle);
+    let snapshot=h.invoke("sharing_state",json!({"session":id})).unwrap();
+    let revision=snapshot["revision"].as_u64().unwrap();
+    let apply=|shared,expected| h.invoke("set_sharing",json!({"session":id,"shared":shared,"connectionIds":[],"expectedRevision":expected}));
+    assert_eq!(apply(true,revision+1).unwrap_err(),"sharing_changed");
+    assert!(h.state.hub.get(&id).unwrap().lock().external_writer_active());
+    assert!(h.state.automation.bindings.lock().contains_key(&handle));
+    assert_eq!(apply(true,revision).unwrap()["shared"],true);
+    assert_eq!(apply(false,revision).unwrap_err(),"sharing_changed");
+    assert!(h.state.hub.get(&id).unwrap().lock().status().shared);
+    let current=h.invoke("sharing_state",json!({"session":id})).unwrap();
+    assert_eq!(current["revision"].as_u64(),Some(revision+1));
+    assert_eq!(apply(false,revision+1).unwrap()["shared"],false);
+    h.shutdown();
+}

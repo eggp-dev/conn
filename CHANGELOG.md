@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.8.3 — Preview · 2026-09-21
+
+Validation: 246 Rust tests, 46 frontend tests, 78 release tests, production-App browser fixtures, the real Rust Harness collaboration flow and a real OpenSSH authentication/sharing regression passed locally. Interactive testing of this patch on macOS was not performed because the test Mac is offline; Linux/Windows native GUI acceptance and installed-app upgrade coverage also remain open. Release CI and signing checks are reported separately.
+
+한국어: 로컬 Rust 246개·프런트엔드 46개·릴리스 78개 테스트, 실제 App 브라우저 검증·Rust Harness 협업 흐름·실제 OpenSSH 인증 및 공유 회귀 검증을 통과했습니다. 테스트 Mac이 꺼져 있어 이번 패치의 macOS 대화형 검증은 하지 않았습니다. Linux·Windows 네이티브 GUI 및 설치된 앱의 업그레이드 검증도 남아 있습니다.
+
+- Connection approval stays actionable in private, empty, preparing and Settings views. Failed decisions remain retryable, and late snapshots cannot resurrect resolved requests.
+- Sharing validates input, live participants, history resources and the selected revision before revoking external input. Failed transitions preserve the running shell and writer; stale selections require reloading.
+- Centralize connection admission, cross-session control transitions, participation cleanup and typed UI state. Owner grants and hand-backs enforce one lease per connection; explicit take/release and process exit cancel pending work. Cards, keyboard and palette decisions share their request state.
+- Add required browser collaboration regressions using the production App and real Rust Harness. [Implementation and validation](docs/collaboration-refactor-results.md); native platform acceptance remains open.
+
+한국어: 비공개 화면에서도 연결 승인을 처리하고, 공유 실패 시 기존 셸과 외부 입력 권한을 유지합니다. 연결·참여·제어권·UI 상태의 책임을 분리했으며, 오래된 공유 선택은 다시 확인하게 합니다. [구현·검증 결과](docs/collaboration-refactor-results.ko.md)에 플랫폼별 남은 검증을 구분했습니다.
+
 - Snapshots no longer carry the constant `imageUnavailable: true` field, a remnant of the optional PNG snapshots removed in 0.8.0. Snapshots remain text only.
 - Removed the native OpenAI command suggestions preview, its provider settings and the OS credential-store key storage. Themes and the extension registry stay. A key saved earlier remains in the OS credential store under `dev.eggp.conn.model-provider` until you delete it there.
 

@@ -29,13 +29,13 @@ curl -fsSL https://conn.eggp.dev/install.sh | sh
 
 Rust나 Node.js는 필요 없습니다. 에이전트 연결 도구가 함께 들어 있습니다. 두 방법 모두 아래 다운로드와 같은 서명된 릴리스 파일을 설치하며, 이후에는 앱 안에서 업데이트됩니다. Windows는 설치 파일을 사용하세요.
 
-| 운영체제 | v0.8.2 프리뷰 |
+| 운영체제 | v0.8.3 프리뷰 |
 |---|---|
-| macOS · Apple Silicon | [Mac용 다운로드](https://github.com/eggp-dev/conn/releases/download/v0.8.2/conn-v0.8.2-aarch64-apple-darwin-desktop.dmg) |
-| Windows · x64 | [설치 파일 다운로드](https://github.com/eggp-dev/conn/releases/download/v0.8.2/conn-v0.8.2-x86_64-pc-windows-msvc-setup.exe) |
-| Ubuntu · x64 | [.deb 다운로드](https://github.com/eggp-dev/conn/releases/download/v0.8.2/conn-v0.8.2-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggp-dev/conn/releases/download/v0.8.2/conn-v0.8.2-x86_64-unknown-linux-gnu-desktop.AppImage) |
+| macOS · Apple Silicon | [Mac용 다운로드](https://github.com/eggp-dev/conn/releases/download/v0.8.3/conn-v0.8.3-aarch64-apple-darwin-desktop.dmg) |
+| Windows · x64 | [설치 파일 다운로드](https://github.com/eggp-dev/conn/releases/download/v0.8.3/conn-v0.8.3-x86_64-pc-windows-msvc-setup.exe) |
+| Ubuntu · x64 | [.deb 다운로드](https://github.com/eggp-dev/conn/releases/download/v0.8.3/conn-v0.8.3-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggp-dev/conn/releases/download/v0.8.3/conn-v0.8.3-x86_64-unknown-linux-gnu-desktop.AppImage) |
 
-Mac 배포 파일은 서명·공증되어 있습니다. Windows 프리뷰는 무서명이며, Linux는 Ubuntu 24.04에서 빌드하며, AppImage는 앱 안에서 업데이트되고 `.deb`는 새 패키지를 설치해 업데이트합니다. Intel Mac 배포는 잠시 중단했습니다. [설치·업데이트 안내](docs/getting-started.ko.md) · [전체 파일·체크섬](https://github.com/eggp-dev/conn/releases/tag/v0.8.2)
+Mac 배포 파일은 서명·공증되어 있습니다. Windows 프리뷰는 무서명이며, Linux는 Ubuntu 24.04에서 빌드하며, AppImage는 앱 안에서 업데이트되고 `.deb`는 새 패키지를 설치해 업데이트합니다. Intel Mac 배포는 잠시 중단했습니다. [설치·업데이트 안내](docs/getting-started.ko.md) · [전체 파일·체크섬](https://github.com/eggp-dev/conn/releases/tag/v0.8.3)
 
 ## 처음 5분
 

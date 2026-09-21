@@ -13,37 +13,37 @@ brew install --cask eggp-dev/tap/conn                                           
 curl -fsSL https://conn.eggp.dev/install.sh | sh     # Linux x86_64
 ```
 
-The cask installs the signed and notarized DMG and checks it against the SHA-256 published with the release. The Linux script downloads the AppImage, verifies it against the release's `SHA256SUMS`, and installs it for your user only (`~/.local/bin`, an app-menu entry, no sudo); it refuses to install on a checksum mismatch. `CONN_VERSION=v0.8.2` pins a release. AppImages need FUSE 2: on Ubuntu 24.04 and newer, `sudo apt install libfuse2t64`. Both keep updating from inside the app. Read the script before piping it to a shell if you like: [`scripts/install.sh`](../scripts/install.sh).
+The cask installs the signed and notarized DMG and checks it against the SHA-256 published with the release. The Linux script downloads the AppImage, verifies it against the release's `SHA256SUMS`, and installs it for your user only (`~/.local/bin`, an app-menu entry, no sudo); it refuses to install on a checksum mismatch. `CONN_VERSION=v0.8.3` pins a release. AppImages need FUSE 2: on Ubuntu 24.04 and newer, `sudo apt install libfuse2t64`. Both keep updating from inside the app. Read the script before piping it to a shell if you like: [`scripts/install.sh`](../scripts/install.sh).
 
 Or download a file yourself:
 
-Download the [v0.8.2 preview](https://github.com/eggp-dev/conn/releases/tag/v0.8.2) for your OS and CPU. See the release notes for the exact signing and runtime verification results.
+Download the [v0.8.3 preview](https://github.com/eggp-dev/conn/releases/tag/v0.8.3) for your OS and CPU. See the release notes for the exact signing and runtime verification results.
 
 | Platform | Download | Install |
 |---|---|---|
-| Ubuntu x64 | [`.deb`](https://github.com/eggp-dev/conn/releases/download/v0.8.2/conn-v0.8.2-x86_64-unknown-linux-gnu-desktop.deb) | Run the command below, then open Conn from your applications. |
-| Ubuntu x64 | [AppImage](https://github.com/eggp-dev/conn/releases/download/v0.8.2/conn-v0.8.2-x86_64-unknown-linux-gnu-desktop.AppImage) | Make the file executable, then open it. |
-| macOS Apple Silicon | [`.dmg`](https://github.com/eggp-dev/conn/releases/download/v0.8.2/conn-v0.8.2-aarch64-apple-darwin-desktop.dmg) | Open the DMG, drag Conn into Applications, then launch it there. |
-| Windows x64 | [Installer `.exe`](https://github.com/eggp-dev/conn/releases/download/v0.8.2/conn-v0.8.2-x86_64-pc-windows-msvc-setup.exe) | Run the installer, then open Conn from the Start menu. |
+| Ubuntu x64 | [`.deb`](https://github.com/eggp-dev/conn/releases/download/v0.8.3/conn-v0.8.3-x86_64-unknown-linux-gnu-desktop.deb) | Run the command below, then open Conn from your applications. |
+| Ubuntu x64 | [AppImage](https://github.com/eggp-dev/conn/releases/download/v0.8.3/conn-v0.8.3-x86_64-unknown-linux-gnu-desktop.AppImage) | Make the file executable, then open it. |
+| macOS Apple Silicon | [`.dmg`](https://github.com/eggp-dev/conn/releases/download/v0.8.3/conn-v0.8.3-aarch64-apple-darwin-desktop.dmg) | Open the DMG, drag Conn into Applications, then launch it there. |
+| Windows x64 | [Installer `.exe`](https://github.com/eggp-dev/conn/releases/download/v0.8.3/conn-v0.8.3-x86_64-pc-windows-msvc-setup.exe) | Run the installer, then open Conn from the Start menu. |
 
 Intel Mac distribution is paused for future releases. Previously published Intel packages remain in [past releases](https://github.com/eggp-dev/conn/releases); do not install the Apple Silicon package on an Intel Mac.
 
 For Ubuntu, run the matching command in your download directory:
 
 ```sh
-sudo apt install ./conn-v0.8.2-x86_64-unknown-linux-gnu-desktop.deb
+sudo apt install ./conn-v0.8.3-x86_64-unknown-linux-gnu-desktop.deb
 ```
 
 Or, for AppImage:
 
 ```sh
-chmod +x ./conn-v0.8.2-x86_64-unknown-linux-gnu-desktop.AppImage
-./conn-v0.8.2-x86_64-unknown-linux-gnu-desktop.AppImage
+chmod +x ./conn-v0.8.3-x86_64-unknown-linux-gnu-desktop.AppImage
+./conn-v0.8.3-x86_64-unknown-linux-gnu-desktop.AppImage
 ```
 
 The Linux build targets Ubuntu 24.04 and 26.04 x64; AppImage still depends on system libraries. Windows previews are intentionally unsigned, so SmartScreen or an unknown-publisher prompt may appear; managed PCs may block installation. Public Mac assets must pass the release's Developer ID signing and notarization checks. See [platform support](platform-support.md) for the limits of each target.
 
-Optional: download [SHA256SUMS](https://github.com/eggp-dev/conn/releases/download/v0.8.2/SHA256SUMS) alongside your file. On Linux, run `sha256sum --ignore-missing -c SHA256SUMS`; on macOS, compare `shasum -a 256 <file>` with its line; on Windows, use `Get-FileHash <file> -Algorithm SHA256`. Checksums detect corruption and are separate from code signing.
+Optional: download [SHA256SUMS](https://github.com/eggp-dev/conn/releases/download/v0.8.3/SHA256SUMS) alongside your file. On Linux, run `sha256sum --ignore-missing -c SHA256SUMS`; on macOS, compare `shasum -a 256 <file>` with its line; on Windows, use `Get-FileHash <file> -Algorithm SHA256`. Checksums detect corruption and are separate from code signing.
 
 ## 2. Set up your terminal
 
@@ -178,3 +178,11 @@ Earlier private input/output is not added to history.
 
 **Settings → Extensions** contains terminal themes, including themes you install from
 a JSON file. [Extension guide](extensions.md)
+
+### Connection approval and sharing recovery (unreleased)
+
+The **Allow / Deny** connection card also appears in private and preparing windows and inside Settings.
+Allowing the connection keeps the terminal private until you select that connection and start sharing.
+If sharing reports unfinished input, finish or cancel it in the terminal and try again; the failed change
+keeps external input available. If another view changed the selection, use **Reload selection**, review
+the current participants and apply again. See [validation scope](collaboration-refactor-results.md).

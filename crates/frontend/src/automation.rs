@@ -48,6 +48,10 @@ struct Binding {
 impl Binding {
     fn stop(&self) {
         let _operation = self.operation.lock();
+        self.stop_locked();
+    }
+    // Caller holds operation; no worker can deliver a chunk during the transition.
+    fn stop_locked(&self) {
         self.stopped.store(true, Ordering::Release);
         self.session.lock().revoke_external();
         for job in self.queue.lock().drain(..) {
@@ -120,6 +124,18 @@ impl Automation {
             handles.into_iter().filter_map(|handle| bindings.remove(&handle)).collect::<Vec<_>>()
         };
         for b in stopped { b.stop(); }
+    }
+    /// Fence in-flight external writes, commit the session change, then drain.
+    /// A failed precondition leaves writer handles and queued payloads untouched.
+    pub(crate) fn transition_session<T>(&self, id: &str, commit: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+        let mut bindings: Vec<_> = self.bindings.lock().values().filter(|b| b.session_id == id).cloned().collect();
+        bindings.sort_by(|a,b| a.handle.cmp(&b.handle));
+        let _operations: Vec<_> = bindings.iter().map(|b| b.operation.lock()).collect();
+        let result = commit()?;
+        for binding in &bindings { binding.stop_locked(); }
+        let mut current = self.bindings.lock();
+        for binding in &bindings { current.remove(&binding.handle); }
+        Ok(result)
     }
     fn stop_binding(&self, binding: &Binding) {
         self.bindings.lock().remove(&binding.handle);

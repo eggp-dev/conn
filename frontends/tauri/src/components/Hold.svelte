@@ -1,8 +1,10 @@
 <script lang="ts">
   import { t } from "../lib/i18n.svelte";
-  import { fly } from "svelte/transition";
-  import { cur } from "../lib/store.svelte";
-  import { cmd } from "../lib/bridge";
+  import DecisionCard from "./DecisionCard.svelte";
+  import { reviewAction, resolveReview } from "../lib/collaboration/review.svelte";
+  import { cur, st } from "../lib/store.svelte";
+  const action = $derived(reviewAction(st.active, cur().approval?.id ?? "none"));
+  function decide(value: string) { return resolveReview(st.active, a.id, value); }
   const a = $derived(cur().approval!);
   const targets = $derived(a.analysis?.segments.flatMap((s) => s.targets) ?? []);
   const multi = $derived((a.analysis?.segments.length ?? 0) > 1);
@@ -10,12 +12,8 @@
 
 
 {#if cur().approval}
-  <div class="hold" transition:fly={{ y: 6, duration: 160 }} role="dialog" aria-label={a.label}>
-    <div class="top">
-      <span class="label">⚠ {a.label}</span>
-      {#if a.intent}<span class="intent">{a.intent}</span>{:else}<span class="intent muted">{t("hold.no_intent")}</span>{/if}
-      <span class="who muted">{a.agentId} · {a.id}</span>
-    </div>
+  <DecisionCard agent={a.agentId} label={a.label} busy={action.busy} error={action.error}>
+    <p class="reason">{a.intent || t("hold.no_intent")}</p>
     {#if targets.length}
       <ul class="targets">
         {#each targets as tg}
@@ -38,37 +36,30 @@
     {:else}
       <code class="raw">{a.cmd}</code>
     {/if}
-    <div class="keys">
+    {#snippet actions()}
       {#if a.analysis?.cwd}<span class="muted cwd">cwd {a.analysis.cwd}</span>{/if}
       <span class="spacer"></span>
-      <button class="btn ok" onclick={() => cmd("approve", { approvalId: a.id, decision: "grant" })}><kbd>a</kbd> {t("hold.approve")}</button>
-      <button class="btn danger" onclick={() => cmd("approve", { approvalId: a.id, decision: "deny" })}><kbd>d</kbd> {t("hold.deny")}</button>
-      <button class="btn" disabled={cur().reviewRequired} onclick={() => cmd("approve", { approvalId: a.id, decision: "allow_session" })}><kbd>A</kbd> {t("hold.allow_session")}</button>
-    </div>
-  </div>
+      <button class="btn ok" disabled={action.busy} onclick={() => decide("grant")}><kbd>a</kbd> {t("hold.approve")}</button>
+      <button class="btn danger" disabled={action.busy} onclick={() => decide("deny")}><kbd>d</kbd> {t("hold.deny")}</button>
+      <button class="btn" disabled={action.busy || cur().reviewRequired} onclick={() => decide("allow_session")}><kbd>A</kbd> {t("hold.allow_session")}</button>
+    {/snippet}
+  </DecisionCard>
 {/if}
 
 <style>
-  .hold { position: relative; margin: 6px 16px; z-index: 9; display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(12px); border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line)); box-shadow: var(--shadow); font-size: 12.5px; }
-  .top { display: flex; gap: 12px; align-items: baseline; }
-  .label { color: var(--warn); font-weight: 700; white-space: nowrap; }
-  .intent { flex: 1; font-size: 13.5px; font-weight: 600; }
-  .who { white-space: nowrap; font-size: 11px; }
   ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
-  .targets li { display: flex; gap: 8px; align-items: center; }
+  .targets li { min-width:0; flex-wrap:wrap; display: flex; gap: 8px; align-items: center; }
   .targets .k { color: var(--muted); font-size: 11px; width: 28px; }
-  .targets code { font-size: 12.5px; }
+  .targets code { overflow-wrap:anywhere; min-width:0; font-size: 12.5px; }
   .targets li.protected code { color: var(--danger); }
   .tag { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: var(--surface2); color: var(--muted); white-space: nowrap; }
   .tag.git { color: var(--agent); }
   .tag.danger { background: color-mix(in srgb, var(--danger) 20%, transparent); color: var(--danger); }
-  .segs li { display: flex; gap: 8px; align-items: center; }
+  .segs li { flex-wrap:wrap; display: flex; gap: 8px; align-items: center; }
   .segs .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
   .segs li.confirm .dot { background: var(--warn); } .segs li.deny .dot { background: var(--danger); }
   .segs li.allow code { color: var(--muted); }
   .raw { color: var(--muted); white-space: pre-wrap; word-break: break-all; }
-  .keys { display: flex; gap: 6px; align-items: center; }
-  .keys .btn { padding: 3px 9px; font-size: 11.5px; display: flex; gap: 5px; align-items: center; }
   .spacer { flex: 1; }
   .cwd { font-size: 11px; }
 </style>

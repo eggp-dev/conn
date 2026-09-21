@@ -102,3 +102,10 @@ external authentication followed by same-session sharing, and human correction.
 
 Linux tests do not establish native macOS or Windows acceptance. Release notes
 must distinguish automated checks, browser runs and installed-app validation.
+
+### Collaboration lifecycle clarification (unreleased)
+
+App admission remains answerable without a shared session. A failed sharing preflight leaves the
+external writer intact; stale participant selections require review again. Explicit takeover/release
+and process exit end the corresponding pending work so a later decision cannot execute it.
+See the [transition table and verified scope](collaboration-refactor-results.md).
