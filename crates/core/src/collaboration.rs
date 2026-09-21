@@ -40,6 +40,23 @@ impl Hub {
     pub fn admission_snapshot(&self) -> crate::connections::AdmissionSnapshot {
         self.connections.snapshot()
     }
+    pub fn activity_snapshot(&self) -> crate::connections::ActivitySnapshot {
+        // A newly shared live shell resolves preparation, without choosing it or granting control.
+        let snapshot = self.connections.activity_snapshot();
+        for a in &snapshot.connections {
+            if let Some(request) = &a.preparation {
+                if self.has_available_session(a.conn_id) { self.connections.dismiss_preparation(a.conn_id, request.id); }
+            }
+        }
+        self.connections.activity_snapshot()
+    }
+    pub fn has_available_session(&self, conn: ConnId) -> bool {
+        self.public_ids().iter().any(|id| self.get_public(id).is_some_and(|s| {
+            let s = s.lock(); s.participant_allowed(conn) && s.process_alive()
+        }))
+    }
+    pub fn set_activity_listener(&self, listener: crate::connections::ActivityListener) { self.connections.set_activity_listener(listener); }
+    pub fn dismiss_preparation(&self, conn: ConnId, request_id: u64) -> bool { self.connections.dismiss_preparation(conn, request_id) }
     pub fn admission_policy(&self) -> AdmissionPolicy {
         self.connections.policy()
     }

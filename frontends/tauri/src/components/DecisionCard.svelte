@@ -4,9 +4,9 @@
   import { agentColor } from '../lib/themes';
   import { t } from '../lib/i18n.svelte';
   import { failureKey } from '../lib/collaboration/api';
-  let { agent, label, busy = false, error = null, children, actions }: { agent: string; label: string; busy?: boolean; error?: unknown; children?: Snippet; actions: Snippet } = $props();
+  let { agent, label, busy = false, error = null, requestKey, children, actions }: { agent: string; label: string; busy?: boolean; error?: unknown; requestKey?:string; children?: Snippet; actions: Snippet } = $props();
 </script>
-<div class="decision-card" role="alertdialog" aria-label={label} aria-busy={busy} style:--c={agentColor(agent)} transition:decisionReveal>
+<div class="decision-card" data-request-key={requestKey} tabindex="-1" role="alertdialog" aria-label={label} aria-busy={busy} style:--c={agentColor(agent)} transition:decisionReveal>
   <div class="heading"><strong>{agent}</strong><span class="muted">{label}</span></div>
   {@render children?.()}
   {#if error}<p class="error" role="alert">{t(failureKey(error))}</p>{/if}

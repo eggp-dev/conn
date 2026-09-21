@@ -22,6 +22,20 @@ fn wait_for(what: &str, ready: impl Fn() -> bool) {
 }
 
 #[test]
+fn preparation_creates_a_private_live_shell_with_no_agent_participation() {
+    let dir=tempfile::tempdir().unwrap();let h=harness(dir.path(),Default::default());
+    let agent=Client::connect(&dir.path().join("conn.sock")).unwrap();let hello=agent.hello("agent","candidate").unwrap();
+    h.invoke("decide_admission",json!({"connId":hello["conn"],"allow":true})).unwrap();
+    let before=agent.call("list_tabs",json!({})).unwrap()["tabs"].clone();
+    let id=h.invoke("prepare_terminal",json!({"rows":24,"cols":80})).unwrap();
+    let status=h.invoke("status",json!({"session":id})).unwrap();
+    assert_eq!(status["shared"],false);assert_eq!(status["processAlive"],true);assert_eq!(status["controller"]["type"],"human");
+    assert_eq!(agent.call("list_tabs",json!({})).unwrap()["tabs"],before);
+    assert!(agent.call("snapshot",json!({"session":id})).is_err());
+    h.shutdown();
+}
+
+#[test]
 fn desktop_asks_by_default_and_the_owner_command_admits() {
     let dir = tempfile::tempdir().unwrap();
     let events = Arc::new(Mutex::new(Vec::new()));

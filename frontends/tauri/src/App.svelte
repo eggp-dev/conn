@@ -1,4 +1,8 @@
 <script lang="ts">
+  import CollaborationActivity from './components/CollaborationActivity.svelte';
+  import TerminalPreparation from './components/TerminalPreparation.svelte';
+  import {signalPending} from './lib/collaboration/attention';
+  import {requestStillPending, sessionLabel, type ActivitySnapshot, type NoticeTarget} from './lib/collaboration/activity';
   import { Reconciler } from "./lib/collaboration/reconcile";
   import { applySessionSnapshot, applySessionEvent, type SessionSnapshot } from "./lib/collaboration/session";
   import { Admissions } from "./lib/collaboration/admissions";
@@ -51,6 +55,11 @@
     handbackTimers[t.id] = window.setTimeout(() => (t.handback = false), 60_000);
   }
   const typingTimers: Record<string, number> = {};
+  $effect(()=>{
+    const keys=[...st.admissions.map(a=>`admission:${a.connId}`),...st.activity.connections.filter(a=>a.preparation).map(a=>`prepare:${a.connId}:${a.preparation!.id}`),
+      ...st.order.flatMap(id=>{const t=tab(id)!;return t.shared ? [t.ctlReq?.id,t.approval?.id,t.proposal?.ready?t.proposal.id:null,t.attention?`attention:${id}`:null].filter(Boolean).map(key=>`${id}:${key}`):[]})];
+    void signalPending(keys).catch(()=>{});
+  });
 
   // ---- tabs ----
   const sessions = new Reconciler(
@@ -63,13 +72,13 @@
     st.tabs[id] = newTab(id, st.tabSeq);
     st.order.push(id);
   }
-  async function select(id: string) {
+  async function select(id: string, focusInput = true) {
     if (id === st.active || !tab(id)) return;
     st.active = id;
     st.centerOpen = false; st.timelineOpen = false;
     await invoke("attend", { session: id });
     tab(id)!.attention = null;
-    terms[id]?.refit(); focusTerm();
+    terms[id]?.refit(); if(focusInput) focusTerm();
   }
   async function openTab(profileId?: string) {
     if (st.externalPending) return;
@@ -91,6 +100,34 @@
     if (st.active === id) { const next = st.order[Math.max(0, idx - 1)]; st.active = next; await invoke("attend", { session: next }); terms[next]?.refit(); focusTerm(); }
   }
   const needsYou = (tb: TabState | undefined) => !!tb && !!(tb.approval || tb.attention || tb.ctlReq || tb.proposal?.ready);
+  let focusedConnection=$state<number>();
+  async function focusRequest(key:string) {
+    await tick();
+    [...document.querySelectorAll<HTMLElement>('[data-request-key]')].find(el=>el.dataset.requestKey===key)?.focus();
+  }
+  async function navigateNotice(target?: NoticeTarget) {
+    if (!target) { st.centerOpen=!st.centerOpen; return; }
+    st.settingsOpen=false; st.paletteOpen=false; st.centerOpen=false; st.sharingOpen=false;
+    if ('session' in target) {
+      if (!tab(target.session)) { toast(tr('activity.gone')); return; }
+      try { await syncStatus(target.session); } catch { toast(tr('decision.failed'),'danger'); return; }
+      const current=tab(target.session);
+      if (!current) { toast(tr('activity.gone')); return; }
+      await select(target.session,!target.requestId);
+      if (!requestStillPending(current,target)) { toast(tr('activity.resolved')); return; }
+      if(target.requestId && target.kind) await focusRequest(`${target.session}:${target.kind}:${target.requestId}`);
+    } else {
+      const live=st.activity.connections.find(a=>a.connId===target.connId);
+      if (target.preparationId !== undefined ? live?.preparation?.id !== target.preparationId : !live?.preparation && !st.admissions.some(a=>a.connId===target.connId)) { toast(tr('activity.resolved')); return; }
+      focusedConnection=target.connId;
+      await focusRequest(live?.preparation ? `preparation:${target.connId}:${live.preparation.id}` : `connection:${target.connId}`);
+    }
+  }
+  async function choosePreparation(id:string) { await navigateNotice({session:id}); if(st.active===id && tab(id)?.processAlive) st.sharingOpen=true; }
+  async function newPreparation() {
+    const sz=terms[st.active]?.size()??{rows:24,cols:80};
+    const id=await invoke<string>('prepare_terminal',sz);addTab(id);await syncStatus(id);await select(id);st.sharingOpen=true;
+  }
   const nextNeedingAttention = () => st.order.find((id) => id !== st.active && needsYou(tab(id)));
 
   const maskIs = (p: string[] | null) => p === null ? cur().mask === null : !!cur().mask && p.length === cur().mask!.length && p.every((a) => cur().mask!.includes(a));
@@ -201,6 +238,12 @@
       catch { /* Keep actionable requests during a temporary transport failure. */ }
       finally { reconciling = false; }
     }
+    const activity = new Reconciler<ActivitySnapshot>(()=>invoke('activity_snapshot'),(_id,snapshot)=>{
+      if(snapshot.revision>=st.activity.revision) st.activity=snapshot;
+    });
+    const refreshActivity=()=>activity.sync('app').catch(()=>{});
+    const activityListener=listen('ss:activity_changed',()=>{activity.changed('app');void refreshActivity();});
+    const activityTimer=setInterval(refreshActivity,1500);
     const admissionTimer = setInterval(reconcileAdmissions, 2500);
     const connectionListener = listen<{ connected: boolean }>("ss:connection", ({payload}) => {
       st.backendOnline = payload.connected;
@@ -208,7 +251,7 @@
     });
     const admissionListener = onAdmission((p) => {
       admissions.event(p); st.admissions = admissions.requests;
-      if (p.state === "pending") { announce(tr("admission.announce", { agent: p.agentId }), agentColor(p.agentId), "attention", 3200); }
+      if (p.state === "pending") { announce(tr("admission.announce", { agent: p.agentId }), agentColor(p.agentId), "attention", 3200, undefined, {connId:p.connId}); }
     });
     const tabListener = onTabOpened(async (p) => {
       // Agent tabs stay in the background; an explicit external-launch request may select its new tab.
@@ -217,6 +260,7 @@
       // A prepared tab can be aborted while its initial status is in flight.
       if (!tab(p.session)) return;
       st.externalPending = st.order.some(id => tab(id)?.externalStarting);
+      if (p.agentId) announce(tr('tab.opened.by',{agent:p.agentId,where:sessionLabel(st.order,st.tabs,p.session)}),agentColor(p.agentId),'attention',3200,p.reason??undefined,{session:p.session});
       if (p.focus) { st.active = p.session; st.centerOpen = false; st.timelineOpen = false; focusTerm(); }
     });
     const abortListener = listen<{ session: string }>("ss:tab_aborted", async ({payload}) => {
@@ -257,7 +301,7 @@
       const sfx = where ? ` · ${where}` : "";
       switch (ev.event) {
         case "control_granted": {
-          announce(W("conn.agent", { agent: ev.agentId }), agentColor(ev.agentId), "conn", 2600, ev.reason ?? undefined);
+          announce(W("conn.agent", { agent: ev.agentId }), agentColor(ev.agentId), "conn", 2600, ev.reason ?? undefined, {session:t.id});
           break;
         }
         case "control_revoked":
@@ -266,25 +310,15 @@
           {
             const a = { agent: ev.agentId };
             const why: Record<string, string> = { human_input: "", taken: "", released: tr("conn.released", a), expired: tr("conn.expired", a), disconnected: tr("conn.disconnected", a), process_exited: tr("conn.shell_exited") };
-            announce(W("conn.yours"), agentColor(ev.agentId), "conn", 2600, why[ev.reason] ?? ev.reason);
+            announce(W("conn.yours"), agentColor(ev.agentId), "conn", 2600, why[ev.reason] ?? ev.reason, {session:t.id});
           }
           break;
         case "control_handed_back": announce(tr("conn.again", { agent: ev.agentId }), agentColor(ev.agentId), "conn", 1800); break;
-        case "control_requested": announce(W("conn.asks", { agent: ev.request.agentId }), agentColor(ev.request.agentId), "conn", 3000, ev.request.reason ?? undefined); break;
-        case "attention_requested": announce(tr("attention.asks", { agent: ev.agentId, where: tabName(tabIndex(t.id)) }), agentColor(ev.agentId), "attention", 3200, ev.reason ?? undefined); break;
-        case "tab_opened":
-          // An agent opened this tab. Your view stays where it is; the tab knocks so
-          // you can decide to look. Its access follows participation and control.
-
-          announce(tr("tab.opened.by", { agent: ev.agentId, where: tabName(tabIndex(t.id)) }), agentColor(ev.agentId), "attention", 3200, ev.reason ?? tr("tab.opened.hint"));
-          break;
+        case "control_requested": announce(W("conn.asks", { agent: ev.request.agentId }), agentColor(ev.request.agentId), "conn", 3000, ev.request.reason ?? undefined, {session:t.id,kind:"control",requestId:ev.request.requestId}); break;
+        case "attention_requested": announce(tr("attention.asks", { agent: ev.agentId, where: tabName(tabIndex(t.id)) }), agentColor(ev.agentId), "attention", 3200, ev.reason ?? undefined, {session:t.id}); break;
+        case "tab_opened": break; // announced after tab registration, even if this event arrived early
         case "agent_switched_tab":
-          if (t.id === ev.to) {
-
-            if (here) announce(tr("agent.moved.here", { agent: ev.agentId }), agentColor(ev.agentId), "info", 2200, tr("agent.moved.from", { where: tabName(tabIndex(ev.from)) }));
-          } else if (here) {
-            announce(tr("agent.moved.to", { agent: ev.agentId, where: tabName(tabIndex(ev.to)) }), agentColor(ev.agentId), "info", 2200);
-          }
+          if (t.id === ev.to) announce(tr('agent.moved.to',{agent:ev.agentId,where:sessionLabel(st.order,st.tabs,ev.to)}),agentColor(ev.agentId),'info',2200,undefined,{session:ev.to});
           break;
         case "agent_input":
           t.typing = true; if (typingTimers[t.id]) clearTimeout(typingTimers[t.id]); typingTimers[t.id] = window.setTimeout(() => (t.typing = false), 500);
@@ -292,7 +326,7 @@
         case "proposal_changed": {
           const becameReady = ev.proposal.state === "ready" && !proposalWasReady;
           // A proposal waiting on another tab is a knock: you decide there, it cannot run itself.
-          if (becameReady && !here) announce(tr("proposal.waiting", { agent: ev.proposal.agentId, where }), agentColor(ev.proposal.agentId), "attention", 3200, ev.proposal.intent ?? ev.proposal.text);
+          if (becameReady && !here) announce(tr("proposal.waiting", { agent: ev.proposal.agentId, where }), agentColor(ev.proposal.agentId), "attention", 3200, ev.proposal.intent ?? ev.proposal.text, {session:t.id,kind:"proposal",requestId:ev.proposal.proposalId});
           break;
         }
         case "proposal_resolved": {
@@ -301,7 +335,7 @@
           break;
         }
         case "approval_requested":
-          announce(W("approval.needed", { agent: ev.request.agentId }), "var(--warn)", "approval", 3000, `${ev.request.label}${ev.request.intent ? " · " + ev.request.intent : " · " + ev.request.cmd}`);
+          announce(W("approval.needed", { agent: ev.request.agentId }), "var(--warn)", "approval", 3000, `${ev.request.label}${ev.request.intent ? " · " + ev.request.intent : " · " + ev.request.cmd}`, {session:t.id,kind:"review",requestId:ev.request.id});
           break;
         case "approval_resolved":
 
@@ -318,7 +352,7 @@
       }
     });
     void (async () => { try {
-      await Promise.all([connectionListener, admissionListener, tabListener, abortListener, eventListener]);
+      await Promise.all([connectionListener, admissionListener, tabListener, abortListener, eventListener, activityListener]);
       if (disposed) return;
       await reconcileAdmissions();
       await refreshProfiles();
@@ -341,6 +375,7 @@
       }
       // A window opened later, or a reload, must still see who is waiting.
       await reconcileAdmissions();
+      await refreshActivity();
       st.backendOnline = true;
       await tick();
       await invoke("ui_ready");
@@ -351,8 +386,8 @@
       log(`start failed: ${e}`); toast(tr("engine.failed", { err: String(e) }), "danger");
     } })();
     return () => {
-      disposed = true; sessions.dispose(); clearInterval(admissionTimer); clearInterval(statusTimer);
-      for (const listener of [connectionListener, admissionListener, tabListener, abortListener, eventListener]) void listener.then(unlisten => unlisten());
+      disposed = true; sessions.dispose(); activity.dispose(); clearInterval(activityTimer); clearInterval(admissionTimer); clearInterval(statusTimer);
+      for (const listener of [connectionListener, admissionListener, tabListener, abortListener, eventListener, activityListener]) void listener.then(unlisten => unlisten());
     };
   });
 </script>
@@ -368,15 +403,15 @@
     <HandoffWash />
   {/if}
   <TabStrip onselect={select} onclose={closeTab} onnew={openTab} onsettings={() => openSettings(st.settingsTab)} onpalette={() => { st.settingsOpen = false; st.centerOpen = false; st.paletteOpen = true; }} ontimeline={() => { st.timelineOpen = !st.timelineOpen; }} />
-  {#if st.active}<Island onopen={() => { st.paletteOpen = false; st.centerOpen = !st.centerOpen; }} />{/if}
-  <div class="interaction-dock" bind:clientHeight={dockHeight}>{#if !st.settingsOpen}<AdmissionRequest />{/if}{#if cur().shared}<ControlRequest /><Hold /><Ghost /><GraceBar /><HandbackChip bind:this={chip} />{/if}</div>
+  {#if st.active}<Island onnotice={navigateNotice} onopen={() => { st.paletteOpen = false; st.centerOpen = !st.centerOpen; }} />{/if}
+  <div class="interaction-dock" bind:clientHeight={dockHeight}><CollaborationActivity onselect={(session)=>void navigateNotice({session})} /><TerminalPreparation focused={focusedConnection} onchoose={choosePreparation} onnew={newPreparation} />{#if !st.settingsOpen}<AdmissionRequest focused={focusedConnection} />{/if}{#if cur().shared}<ControlRequest /><Hold /><Ghost /><GraceBar /><HandbackChip bind:this={chip} />{/if}</div>
   {#if !!cur().shared}
   <Timeline bind:height={timelineHeight} />
   {/if}
   <Toasts />
   {#if st.centerOpen}<Center onclose={() => { st.centerOpen = false; focusTerm(); }} />{/if}
   {#if st.paletteOpen}<Palette {actions} {parsers} onclose={() => { st.paletteOpen = false; focusTerm(); }} />{/if}
-  {#if st.sharingOpen}<SharingDialog onclose={() => { st.sharingOpen = false; focusTerm(); }} />{/if}
+  {#if st.sharingOpen}{#key st.active}<SharingDialog onclose={() => { st.sharingOpen = false; focusTerm(); }} />{/key}{/if}
   {#if st.settingsOpen}<SettingsSheet onclose={() => { st.settingsOpen = false; queueMicrotask(focusTerm); }} />{/if}
 </main>
 

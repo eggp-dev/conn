@@ -90,14 +90,14 @@ const TOOLS: &[ToolDef] = &[
         name: "terminal_request_attention",
         affordance: "request_attention",
         method: "request_attention",
-        description: "Asks the human to look at this shared session, for example to review a pending decision. Background access does not depend on attention.",
-        schema: || json!({ "type": "object", "properties": { "reason": { "type": "string", "description": "Why they should look, one line" } }, "additionalProperties": false }),
+        description: "Asks the human to review this session. After connection admission, if no live shell is accessible, asks them to choose or prepare a terminal without granting access or control. Repeated preparation requests coalesce. Background access does not depend on attention. Use cancel to withdraw a preparation request.",
+        schema: || json!({ "type": "object", "properties": { "reason": { "type": "string", "maxLength":512, "description": "Why they should look, one line; omit credentials" }, "cancel": {"type":"boolean"} }, "additionalProperties": false }),
     },
     ToolDef {
         name: "terminal_list_tabs",
         affordance: "*",
         method: "list_tabs",
-        description: "Lists the tabs (sessions): number, mode, effectiveMode, whether the human is looking at it (attended), who has the conn, who opened it, and which one your connection is bound to (current). No screen contents.",
+        description: "Lists permitted existing shells: stable id, tab number, profileName, processAlive, mode, effectiveMode, attended, controller and current binding. After reconnecting, rediscover a surviving shell here and select its id instead of opening a replacement. Names do not establish remote host/account identity. Exited shells are not restored sessions. No screen contents.",
         schema: || json!({ "type": "object", "properties": {}, "additionalProperties": false }),
     },
     ToolDef {
@@ -111,7 +111,7 @@ const TOOLS: &[ToolDef] = &[
         name: "terminal_switch_tab",
         affordance: "switch_tab",
         method: "switch_tab",
-        description: "Moves your connection to another tab. It never moves the human's view. In a tab the human is not looking at you still cannot see or write. `tab` is a number or id from terminal_list_tabs.",
+        description: "Moves your connection to a permitted existing tab, including an Observe tab. It never moves the human's view or grants write control. Access follows sharing, mode and control independently of focus. Prefer the stable session id from terminal_list_tabs when rediscovering an existing shell.",
         schema: || json!({ "type": "object", "properties": { "tab": { "type": ["integer", "string"], "description": "Tab number (from 1) or session id" } }, "required": ["tab"], "additionalProperties": false }),
     },
     ToolDef {
@@ -251,7 +251,7 @@ impl Bridge {
                     "exec_pending" => " — a previous ENTER is still in its grace window",
                     "busy" => " — another agent holds control; use terminal_snapshot only",
                     "approval_pending" => " — wait with terminal_check_approval or call terminal_interrupt",
-                    "control_denied" => " — the human declined to hand over control; observe with terminal_snapshot and ask again later with a clearer reason",
+                    "control_denied" => " — the human declined control; observe only and tell them. Do not repeat the request unless asked to retry",
                     "wrong_mode" => " — the frontend put agents in observe mode",
                     "proposal_pending" => " — your proposal is waiting for the human to commit or reject",
                     "intent_required" => " — resend ENTER with an `intent` (one line: what this command does and changes)",
@@ -263,6 +263,7 @@ impl Bridge {
                 };
                 tool_error(format!("{code}: {message}{hint}"))
             }
+            Err(ClientError::Disconnected) => tool_error("connection_lost: Conn disconnected. The last operation may be incomplete; do not replay it automatically. Reconnect, complete any new connection approval, then use terminal_list_tabs and terminal_switch_tab with the existing session ID and read a fresh snapshot. A new connection inherits no selected sharing or control.".into()),
             Err(e) => tool_error(e.to_string()),
         }
     }

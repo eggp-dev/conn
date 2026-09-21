@@ -15,6 +15,9 @@
   const live = $derived(liveAgents.list);
   $effect(() => { void st.active; return watchLiveAgents(); });
 
+  let now=$state(Date.now());
+  $effect(()=>{const timer=setInterval(()=>now=Date.now(),1000);return ()=>clearInterval(timer)});
+  const leaseLeft=$derived(tb.leaseExpiresAt===undefined?null:Math.max(0,Math.ceil((tb.leaseExpiresAt-now)/1000)));
   const MODES = ["observe", "copilot", "autopilot"] as const;
   function key(e: KeyboardEvent) { if (e.key === "Escape") { e.stopPropagation(); onclose(); } }
 </script>
@@ -28,6 +31,9 @@
     {#if isAgent}<button class="btn mini" onclick={() => cmd("take")}>{t("center.take")}</button>{/if}
   </header>
 
+  <p class="muted note">{t('activity.scope')}</p>
+  {#if isAgent && leaseLeft!==null}<p class="muted note">{t('activity.lease',{n:leaseLeft})}</p>{/if}
+  {#if !tb.processAlive}<p class="muted note">{t('activity.exited')}</p>{:else if !isAgent && tb.controlReason==='expired'}<p class="muted note">{t('activity.expired')}</p>{:else if !isAgent && tb.controlReason==='disconnected'}<p class="muted note">{t('activity.disconnected')}</p>{/if}
   <div class="sharing-row"><span>{t(tb.shared ? "sharing.on" : "sharing.off")}</span><button class="btn mini" onclick={() => { onclose(); st.sharingOpen = true; }}>{t(tb.shared ? "sharing.manage" : "sharing.start")}</button></div>
   {#if tb.inputPending}<p class="muted note">{t("sharing.pendingInput")}</p>{/if}
   {#if tb.shared}

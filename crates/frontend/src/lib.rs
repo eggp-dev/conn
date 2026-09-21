@@ -80,6 +80,8 @@ impl Harness {
         let notify = app.clone();
         // Connection-level, so every owner window hears it; any of them may answer.
         state.hub.set_admission_listener(Arc::new(move |change| { let _ = notify.emit("ss:admission", serde_json::to_value(change).unwrap_or(Value::Null)); }));
+        let notify = app.clone();
+        state.hub.set_activity_listener(Arc::new(move || { let _ = notify.emit("ss:activity_changed", Value::Null); }));
         Self { state, app }
     }
     pub fn shutdown(&self) {
@@ -105,6 +107,12 @@ impl Harness {
         match name {
             "start" => start(&self.app, &self.state, window, arg(&args, "rows")?, arg(&args, "cols")?),
             "open_tab" => open_tab(&self.app, &self.state, window, arg(&args, "rows")?, arg(&args, "cols")?, arg(&args, "profileId")?).map(|id| json!(id)),
+            "prepare_terminal" => {
+                let _startup = self.state.startup.lock();
+                if self.state.windows.lock().pending(window) { return Err("Window is preparing an external session".into()); }
+                let id = spawn_tab_with(&self.app, &self.state, window, arg(&args,"rows")?, arg(&args,"cols")?, None, false, true, LaunchSpec::ProfileDefault, None)?;
+                self.state.windows.lock().select(window, &id); self.state.hub.set_attended(&id); Ok(json!(id))
+            },
             "ui_ready" => { self.state.windows.lock().mark_ready(window); Ok(Value::Null) },
             "attend" => {
                 let session: String = arg(&args, "session")?;
@@ -213,10 +221,10 @@ fn terminal_output(app: AppHandle, session: String) -> conn_core::session::Outpu
 }
 
 fn spawn_tab(app: &AppHandle, state: &AppState, window: &str, rows: u16, cols: u16, profile_id: Option<&str>) -> Result<String, String> {
-    spawn_tab_with(app, state, window, rows, cols, profile_id, false, LaunchSpec::ProfileDefault, None)
+    spawn_tab_with(app, state, window, rows, cols, profile_id, false, false, LaunchSpec::ProfileDefault, None)
 }
 
-fn spawn_tab_with(app: &AppHandle, state: &AppState, window: &str, mut rows: u16, mut cols: u16, profile_id: Option<&str>, external_private: bool, launch: LaunchSpec, caller_alive: Option<&(dyn Fn() -> bool + Send + Sync)>) -> Result<String, String> {
+fn spawn_tab_with(app: &AppHandle, state: &AppState, window: &str, mut rows: u16, mut cols: u16, profile_id: Option<&str>, external_private: bool, start_private: bool, launch: LaunchSpec, caller_alive: Option<&(dyn Fn() -> bool + Send + Sync)>) -> Result<String, String> {
     let profiles = conn_core::profiles::Profiles::load(&state.config_dir.join("profiles.json"))?;
     let profile = profiles.profiles.iter().find(|p| p.id == profile_id.unwrap_or(&profiles.default_profile)).ok_or("Unknown profile")?.clone();
     let availability = profile.availability();
@@ -300,6 +308,7 @@ fn spawn_tab_with(app: &AppHandle, state: &AppState, window: &str, mut rows: u16
         }),
     );
     if !external_private { apply_defaults(&state.defaults.lock(), engine.as_ref()); }
+    if start_private { engine.session().lock().set_shared(false).map_err(|e|e.to_string())?; }
     state.hub.add(&id, engine.session());
     state.engines.lock().insert(id.clone(), engine);
     if let Some(pending) = pending.as_mut() { pending.remove(&id); }
@@ -613,6 +622,8 @@ fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Resul
         },
         "open_release" => updates::open(&arg::<String>(&args, "url")?).map(|_| Value::Null),
         "admission_snapshot" => Ok(json!(state.hub.admission_snapshot())),
+        "activity_snapshot" => Ok(json!(state.hub.activity_snapshot())),
+        "dismiss_preparation" => Ok(json!({"dismissed":state.hub.dismiss_preparation(arg(&args,"connId")?, arg(&args,"requestId")?)})),
         "pending_admissions" => Ok(json!(state.hub.pending_admissions().into_iter().map(|a| json!({"connId":a.conn_id,"agentId":a.agent_id})).collect::<Vec<_>>())),
         "admission_policy" => Ok(json!({"ask": state.hub.admission_policy() == AdmissionPolicy::Ask})),
         "set_admission" => set_admission(state, arg::<bool>(&args, "ask")?),

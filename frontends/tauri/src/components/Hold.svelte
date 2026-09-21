@@ -12,7 +12,7 @@
 
 
 {#if cur().approval}
-  <DecisionCard agent={a.agentId} label={a.label} busy={action.busy} error={action.error}>
+  <DecisionCard requestKey={`${st.active}:review:${a.id}`} agent={a.agentId} label={a.label} busy={action.busy} error={action.error}>
     <p class="reason">{a.intent || t("hold.no_intent")}</p>
     {#if targets.length}
       <ul class="targets">

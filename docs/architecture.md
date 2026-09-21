@@ -44,7 +44,10 @@ palette commands. See [ownership, lock order and validation](collaboration-refac
 
 A grid revision identifies `surfaceId`, `generation`, `revision`, `outputSeq`,
 size, visible text, nullable cursor and alternate-screen state. The core parses PTY
-output with a bounded, zero-scrollback terminal model. Snapshots are text-only.
+output with a bounded terminal model. Normal-buffer resize uses up to 5,000 internal
+history rows, matching the owner's terminal, to preserve soft wraps and viewport position.
+Snapshots remain text-only projections of the current grid; there is no history query.
+Alternate screens resize without reflow, and the application redraws the cursor's logical line.
 
 Sharing changes advance the generation; output, cursor and resize changes update the
 screen revision. No foreground,

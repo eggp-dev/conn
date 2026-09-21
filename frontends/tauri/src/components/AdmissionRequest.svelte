@@ -4,7 +4,8 @@
   import { decideAdmission } from '../lib/collaboration/api';
   import { requestAction } from '../lib/collaboration/decision.svelte';
   import DecisionCard from './DecisionCard.svelte';
-  const r = $derived(st.admissions[0]);
+  let { focused }: {focused?:number}=$props();
+  const r = $derived(st.admissions.find(a=>a.connId===focused) ?? st.admissions[0]);
   const action = $derived(requestAction(`admission:${r?.connId ?? "none"}`));
   async function decide(allow: boolean) {
     const request = r;
@@ -16,7 +17,7 @@
 </script>
 {#if r}
   {#key r.connId}
-    <DecisionCard agent={r.agentId} label={t('admission.asks')} busy={action.busy} error={action.error}>
+    <DecisionCard requestKey={`connection:${r.connId}`} agent={r.agentId} label={t('admission.asks')} busy={action.busy} error={action.error}>
       <p class="reason">{t('admission.desc')}</p>
       {#if st.admissions.length > 1}<span class="muted">{t('admission.more', { n: st.admissions.length - 1 })}</span>{/if}
       {#snippet actions()}

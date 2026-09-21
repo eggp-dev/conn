@@ -7,7 +7,7 @@
   import { cmd } from "../lib/bridge";
   import { st, cur, toast } from "../lib/store.svelte";
   import { agentColor } from "../lib/themes";
-  let { onopen }: { onopen: () => void } = $props();
+  let { onopen, onnotice }: { onopen: () => void; onnotice: (target?: import("../lib/collaboration/activity").NoticeTarget) => void } = $props();
   const t = $derived(cur());
   let stopping = $state(false);
   async function stopExternal() {
@@ -52,11 +52,12 @@
   <span class="core"></span>
   <span class="lbl">{label}</span>
 </button>
+{/if}
 
 <!-- pill (announcement) -->
 {#if st.announcement}
   {#key st.announcement.id}
-    <button class="pill {st.announcement.kind}" style:--c={st.announcement.color} style:--ms="{st.announcement.ms}ms" onclick={onopen}>
+    <button class="pill {st.announcement.kind}" style:--c={st.announcement.color} style:--ms="{st.announcement.ms}ms" onclick={()=>onnotice(st.announcement?.target)}>
       <span class="core"></span>
       <span class="text">
         {#each words as w, i}<span class="w" style:animation-delay="{60 + i * 45}ms">{w}</span>{/each}
@@ -64,8 +65,6 @@
       {#if st.announcement.detail}<span class="detail">{st.announcement.detail}</span>{/if}
     </button>
   {/key}
-{/if}
-
 {/if}
 
 <style>

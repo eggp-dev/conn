@@ -1044,6 +1044,7 @@ impl Session {
     /// Agent: ask the human to look at this session.
     pub fn agent_request_attention(&mut self, conn: ConnId, reason: Option<String>) -> Result<(), SessionError> {
         self.require_participant(conn)?;
+        self.check_mask(Affordance::RequestAttention)?;
         let agent_id = self.agent_name(conn);
         let req = AttentionRequest { agent_id: agent_id.clone(), reason: reason.clone(), at: chrono::Local::now().format("%H:%M:%S").to_string() };
         self.attention_request = Some(req);
@@ -1081,7 +1082,7 @@ impl Session {
             return Err(SessionError::NotAvailable("participation not granted".into()));
         }
         self.check_mask(Affordance::SwitchTab)?;
-        if !self.tabs_supported || self.mode == AgentMode::Observe {
+        if !self.tabs_supported {
             return Err(SessionError::NotAvailable("switch_tab".into()));
         }
         Ok(())
@@ -1212,7 +1213,7 @@ impl Session {
             out.retain(|a| mask.contains(a));
         }
         if matches!(actor, Actor::Agent { .. }) && self.mode == AgentMode::Observe {
-            out.retain(|a| *a == Affordance::Snapshot);
+            out.retain(|a| matches!(a, Affordance::Snapshot | Affordance::RequestAttention | Affordance::SwitchTab | Affordance::CheckApproval));
         }
         out
     }

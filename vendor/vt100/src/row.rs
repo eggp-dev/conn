@@ -75,6 +75,10 @@ impl Row {
         self.wrapped = false;
     }
 
+    pub fn grow(&mut self, len: u16) {
+        if usize::from(len) > self.cells.len() { self.cells.resize(usize::from(len), crate::cell::Cell::default()); }
+    }
+
     pub fn wrap(&mut self, wrap: bool) {
         self.wrapped = wrap;
     }

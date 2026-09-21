@@ -47,6 +47,13 @@ impl Parser {
         self.screen.set_scrollback(rows);
     }
 
+    /// Resize normal-buffer soft wraps like the owner terminal. The alternate
+    /// screen and the logical line containing the cursor are left for the
+    /// running program to redraw. History remains bounded by `new`'s limit.
+    pub fn set_size_reflow(&mut self, rows: u16, cols: u16) {
+        self.screen.set_size_reflow(rows, cols);
+    }
+
     /// Returns a reference to a `Screen` object containing the terminal
     /// state.
     #[must_use]

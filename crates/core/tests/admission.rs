@@ -33,6 +33,51 @@ fn wait_until(what: &str, ready: impl Fn() -> bool) {
 }
 
 #[test]
+fn preparation_works_without_sessions_and_never_grants_access() {
+    let hub=Arc::new(Hub::new());hub.set_admission_policy(AdmissionPolicy::Ask);
+    let (_dir,path,_guard)=serve(&hub);
+    let agent=Arc::new(Client::connect(&path).unwrap());let conn=agent.hello("agent","preparation").unwrap()["conn"].as_u64().unwrap();
+    let waiting={let a=agent.clone();std::thread::spawn(move||a.call("request_attention",json!({"reason":"Choose a fixture shell"})))};
+    std::thread::sleep(Duration::from_millis(60));assert!(hub.activity_snapshot().connections.is_empty());assert!(!waiting.is_finished());
+    hub.decide_admission(conn,true);let request=waiting.join().unwrap().unwrap();assert_eq!(request["scope"],"connection");
+    assert_eq!(agent.call("navigation_affordances",json!({})).unwrap(),json!(["request_attention"]));
+    assert_eq!(agent.call("request_attention",json!({})).unwrap()["requestId"],request["requestId"]);
+    let tab=session();tab.lock().set_shared(false).unwrap();hub.add("existing",tab.clone());
+    assert_eq!(agent.call("list_tabs",json!({})).unwrap()["tabs"],0);
+    assert!(agent.call("snapshot",json!({"session":"existing"})).is_err());
+    assert!(hub.activity_snapshot().connections[0].preparation.is_some());
+    tab.lock().set_shared_with_agents(true,vec![conn]).unwrap();
+    assert!(hub.activity_snapshot().connections[0].preparation.is_none());
+    assert!(matches!(tab.lock().status().controller,ControllerInfo::Human));
+    assert!(agent.call("activity_snapshot",json!({})).is_err());
+    assert!(agent.call("prepare_terminal",json!({})).is_err());
+}
+
+#[test]
+fn observe_can_navigate_and_request_attention_but_cannot_acquire_or_write() {
+    use conn_core::session::AgentMode;
+    let first=session();let second=session();
+    first.lock().set_mode(AgentMode::Observe).unwrap();second.lock().set_mode(AgentMode::Observe).unwrap();
+    let hub=Hub::single("first",first);hub.add("second",second.clone());hub.set_opener(Arc::new(|_,_|Err("unused".into())));
+    let (_dir,path,_guard)=serve(&hub);let agent=Client::connect(&path).unwrap();agent.hello("agent","observer").unwrap();
+    agent.call("switch_tab",json!({"tab":"second"})).unwrap();agent.call("snapshot",json!({})).unwrap();agent.call("request_attention",json!({"reason":"Please inspect"})).unwrap();
+    let affordances=agent.call("affordances",json!({})).unwrap();assert!(affordances.as_array().unwrap().contains(&json!("request_attention")));
+    assert_eq!(code(agent.call("request_control",json!({}))),"wrong_mode");assert!(agent.call("type",json!({"text":"x"})).is_err());
+    second.lock().set_affordance_mask(Some([Affordance::Snapshot].into_iter().collect()));
+    assert_eq!(code(agent.call("request_attention",json!({}))),"masked");
+}
+
+#[test]
+fn activity_tracks_explicit_targets_and_discovery_cannot_move_it() {
+    let hub=Hub::single("first",session());hub.add("second",session());
+    let (_dir,path,_guard)=serve(&hub);let a=Client::connect(&path).unwrap();a.hello("agent","reader").unwrap();
+    a.call("snapshot",json!({"session":"second"})).unwrap();
+    a.call("list_tabs",json!({})).unwrap();a.call("status",json!({})).unwrap();
+    assert_eq!(hub.activity_snapshot().connections[0].session.as_deref(),Some("second"));
+    drop(a);wait_until("activity removed",||hub.activity_snapshot().connections.is_empty());
+}
+
+#[test]
 fn pending_connection_learns_nothing_until_the_owner_allows_it() {
     let hub = Hub::single("tab", session());
     hub.set_admission_policy(AdmissionPolicy::Ask);

@@ -76,3 +76,20 @@ the test backend. CLI staging and backups remain under the test state directory.
 
 Run `npm test` in `frontends/tauri` for the timeline, icon-state,
 connection-status and terminal-input checks. They need neither a browser nor the native backend.
+
+## Collaboration context and screen parity
+
+Build `cargo build -p conn-browser-harness --locked` at the repository root, then run
+`npm run test:context:harness` from `frontends/tauri`. This uses the same UI, Rust backend,
+real local PTYs and persistent agent sockets. It covers background tab requests and notification
+targets, human takeover, fresh connection admission, retained shell state, Observe navigation,
+sessionless preparation, explicit sharing, EN/KO and a narrow viewport. It uses ports 1461/1463;
+override `CONN_HARNESS_UI_PORT` and `CONN_HARNESS_PORT` if needed.
+Screenshots, video, state and grid comparisons are written under the printed temporary directory.
+`CONN_CONTEXT_OUTPUT` overrides the evidence location. Native attention delivery is not simulated.
+
+`npm run test:screen` compares the installed xterm parser with a JSON-lines probe of the real Rust
+`ScreenModel`. It checks rows and cursor positions after ASCII, Korean, combining marks, emoji,
+soft wraps, scroll, height/width changes and alternate-screen transitions. The browser test separately
+compares actual rendered rows against agent snapshots. Neither test proves every terminal program,
+Unicode sequence, SSH connection or native window-manager behavior.

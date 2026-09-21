@@ -116,6 +116,11 @@ impl Screen {
             .set_size(crate::grid::Size { rows, cols });
     }
 
+    pub(crate) fn set_size_reflow(&mut self, rows: u16, cols: u16) {
+        self.grid.set_size_reflow(crate::grid::Size { rows, cols }, true);
+        self.alternate_grid.set_size_reflow(crate::grid::Size { rows, cols }, false);
+    }
+
     /// Returns the current size of the terminal.
     ///
     /// The return value will be (rows, cols).
@@ -825,30 +830,10 @@ impl Screen {
             // width() can only return 0, 1, or 2
             .unwrap();
 
-        // it doesn't make any sense to wrap if the last column in a row
-        // didn't already have contents. don't try to handle the case where a
-        // character wraps because there was only one column left in the
-        // previous row - literally everything handles this case differently,
-        // and this is tmux behavior (and also the simplest). i'm open to
-        // reconsidering this behavior, but only with a really good reason
-        // (xterm handles this by introducing the concept of triple width
-        // cells, which i really don't want to do).
-        let mut wrap = false;
-        if pos.col > size.cols - width {
-            let last_cell = self
-                .grid()
-                .drawing_cell(crate::grid::Pos {
-                    row: pos.row,
-                    col: size.cols - 1,
-                })
-                // pos.row is valid, since it comes directly from
-                // self.grid().pos() which we assume to always have a valid
-                // row value. size.cols - 1 is also always a valid column.
-                .unwrap();
-            if last_cell.has_contents() || last_cell.is_wide_continuation() {
-                wrap = true;
-            }
-        }
+        // A wide glyph also soft-wraps when only one column remains. Keep
+        // that relationship even though the padding cell has no contents;
+        // otherwise a later resize cannot rejoin the logical line.
+        let wrap = pos.col > size.cols.saturating_sub(width);
         self.grid_mut().col_wrap(width, wrap);
         let pos = self.grid().pos();
 
@@ -1174,6 +1159,7 @@ impl Screen {
             0 => self.grid_mut().erase_all_forward(attrs),
             1 => self.grid_mut().erase_all_backward(attrs),
             2 => self.grid_mut().erase_all(attrs),
+            3 => self.grid_mut().clear_scrollback(),
             n => {
                 log::debug!("unhandled ED mode: {n}");
             }
