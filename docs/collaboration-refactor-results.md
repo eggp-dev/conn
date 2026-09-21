@@ -4,7 +4,7 @@
 
 2026-09-21 · Implementation based on `263f255`, in the working tree.
 **S0–S3 implemented; S4 local acceptance passed, native platform acceptance remains open.**
-This is not a release certification. No version bump, publication, or signing-key access is part of this change.
+This report records implementation validation before the 0.8.3 version bump. It is not a release certification. See the [0.8.3 changelog](../CHANGELOG.md) for the subsequent release scope and remaining native verification. Signing credentials stay in release CI.
 
 ## Responsibility boundaries
 
