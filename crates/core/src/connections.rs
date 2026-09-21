@@ -1,4 +1,4 @@
-//! App-wide admission and live connection identity; no sessions or terminal access.
+//! App-wide admission, live identity and navigation metadata; never grants terminal access.
 use crate::{authority::ConnId, session::AgentConnection};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -7,7 +7,25 @@ struct AgentRegistration {
     last_seen: std::time::Instant,
     catalog_changed: tokio::sync::mpsc::UnboundedSender<()>,
     admission: tokio::sync::watch::Sender<Admission>,
+    session: Option<String>,
+    preparation: Option<PreparationRequest>,
+    last_preparation: Option<std::time::Instant>,
 }
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreparationRequest { pub id: u64, pub reason: Option<String> }
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionActivity {
+    pub conn_id: ConnId,
+    pub agent_id: String,
+    pub session: Option<String>,
+    pub preparation: Option<PreparationRequest>,
+}
+#[derive(Serialize)]
+pub struct ActivitySnapshot { pub revision: u64, pub connections: Vec<ConnectionActivity> }
+pub type ActivityListener = Arc<dyn Fn() + Send + Sync>;
 
 /// Whether a new agent connection participates at once or waits for the owner.
 /// Ordinary tabs are open to every admitted connection, so admission is where
@@ -53,6 +71,7 @@ struct State {
 pub struct ConnectionRegistry {
     state: parking_lot::Mutex<State>,
     listener: parking_lot::Mutex<Option<AdmissionListener>>,
+    activity_listener: parking_lot::Mutex<Option<ActivityListener>>,
 }
 impl Default for ConnectionRegistry {
     fn default() -> Self {
@@ -63,10 +82,58 @@ impl Default for ConnectionRegistry {
                 policy: AdmissionPolicy::Allow,
             }),
             listener: Default::default(),
+            activity_listener: Default::default(),
         }
     }
 }
 impl ConnectionRegistry {
+    pub fn set_activity_listener(&self, listener: ActivityListener) { *self.activity_listener.lock() = Some(listener); }
+    fn activity_changed(&self) {
+        let listener = self.activity_listener.lock().clone();
+        if let Some(listener) = listener { listener(); }
+    }
+    pub fn activity_snapshot(&self) -> ActivitySnapshot {
+        let state = self.state.lock();
+        let mut connections: Vec<_> = state.agents.iter()
+            .filter(|(_, a)| *a.admission.borrow() == Admission::Granted)
+            .map(|(id, a)| ConnectionActivity { conn_id: *id, agent_id: a.name.clone(), session: a.session.clone(), preparation: a.preparation.clone() }).collect();
+        connections.sort_by_key(|a| a.conn_id);
+        ActivitySnapshot { revision: state.revision, connections }
+    }
+    pub(crate) fn bind(&self, conn: ConnId, session: &str) {
+        let changed = {
+            let mut state = self.state.lock();
+            if let Some(a) = state.agents.get_mut(&conn).filter(|a| *a.admission.borrow() == Admission::Granted) {
+                if a.session.as_deref() == Some(session) && a.preparation.is_none() { false }
+                else { a.session = Some(session.into()); a.preparation = None; state.revision += 1; true }
+            } else { false }
+        };
+        if changed { self.activity_changed(); }
+    }
+    /// One live request per admitted connection. Dismissed requests have a short cooldown.
+    pub(crate) fn request_preparation(&self, conn: ConnId, reason: Option<String>) -> Option<PreparationRequest> {
+        let request = {
+            let mut state = self.state.lock();
+            let revision = state.revision + 1;
+            let a = state.agents.get_mut(&conn).filter(|a| *a.admission.borrow() == Admission::Granted)?;
+            if let Some(request) = &a.preparation { return Some(request.clone()); }
+            if a.last_preparation.is_some_and(|at| at.elapsed().as_secs() < 10) { return None; }
+            let request = PreparationRequest { id: revision, reason };
+            a.preparation = Some(request.clone()); a.last_preparation = Some(std::time::Instant::now());
+            state.revision = revision;
+            request
+        };
+        self.activity_changed(); Some(request)
+    }
+    pub fn dismiss_preparation(&self, conn: ConnId, id: u64) -> bool {
+        let changed = {
+            let mut state = self.state.lock();
+            if let Some(a) = state.agents.get_mut(&conn).filter(|a| a.preparation.as_ref().is_some_and(|r| r.id == id)) {
+                a.preparation = None; state.revision += 1; true
+            } else { false }
+        };
+        if changed { self.activity_changed(); } changed
+    }
     fn connections(state: &State, admission: Admission) -> Vec<AgentConnection> {
         let mut out: Vec<_> = state
             .agents
@@ -102,6 +169,7 @@ impl ConnectionRegistry {
         if let Some(listener) = listener {
             listener(change);
         }
+        self.activity_changed();
     }
     pub fn set_policy(&self, policy: AdmissionPolicy) {
         let events = {
@@ -170,6 +238,9 @@ impl ConnectionRegistry {
                     last_seen: std::time::Instant::now(),
                     catalog_changed,
                     admission,
+                    session: None,
+                    preparation: None,
+                    last_preparation: None,
                 },
             );
             state.revision += 1;
@@ -224,6 +295,28 @@ impl ConnectionRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn preparation_requires_admission_coalesces_and_does_not_survive_reconnect() {
+        let r=Arc::new(ConnectionRegistry::default());r.set_policy(AdmissionPolicy::Ask);
+        let weak=Arc::downgrade(&r);
+        r.set_activity_listener(Arc::new(move || { let _=weak.upgrade().unwrap().activity_snapshot(); }));
+        let (tx,_)=tokio::sync::mpsc::unbounded_channel();r.register(1,"same",tx);
+        assert!(r.request_preparation(1,None).is_none());assert!(r.activity_snapshot().connections.is_empty());
+        r.decide(1,true);
+        let first=r.request_preparation(1,Some("fixture".into())).unwrap();
+        assert_eq!(r.request_preparation(1,None).unwrap().id,first.id);
+        assert!(!r.dismiss_preparation(1,first.id+1));
+        assert!(r.dismiss_preparation(1,first.id));
+        assert!(r.request_preparation(1,None).is_none(),"dismissal cooldown");
+        r.state.lock().agents.get_mut(&1).unwrap().last_preparation=None;
+        let next=r.request_preparation(1,None).unwrap();assert!(next.id>first.id);
+        assert!(!r.dismiss_preparation(1,first.id),"old UI cannot dismiss a replacement");
+        r.bind(1,"tab");let snapshot=r.activity_snapshot();
+        assert_eq!(snapshot.connections[0].session.as_deref(),Some("tab"));assert!(snapshot.connections[0].preparation.is_none());
+        r.forget(1);assert!(r.activity_snapshot().connections.is_empty());
+        let (tx,_)=tokio::sync::mpsc::unbounded_channel();r.register(2,"same",tx);r.decide(2,true);
+        let snapshot=r.activity_snapshot();assert!(snapshot.connections[0].session.is_none());assert!(snapshot.connections[0].preparation.is_none());
+    }
     #[test]
     fn snapshots_and_events_share_a_revision_and_callbacks_can_read_state() {
         let registry = Arc::new(ConnectionRegistry::default());

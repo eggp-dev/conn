@@ -14,7 +14,7 @@
 </script>
 {#if r}
   {#key `${st.active}:${r.id}`}
-    <DecisionCard agent={r.agentId} label={t('ctl.asks')} busy={action.busy} error={action.error}>
+    <DecisionCard requestKey={`${st.active}:control:${r.id}`} agent={r.agentId} label={t('ctl.asks')} busy={action.busy} error={action.error}>
       {#if r.reason}<p class="reason">{r.reason}</p>{/if}
       <RequestDetails request={r.originalRequest} />
       {#snippet actions()}

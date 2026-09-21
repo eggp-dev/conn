@@ -312,6 +312,8 @@ every possible combination indiscriminately.
 - Address regressions with fixes or reverting the affected sprint change, never by bypassing
   admission or weakening private-session boundaries.
 
+The [product backlog](product-backlog.md) tracks the 2026-09-21 field feedback, priorities and acceptance criteria.
+
 Follow-up backlog: a separate TUI `input_pending` investigation; native staged diagnostics without
 payload disclosure; unrelated UI warnings and settings improvements.
 

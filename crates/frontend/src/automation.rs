@@ -269,7 +269,7 @@ pub(crate) fn dispatch(app: &AppHandle, state: &Arc<AppState>, window: &str, cal
             }
             crate::ensure_runtime(app, state).map_err(|_| "Cannot initialize terminal")?;
             if !(caller.still_alive)() || !state.windows.lock().ready(window) { return Err("External session unavailable".into()); }
-            let id = crate::spawn_tab_with(app, state, window, 24, 80, Some(profile), true, launch, Some(caller.still_alive.as_ref()))
+            let id = crate::spawn_tab_with(app, state, window, 24, 80, Some(profile), true, false, launch, Some(caller.still_alive.as_ref()))
                 .map_err(|_| "Cannot start external session")?;
             let session = state.hub.get(&id).ok_or("Session unavailable")?;
             let handle = uuid::Uuid::new_v4().to_string();

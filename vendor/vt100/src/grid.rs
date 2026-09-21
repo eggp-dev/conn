@@ -96,6 +96,119 @@ impl Grid {
         self.pos
     }
 
+    /// Normal-buffer resize, matching the owner's xterm viewport rules. Retain
+    /// cell attributes and wide-character pairs, not just reconstructed text.
+    pub fn set_size_reflow(&mut self, size: Size, reflow: bool) {
+        if self.rows.is_empty() || size.cols < 2 {
+            self.set_size(size);
+            return;
+        }
+        let old = self.size;
+        let mut base = self.scrollback.len();
+        let mut lines: Vec<_> = self.scrollback.drain(..).chain(self.rows.drain(..)).collect();
+        let mut y = usize::from(self.pos.row);
+        let height = usize::from(size.rows);
+        // Height changes discard spare rows below the cursor first. A growing
+        // viewport only pulls history when the cursor was at the bottom.
+        if size.rows > old.rows {
+            for _ in old.rows..size.rows {
+                if lines.len() < height + base {
+                    if base > 0 && lines.len() <= base + y + 1 {
+                        base -= 1;
+                        y += 1;
+                    } else {
+                        lines.push(crate::row::Row::new(old.cols));
+                    }
+                }
+            }
+        } else {
+            for _ in size.rows..old.rows {
+                if lines.len() > height + base {
+                    if lines.len() > base + y + 1 { lines.pop(); }
+                    else { base += 1; }
+                }
+            }
+            y = y.min(height - 1);
+        }
+        let cursor = base + y;
+        let mut added = 0;
+        let mut removed = 0;
+        if reflow && size.cols != old.cols {
+            let mut reflowed = Vec::with_capacity(lines.len());
+            let mut start = 0;
+            while start < lines.len() {
+                let mut end = start + 1;
+                while end < lines.len() && lines[end - 1].wrapped() { end += 1; }
+                let group = &lines[start..end];
+                if (start..end).contains(&cursor) || (size.cols > old.cols && group.len() == 1) {
+                    for row in group {
+                        let wrapped = row.wrapped();
+                        let mut row = row.clone();
+                        row.resize(size.cols, crate::cell::Cell::default());
+                        if row.get(size.cols - 1).is_some_and(crate::cell::Cell::is_wide) {
+                            *row.get_mut(size.cols - 1).unwrap() = crate::cell::Cell::default();
+                        }
+                        row.wrap(wrapped);
+                        reflowed.push(row);
+                    }
+                } else {
+                    let mut cells = Vec::new();
+                    for (index, row) in group.iter().enumerate() {
+                        let mut length = old.cols;
+                        if index + 1 == group.len() {
+                            while length > 0 && row.get(length - 1).is_none_or(|c| !c.has_contents() && !c.is_wide_continuation()) { length -= 1; }
+                        } else if row.get(old.cols - 1).is_some_and(|c| !c.has_contents() && !c.is_wide_continuation())
+                            && group[index + 1].get(0).is_some_and(crate::cell::Cell::is_wide) {
+                            // A wide glyph moved to the next row, leaving one pad cell.
+                            length -= 1;
+                        }
+                        cells.extend((0..length).filter_map(|col| row.get(col).cloned()));
+                    }
+                    let before = reflowed.len();
+                    let mut row = crate::row::Row::new(size.cols);
+                    let mut col = 0;
+                    for cell in cells {
+                        if col == size.cols || (cell.is_wide() && col + 1 == size.cols) {
+                            row.wrap(true);
+                            reflowed.push(row);
+                            row = crate::row::Row::new(size.cols);
+                            col = 0;
+                        }
+                        *row.get_mut(col).unwrap() = cell;
+                        col += 1;
+                    }
+                    reflowed.push(row);
+                    let count = reflowed.len() - before;
+                    added += count.saturating_sub(group.len());
+                    removed += group.len().saturating_sub(count);
+                }
+                start = end;
+            }
+            lines = reflowed;
+        } else if !reflow && size.cols > old.cols {
+            for row in &mut lines { row.grow(size.cols); }
+        }
+        for _ in 0..added {
+            if base == 0 && y < height - 1 { y += 1; lines.pop(); }
+            else { base += 1; }
+        }
+        for _ in 0..removed {
+            if base > 0 { base -= 1; }
+            else { y = y.saturating_sub(1); }
+        }
+        lines.resize_with(base + height, || crate::row::Row::new(size.cols));
+        self.rows = lines.split_off(base);
+        self.scrollback = lines.into_iter().skip(base.saturating_sub(self.scrollback_len)).collect();
+        self.scrollback_offset = self.scrollback_offset.min(self.scrollback.len());
+        self.size = size;
+        self.pos.row = y.min(height - 1) as u16;
+        self.pos.col = self.pos.col.min(size.cols - 1);
+        self.saved_pos.row = self.saved_pos.row.saturating_add(added.min(u16::MAX as usize) as u16).saturating_sub(removed.min(u16::MAX as usize) as u16).min(size.rows - 1);
+        self.saved_pos.col = self.saved_pos.col.min(size.cols - 1);
+        self.scroll_top = 0;
+        self.scroll_bottom = size.rows - 1;
+    }
+
     pub fn set_pos(&mut self, mut pos: Pos) {
         if self.origin_mode {
             pos.row = pos.row.saturating_add(self.scroll_top);
@@ -182,6 +295,11 @@ impl Grid {
 
     pub fn set_scrollback(&mut self, rows: usize) {
         self.scrollback_offset = rows.min(self.scrollback.len());
+    }
+
+    pub fn clear_scrollback(&mut self) {
+        self.scrollback.clear();
+        self.scrollback_offset = 0;
     }
 
     pub fn write_contents(&self, contents: &mut String) {

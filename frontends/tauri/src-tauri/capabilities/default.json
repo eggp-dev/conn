@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Conn windows: scoped core commands and events",
   "windows": ["main", "automation-*"],
-  "permissions": ["core:default", "core:event:default", "core:window:default"]
+  "permissions": ["core:default", "core:event:default", "core:window:default", "core:window:allow-request-user-attention", "core:window:allow-is-focused"]
 }

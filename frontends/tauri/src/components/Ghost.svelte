@@ -5,7 +5,7 @@
  const proposal=$derived(cur().proposal);
 </script>
 {#if proposal}
-<section class="proposal conn-popover" aria-label={t('ext.proposal')}>
+<section class="proposal conn-popover" data-request-key={`${cur().id}:proposal:${proposal.id}`} tabindex="-1" aria-label={t('ext.proposal')}>
  <header><b>{proposal.agentId}</b><span class="muted">{t('ext.proposal')}</span></header>
  {#if proposal.intent}<p>{proposal.intent}</p>{/if}
  <code>{proposal.text}</code>

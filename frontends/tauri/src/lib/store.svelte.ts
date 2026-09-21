@@ -1,6 +1,7 @@
 import { newTimeline, type TimelineState } from "./timeline";
 import type { Mode, Pacing } from "./bridge";
 import type { ThemeId } from "./themes";
+import type { ActivitySnapshot, NoticeTarget } from './collaboration/activity';
 
 export type Toast = { id: number; text: string; cls: string };
 export type Target = { path: string; exists: boolean; isDir: boolean; gitRepo: boolean; entries: number | null; protected: boolean };
@@ -30,6 +31,8 @@ export type TabState = {
   /** The agent that opened this tab, if an agent did. */
   openedBy: string | null;
   controller: { type: "human" | "agent"; agentId?: string };
+  leaseExpiresAt?: number;
+  controlReason?: string;
   mode: Mode;
   effectiveMode: Mode;
   gate: boolean;
@@ -59,9 +62,10 @@ export function newTab(id: string, n: number): TabState {
 }
 
 /** Island announcement: a short message shown in the centre, then collapsed to the dot. */
-export type Announcement = { id: number; text: string; detail?: string; ms: number; color: string; kind: "conn" | "approval" | "attention" | "info" | "warn" };
+export type Announcement = { id: number; text: string; detail?: string; ms: number; color: string; kind: "conn" | "approval" | "attention" | "info" | "warn"; target?: NoticeTarget };
 
 export const st = $state({
+  activity: {revision:-1,connections:[]} as ActivitySnapshot,
   externalPending: false,
   backendOnline: false,
   socket: "",
@@ -107,9 +111,9 @@ export function toast(text: string, cls = "") {
 
 let annSeq = 0;
 let annTimer: number | null = null;
-export function announce(text: string, color: string, kind: Announcement["kind"] = "info", ms = 2600, detail?: string) {
+export function announce(text: string, color: string, kind: Announcement["kind"] = "info", ms = 2600, detail?: string, target?: NoticeTarget) {
   const id = ++annSeq;
-  st.announcement = { id, text, detail: detail?.trim() || undefined, ms, color, kind };
+  st.announcement = { id, text, detail: detail?.trim() || undefined, ms, color, kind, target };
   if (annTimer) clearTimeout(annTimer);
   annTimer = window.setTimeout(() => { if (st.announcement?.id === id) st.announcement = null; }, ms);
 }

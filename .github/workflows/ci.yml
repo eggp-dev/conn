@@ -84,6 +84,9 @@ jobs:
       - run: python -m unittest discover -s tests/release -v
       - run: npm test
         working-directory: frontends/tauri
+      - name: Core and renderer screen parity
+        run: npm run test:screen
+        working-directory: frontends/tauri
       - run: npm run build
         working-directory: frontends/tauri
       - name: The website builds, including the pages it generates from docs/
@@ -171,6 +174,8 @@ jobs:
       - run: npm run test:collaboration
         working-directory: frontends/tauri
       - run: npm run test:collaboration:harness
+        working-directory: frontends/tauri
+      - run: npm run test:context:harness
         working-directory: frontends/tauri
   required:
     name: Required checks

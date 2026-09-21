@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.8.4 — Preview · 2026-09-21
+
+- Keep pending requests, active control and recent agent activity visible across tabs. Clicking a notice opens the exact terminal and request; opening or switching an agent's tab preserves the person's current selection.
+- Let admitted agents without an available shell request terminal preparation. Choose an existing terminal, create a private one, or defer; sharing remains an explicit decision. Duplicate requests coalesce and dismissed requests have a short cooldown.
+- Improve Observe navigation, lease-expiry guidance and reconnect instructions. Reconnect to the existing live shell by its stable ID; a new connection does not inherit sharing or control by name.
+- Fix truncated and mismatched agent snapshots after resizing long wrapped output. Normal-screen reflow preserves text and attributes, alternate screens keep their layout, and Unicode width handling matches the tested UI output.
+
+Validation: 254 Rust tests (one existing ignored test), 48 frontend tests, 12 stages in the production-UI/real-Rust browser harness and 85 core/xterm screen comparisons passed locally. See [implementation and validation](docs/collaboration-context-results.md). Native taskbar/Dock attention, minimized/multiple windows, Mac/Windows interactive collaboration, real SSH reconnect/reauthentication and installed-app upgrades remain unverified for this patch. Release CI, artifact signatures and notarization are checked separately.
+
+한국어: 여러 탭의 대기 요청·제어 상태·최근 에이전트 작업을 함께 표시하고, 안내에서 정확한 셸과 요청으로 이동합니다. 에이전트가 다른 탭으로 이동해도 사람이 보는 탭은 유지합니다. 셸이 없는 에이전트는 준비를 부탁할 수 있으며, 새 셸도 비공개로 시작해 사람이 공유를 결정합니다. Observe 이동·제어 만료·기존 셸 재접속 안내를 개선하고, 긴 출력의 크기 변경 시 화면과 스냅샷이 달라지던 오류를 수정했습니다.
+
+한국어: Rust 254개·프런트엔드 48개·실제 UI와 Rust 하네스 12단계·화면 교차 비교 85회를 통과했습니다. [구현·검증 결과](docs/collaboration-context-results.ko.md)에 범위를 기록했습니다. 네이티브 알림과 최소화·다중 창, Mac·Windows 대화형 협업, 실제 SSH 재접속·재인증, 설치된 앱의 업그레이드는 이번 패치에서 아직 검증하지 않았습니다.
+
 ## 0.8.3 — Preview · 2026-09-21
 
 Validation: 246 Rust tests, 46 frontend tests, 78 release tests, production-App browser fixtures, the real Rust Harness collaboration flow and a real OpenSSH authentication/sharing regression passed locally. Interactive testing of this patch on macOS was not performed because the test Mac is offline; Linux/Windows native GUI acceptance and installed-app upgrade coverage also remain open. Release CI and signing checks are reported separately.

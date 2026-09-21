@@ -7,7 +7,7 @@ export type SessionSnapshot = {
   profileId: string | null; profileName: string | null; reviewRequired: boolean;
   mode: Mode; effectiveMode: Mode; controlGate: boolean; pacing: Pacing;
   sessionAllows: string[]; affordanceMask: string[] | null; connectedAgents: string[];
-  controller: TabState['controller']; attentionRequest: {agentId: string; reason?: string | null} | null; openedBy: string | null;
+  controller: TabState['controller'] & {expiresInSecs?:number}; attentionRequest: {agentId: string; reason?: string | null} | null; openedBy: string | null;
   lastAgent: TabState['lastAgent'];
   scheduled?: { execId: string; cmd: string; intent?: string } | null; scheduledRemainingMs?: number | null;
   pending: Approval[];
@@ -22,8 +22,8 @@ function clearDecisions(t: TabState) {
 }
 export function applyController(t: TabState, controller: TabState['controller']) {
   t.controller = controller;
-  if (controller.type === 'agent') t.handback = false;
-  else { t.grace = null; t.proposal = null; }
+  if (controller.type === 'agent') { t.handback = false; t.controlReason = undefined; }
+  else { t.grace = null; t.proposal = null; t.leaseExpiresAt = undefined; }
 }
 
 /** State changes only. Notifications, focus and motion belong to the view. */
@@ -44,7 +44,7 @@ export function applySessionEvent(t: TabState, ev: SessionEvent) {
       t.lastAgent = { agentId: ev.agentId, connected: true, lastCmd: previous?.agentId === ev.agentId ? previous.lastCmd : undefined };
       applyController(t, { type: 'agent', agentId: ev.agentId }); t.ctlReq = null; break;
     }
-    case 'control_revoked': applyController(t, { type: 'human' }); break;
+    case 'control_revoked': applyController(t, { type: 'human' }); t.controlReason=ev.reason; t.leaseExpiresAt=undefined; break;
     case 'control_requested': t.ctlReq = controlState(ev.request); break;
     case 'control_request_resolved': if (t.ctlReq?.id === ev.requestId) t.ctlReq = null; break;
     case 'attention_requested': t.attention = { agentId: ev.agentId, reason: ev.reason ?? undefined }; break;
@@ -78,6 +78,7 @@ export function applySessionSnapshot(t: TabState, s: SessionSnapshot, privateTit
       t.title = s.profileName || (t.externalOrigin ? privateTitle : t.title);
       t.processAlive = !!s.processAlive; t.attended = !!s.attended;
       t.timeline.recording = false; t.controller = { type: "human" };
+      t.leaseExpiresAt = undefined; t.controlReason = undefined;
       t.agents = []; t.lastAgent = null; t.openedBy = null;
       clearDecisions(t); t.attention = null;
       t.handback = false; t.typing = false;
@@ -93,11 +94,12 @@ export function applySessionSnapshot(t: TabState, s: SessionSnapshot, privateTit
     t.openedBy = s.openedBy ?? null;
     t.lastAgent = s.lastAgent ? { agentId: s.lastAgent.agentId, connected: s.lastAgent.connected, lastCmd: s.lastAgent.lastCmd ?? undefined } : null;
     t.controller = s.controller.type === "agent" ? { type: "agent", agentId: s.controller.agentId } : { type: "human" };
+    t.leaseExpiresAt = s.controller.type === 'agent' && s.controller.expiresInSecs !== undefined ? Date.now()+s.controller.expiresInSecs*1000 : undefined;
     t.approval = s.pending?.length ? approvalState(s.pending[0], t.approval?.id === s.pending[0].id ? t.approval.at : undefined) : null;
     t.proposal = s.proposal ? proposalState(s.proposal) : null;
     t.ctlReq = s.controlRequests?.length ? controlState(s.controlRequests[0]) : null;
     if (!s.scheduled) t.grace = null;
     else if (t.grace?.execId !== s.scheduled.execId) t.grace = { execId: s.scheduled.execId, cmd: s.scheduled.cmd, intent: s.scheduled.intent, ms: Math.max(1, s.scheduledRemainingMs ?? 0), start: performance.now() };
-    if (t.controller.type === 'agent') t.handback = false;
+    if (t.controller.type === 'agent') { t.handback = false; t.controlReason = undefined; }
     t.statusReady = true;
 }

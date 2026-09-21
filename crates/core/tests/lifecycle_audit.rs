@@ -255,13 +255,13 @@ fn navigation_catalog_recovers_without_leaking_or_granting_access() {
         .unwrap();
     assert_eq!(
         c.call("navigation_affordances", json!({})).unwrap(),
-        json!([])
+        json!(["request_attention"])
     );
     assert!(c.call("switch_tab", json!({"tab":"target"})).is_err());
     target.lock().set_shared(false).unwrap();
     assert_eq!(
         c.call("navigation_affordances", json!({})).unwrap(),
-        json!([])
+        json!(["request_attention"])
     );
 }
 #[test]

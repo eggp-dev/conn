@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { Admissions } from '../../src/lib/collaboration/admissions.ts';
 import { applySessionEvent, applySessionSnapshot, type SessionSnapshot } from '../../src/lib/collaboration/session.ts';
 import type { TabState } from '../../src/lib/store.svelte.ts';
+import {pendingKind,requestStillPending,sessionLabel} from '../../src/lib/collaboration/activity.ts';
 const pending = (connId: number, revision: number) => ({connId, agentId: 'same-name', revision, state: 'pending' as const});
 test('late startup snapshot cannot resurrect a request resolved in another window', () => {
   const state = new Admissions();
@@ -56,6 +57,21 @@ function view() {
   const t = { id:'one', title:'Shell', timeline: {recording:true}, controller:{type:'human'} } as TabState;
   applySessionSnapshot(t,snapshot(),'Private'); return t;
 }
+test('notice identity survives reorder and cannot match a replacement request',()=>{
+  const t=view();t.ctlReq={id:'new',agentId:'same-name'};
+  assert.equal(requestStillPending(t,{session:t.id,kind:'control',requestId:'old'}),false);
+  assert.equal(requestStillPending(t,{session:t.id,kind:'control',requestId:'new'}),true);
+  assert.equal(sessionLabel(['other','one'],{one:t},'one'),'2 · Shell');
+  assert.equal(pendingKind(t),'control');t.shared=false;assert.equal(pendingKind(t),null);
+});
+test('server lease clock and revoke reasons clear on a fresh grant or private state',()=>{
+  const t=view();applySessionSnapshot(t,{...snapshot(),controller:{type:'agent',agentId:'one',expiresInSecs:12}},'Private');
+  assert.ok(t.leaseExpiresAt!<=Date.now()+12000 && t.leaseExpiresAt!>=Date.now()+11000);
+  applySessionEvent(t,{session:'one',event:'control_revoked',agentId:'one',reason:'expired'});
+  assert.equal(t.leaseExpiresAt,undefined);assert.equal(t.controlReason,'expired');
+  applySessionEvent(t,{session:'one',event:'control_granted',agentId:'one'});assert.equal(t.controlReason,undefined);
+  applySessionSnapshot(t,{...snapshot(),shared:false},'Private');assert.equal(t.leaseExpiresAt,undefined);
+});
 test('event and snapshot use the same request projection without restarting its age', () => {
   const t=view();
   const request={id:'review-1',agentId:'one',cmd:'echo fixture',label:'review'};

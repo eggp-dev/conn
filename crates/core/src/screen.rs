@@ -63,7 +63,9 @@ pub struct ScreenModel {
 
 impl ScreenModel {
     pub fn new(rows: u16, cols: u16) -> Self {
-        let parser = vt100::Parser::new(rows.max(1), cols.max(1), 0);
+        // Same bounded normal-buffer history as the owner terminal, solely for
+        // resize reflow. Observations still project only the current grid.
+        let parser = vt100::Parser::new(rows.max(1), cols.max(1), 5000);
         let last_contents = vec![""; usize::from(rows.max(1))].join("\n");
         Self { parser, revision: 0, last_contents }
     }
@@ -89,7 +91,7 @@ impl ScreenModel {
     }
 
     pub fn resize(&mut self, rows: u16, cols: u16) {
-        self.parser.set_size(rows.max(1), cols.max(1));
+        self.parser.set_size_reflow(rows.max(1), cols.max(1));
         self.last_contents = self.rows().join("\n");
         self.revision += 1;
     }

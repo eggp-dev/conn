@@ -20,7 +20,7 @@
       <span class="n">{i + 1}</span>
       <span class="title">{tb.title}</span>
       {#if !tb.shared}<span class="badge" title={t("private.description")}>{t(tb.externalStarting ? "private.preparing" : "private.label")}</span>{/if}
-      {#if tb.openedBy}<span class="by" style:--a={agentColor(tb.openedBy)} title={t("tab.opened.title", { agent: tb.openedBy })}>{tb.openedBy}</span>{/if}
+      {#each st.activity.connections.filter(a=>a.session===id && tb.shared) as a (a.connId)}<span class="by" style:--a={agentColor(a.agentId)} title={t('activity.binding',{agent:a.agentId})}>{a.agentId}</span>{/each}
       {#if tb.approval}<span class="badge warn">{t("badge.approval")}</span>{/if}
       {#if waiting && id !== st.active}<span class="badge prop" style:--a={agentColor(waiting.agentId)} title={t("badge.proposal.title", { agent: waiting.agentId })}>{t("badge.proposal", { agent: waiting.agentId })}</span>{/if}
       {#if tb.attention}<span class="badge">{t("badge.knock", { agent: tb.attention.agentId })}</span>{/if}

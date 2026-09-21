@@ -296,9 +296,25 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
                 let g = s.lock();
                 if !g.participant_allowed(conn) { return None; }
                 let st = g.status();
-                Some(json!({ "tab": i + 1, "id": sid, "current": bound.as_deref() == Some(sid.as_str()), "attended": st.attended, "controller": st.controller, "pending": st.pending.len(), "processAlive": st.process_alive, "mode": st.mode, "effectiveMode": st.effective_mode }))
+                Some(json!({ "tab": i + 1, "id": sid, "profileName": st.profile_name, "externalOrigin": st.external_origin, "current": bound.as_deref() == Some(sid.as_str()), "attended": st.attended, "controller": st.controller, "pending": st.pending.len(), "processAlive": st.process_alive, "mode": st.mode, "effectiveMode": st.effective_mode }))
             }).enumerate().map(|(i, mut row)| { row["tab"] = json!(i + 1); row }).collect();
             Ok(json!({ "sessions": list, "tabs": list.len(), "attended": hub.public_attended_for(conn), "current": bound }))
+        } else if req.method == "request_attention" && (!hub.has_available_session(conn) || req.params["cancel"] == true) {
+            disclosure = None;
+            if req.params["cancel"] == true {
+                if let Some(a) = hub.connections.activity_snapshot().connections.iter().find(|a| a.conn_id == conn) {
+                    if let Some(r) = &a.preparation { hub.connections.dismiss_preparation(conn, r.id); }
+                }
+                Ok(json!({"requested":false,"status":"cancelled"}))
+            } else {
+                let reason = str_param(&req.params, "reason");
+                if reason.as_ref().is_some_and(|s| s.chars().count() > 512) {
+                    Err(RpcError { code:"invalid_input".into(), message:"Use a preparation reason of at most 512 characters.".into() })
+                } else {
+                    let request = hub.connections.request_preparation(conn, reason);
+                    Ok(json!({"requested":request.is_some(),"scope":"connection","requestId":request.map(|r|r.id),"status":"waiting_for_terminal"}))
+                }
+            }
         } else if req.method == "open_tab" {
             // Agent: open a tab. It starts unattended; the human sees it knock.
             let reason = str_param(&req.params, "reason");
@@ -317,7 +333,7 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
                                 hub.leave_other_tabs(conn, &sid);
                                 ns.lock().agent_opened_tab(conn, reason);
                                 bound = Some(sid.clone());
-                                Ok(json!({ "session": sid, "tab": hub.public_index_of(&sid, conn), "attended": false, "note": "the human is not looking at this tab yet; request_attention is queued — wait for the human to show this tab" }))
+                                Ok(json!({ "session": sid, "tab": hub.public_index_of(&sid, conn), "attended": false, "note": "Your connection moved to this tab; the human view did not move. Sharing, mode and control apply independently of attention. Request attention when a human decision is needed." }))
                             }
                         },
                     }
@@ -331,7 +347,9 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
             let pinned = bound.as_ref().and_then(|b| hub.get_public(b)).is_some_and(|s| s.lock().blocks_navigation_from(conn));
             let can_switch = !pinned && hub.public_ids().iter().any(|id| hub.get_public(id)
                 .is_some_and(|s| s.lock().agent_can_navigate(conn).is_ok()));
-            Ok(json!(if can_switch { vec!["switch_tab"] } else { vec![] }))
+            let mut available = if can_switch { vec!["switch_tab"] } else { vec![] };
+            if !hub.has_available_session(conn) { available.push("request_attention"); }
+            Ok(json!(available))
         } else if req.method == "switch_tab" {
             let want = req.params.get("tab").cloned().or_else(|| req.params.get("session").cloned()).unwrap_or(Value::Null);
             match hub.find_public_tab(&want, conn) {
@@ -383,6 +401,14 @@ async fn handle_conn(stream: crate::transport::Stream, conn: ConnId, hub: Shared
             }
         } } => result,
         };
+        // Discovery polling must not overwrite the last addressed terminal.
+        // Explicit session calls count too; they need not change the IPC binding.
+        if result.is_ok() && !matches!(req.method.as_str(), "list_tabs" | "sessions" | "navigation_affordances" | "affordances" | "status") {
+            let activity_target = str_param(&req.params, "session").or_else(|| bound.clone());
+            if let Some(sid) = activity_target {
+                if hub.get_public(&sid).is_some_and(|s| { let s=s.lock(); s.participant_allowed(conn) && s.process_alive() }) { hub.connections.bind(conn, &sid); }
+            }
+        }
         let resp = match result {
             Ok(v) => Response { id: req.id, result: Some(v), error: None },
             Err(e) => Response { id: req.id, result: None, error: Some(e) },

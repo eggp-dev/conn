@@ -57,6 +57,36 @@ fn resize_changes_size() {
 }
 
 #[test]
+fn completed_lines_reflow_without_losing_unicode_or_conceal_attributes() {
+    let mut s=ScreenModel::new(8,12);
+    s.process("/long/가나다/끝\r\n\x1b[8mHIDDEN\x1b[0m visible\r\n$ ".as_bytes());
+    let original=s.rows();
+    s.resize(8,7);
+    assert_eq!(&s.rows()[..3],["/long/","가나다/","끝"]);
+    assert!(!s.rows().join("\n").contains("HIDDEN"));
+    assert_eq!(s.cursor().row,5);
+    s.resize(8,12);assert_eq!(s.rows(),original);
+}
+
+#[test]
+fn height_resizes_keep_the_cursor_and_only_restore_visible_history() {
+    let mut s=ScreenModel::new(4,20);s.process(b"one\r\ntwo\r\nthree\r\nfour\r\n$ ");
+    assert_eq!(s.rows(),["two","three","four","$"]);
+    s.resize(2,20);assert_eq!(s.rows(),["four","$"]);assert_eq!(s.cursor().row,1);
+    s.resize(4,20);assert_eq!(s.rows(),["two","three","four","$"]);
+    s.process(b"\x1b[3J");s.resize(6,20);
+    assert_eq!(s.rows(),["two","three","four","$","",""]);
+}
+
+#[test]
+fn alternate_screen_is_not_reflowed_and_normal_buffer_survives() {
+    let mut s=ScreenModel::new(5,12);s.process(b"abcdefghijklmnop\r\n$ ");
+    s.process(b"\x1b[?1049h\x1b[HALTERNATE123\r\n$ ");s.resize(5,8);
+    assert_eq!(s.rows()[0],"ALTERNAT");s.process(b"\x1b[?1049l");
+    assert_eq!(&s.rows()[..2],["abcdefgh","ijklmnop"]);
+}
+
+#[test]
 fn concealed_split_sequences_wide_cells_and_equal_colors_are_not_observed() {
     let mut s=ScreenModel::new(5,80);
     for bytes in [b"ID: user Password: \x1b[".as_slice(),b"8mSECRET",b"\x1b[28m ******"] {s.process(bytes);}

@@ -5,6 +5,7 @@
   import { onMount } from "svelte";
   import { Terminal } from "@xterm/xterm";
   import { FitAddon } from "@xterm/addon-fit";
+  import { Unicode11Addon } from "@xterm/addon-unicode11";
   import { observeTerminalInput } from "../lib/terminalInput";
   import { cmd, onOutput, b64ToBytes } from "../lib/bridge";
   import { st, tab } from "../lib/store.svelte";
@@ -46,6 +47,8 @@
 
   onMount(() => {
     term = new Terminal({ logLevel: "off", fontFamily: '"SF Mono", "JetBrains Mono", Menlo, monospace', fontSize: st.fontSize, cursorBlink: true, allowProposedApi: true, scrollback: 5000, macOptionIsMeta: true });
+    term.loadAddon(new Unicode11Addon());
+    term.unicode.activeVersion = '11';
     // Consume clipboard escape sequences before any private output is attached.
     // Returning true prevents fall-through to built-in or future addon handlers.
     const privateClipboard = term.parser.registerOscHandler(52, () => true);
