@@ -204,7 +204,7 @@ fn terminal_output(app: AppHandle, session: String) -> conn_core::session::Outpu
         use base64::Engine as _;
         if let Some(state) = app.state.upgrade() {
             let data = base64::engine::general_purpose::STANDARD.encode(&frame.data);
-            let value = json!({"session":session,"data":data,"outputSeq":frame.output_seq,"generation":frame.generation});
+            let value = json!({"session":session,"data":data,"outputSeq":frame.output_seq,"generation":frame.generation,"size":frame.size});
             let mut output = state.output.lock();
             match output.get_mut(&session) {
                 Some(Some(buffer)) => {

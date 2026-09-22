@@ -1,6 +1,6 @@
 type Handler = (event: {payload:any})=>void;
 const listeners = new Map<string,Set<Handler>>();
-type OutputPacket = {session:string;data:string;outputSeq:number;generation:number};
+type OutputPacket = {session:string;data:string;outputSeq:number;generation:number;size:{rows:number;cols:number}};
 const history = new Map<string,OutputPacket[]>();
 const historyBytes = new Map<string,number>();
 const pending = new Map<number,{resolve:(v:any)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>}>();

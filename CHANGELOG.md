@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.8.6 — Preview · 2026-09-22
+
+- Keep terminal dimensions and shell output in the same order when an approval bar opens and closes, including in a fixed window. This fixes reproduced stale sizes and cursor disagreement after delayed resizes and shell redraws while retaining the existing motion.
+- Preserve JSON and other output exactly: a response without a trailing newline can share its last line with the next shell prompt. Regression coverage distinguishes this from lost newlines and incorrect wrapping.
+
+한국어: 창을 고정한 상태에서 승인 바가 열리고 닫힐 때도 터미널 크기와 셸 출력을 같은 순서로 반영합니다. 모션은 유지하면서 지연된 크기 변경·화면 재출력으로 크기와 커서가 어긋나는 재현된 결함을 수정했습니다. JSON 등 실제 출력은 그대로 유지하며, 끝에 개행이 없어 프롬프트가 붙는 경우와 줄바꿈 오류를 구분해 검사합니다.
+
+Validation: 259 Rust tests, 55 frontend tests, real SSH browser regressions and the 12-stage collaboration context harness passed. The same product code passed native Apple Silicon macOS 27.0 checks in an isolated ad-hoc debug app with real WebKit, Tauri IPC and loopback SSH: 18 approval cycles, including 12 rapid denials, and 38 full visible-grid/cursor comparisons passed. Human editing/takeover, session allowance, shell preservation and output-ending checks also passed. [Verification report](docs/ssh-input-review-results.md#native-macos-verification-of-pr-64).
+
+Remaining coverage: ResizeObserver warnings remain (24 during the rapid-denial cycles), without persistent disagreement at the checked post-motion points. The user's actual remote environment, physical-keyboard IME and separate canonical `/bin/sh` wrapped-text behavior remain unverified or unresolved. Signed release artifacts and installed-app upgrades are separate from these debug-app results.
+
+한국어: Rust 259개·프런트엔드 55개·실제 SSH 브라우저 회귀·협업 맥락 12단계를 통과했습니다. 같은 제품 코드를 Apple Silicon macOS 27.0의 별도 네이티브 디버그 앱과 실제 SSH에서도 확인했습니다. 승인 동작 18회(빠른 거부 12회 포함), 전체 화면·커서 비교 38회, 사람의 편집·제어권 회수, 세션 허용, 기존 셸 유지와 개행 구분이 통과했습니다. 빠른 거부 중 ResizeObserver 경고 24건은 남았지만 확인한 모션 종료 지점에서는 지속되는 불일치가 없었습니다. 사용자 실제 원격 환경·물리 키보드 IME·별도 canonical `/bin/sh` 현상은 미검증 또는 미해결이며, 배포 파일 서명·공증과 설치 앱 업데이트 검증은 별개입니다. [검증 보고서](docs/ssh-input-review-results.ko.md#pr-64-네이티브-macos-검증).
+
 ## 0.8.5 — Preview · 2026-09-22
 
 - Restore policy-based Autopilot in POSIX SSH: ordinary commands run, risky commands request approval, and deny rules remain blocked. Remote paths are never inspected as host files.

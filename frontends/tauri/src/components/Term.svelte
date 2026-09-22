@@ -7,6 +7,8 @@
   import { FitAddon } from "@xterm/addon-fit";
   import { Unicode11Addon } from "@xterm/addon-unicode11";
   import { observeTerminalInput } from "../lib/terminalInput";
+  import { terminalResizeQueue } from "../lib/terminalResize";
+  import { terminalOutputQueue } from "../lib/terminalOutput";
   import { cmd, onOutput, b64ToBytes } from "../lib/bridge";
   import { st, tab } from "../lib/store.svelte";
   import { THEMES, applyTheme, agentColor } from "../lib/themes";
@@ -15,11 +17,12 @@
   let host: HTMLDivElement;
   let term: Terminal;
   let fit: FitAddon;
+  let requestFit = () => {};
   const t = $derived(tab(session)!);
   const active = $derived(st.active === session);
   export function focus() { term?.focus(); }
   export function size() { return { rows: term?.rows ?? 24, cols: term?.cols ?? 80 }; }
-  export function refit() { fit?.fit(); }
+  export function refit() { requestFit(); }
 
   /** Centre of the cursor cell in the app frame. Measured on demand: only the handoff wash needs it. */
   export function cursorCenter() {
@@ -42,7 +45,7 @@
     term.options.theme = xt;
     term.options.cursorStyle = agent ? "underline" : "block";
     term.options.fontSize = st.fontSize;
-    if (active) fit.fit();
+    if (active) requestFit();
   }
 
   onMount(() => {
@@ -55,9 +58,16 @@
     fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
-    // Register before the first fit: the PTY starts at 80x24, while xterm
-    // immediately adopts the pane size. Missing this event desynchronizes wrapping.
-    term.onResize(({ rows, cols }) => { cmd("resize", { session, rows, cols }); });
+    // Request the pane size, but commit it to xterm through the backend output
+    // stream so shell redraws and size changes reach both parsers in one order.
+    const sizes = terminalResizeQueue(
+      ({ rows, cols }) => cmd("resize", { session, rows, cols }),
+      (error) => console.error("Terminal resize failed", error),
+    );
+    requestFit = () => {
+      const size = fit.proposeDimensions();
+      if (size && Number.isFinite(size.rows) && Number.isFinite(size.cols)) sizes.resize(size);
+    };
     applyLook();
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
@@ -100,16 +110,12 @@
     });
     let mounted = true;
     let previousBottom = parseFloat(getComputedStyle(host).bottom);
-    let previousHeight = host.clientHeight;
     let motion: Animation | undefined;
-    const ro = new ResizeObserver(() => {
+    const output = terminalOutputQueue(({ rows, cols }) => {
+      if (rows === term.rows && cols === term.cols) return;
       const bottom = parseFloat(getComputedStyle(host).bottom);
-      const height = host.clientHeight;
       const dockChanged = bottom !== previousBottom;
-      const delta = previousHeight - height;
       previousBottom = bottom;
-      previousHeight = height;
-      if (!active) return;
       // Commit the final terminal grid once. Animate its visual offset, not
       // its height: otherwise every frame resizes the PTY and redraws the shell.
       const transform = getComputedStyle(host).transform;
@@ -118,29 +124,30 @@
       const rowHeight = host.querySelector<HTMLElement>(".xterm-screen")!.clientHeight / term.rows;
       const before = term.buffer.active;
       const cursorBefore = before.baseY + before.cursorY - before.viewportY;
-      fit.fit();
+      term.resize(cols, rows);
       const after = term.buffer.active;
       const cursorDelta = (cursorBefore - (after.baseY + after.cursorY - after.viewportY)) * rowHeight;
-      if (dockChanged && delta && cursorDelta && !reducedMotion()) {
+      if (active && dockChanged && cursorDelta && !reducedMotion()) {
         host.style.willChange = "transform";
         motion = host.animate(dockOffsetFrames(cursorDelta + offset), {
           duration: DOCK_MOTION_MS, easing: "linear",
         });
         motion.onfinish = () => { host.style.willChange = ""; };
       } else { host.style.willChange = ""; }
-    });
+    }, (data, done) => term.write(data, done));
+    const ro = new ResizeObserver(() => { if (active) requestFit(); });
     ro.observe(host);
     const un = onOutput((p) => {
       if (!mounted || p.session !== session) return;
-      term.write(b64ToBytes(p.data));
+      output.push({ size: p.size, data: b64ToBytes(p.data) });
     });
     un.then(() => { if (mounted) return cmd("attach_output", { session }); }).catch(() => {});
-    return () => { mounted = false; inputListener.dispose(); privateClipboard.dispose(); motion?.cancel(); ro.disconnect(); un.then((f) => f()); term.dispose(); };
+    return () => { mounted = false; sizes.dispose(); output.dispose(); requestFit = () => {}; inputListener.dispose(); privateClipboard.dispose(); motion?.cancel(); ro.disconnect(); un.then((f) => f()); term.dispose(); };
   });
 
   $effect(() => {
     void st.theme; void st.themeRevision; void t?.controller.type; void t?.controller.agentId; void st.fontSize; void active;
-    if (term) { applyLook(); if (active) setTimeout(() => fit.fit(), 0); }
+    if (term) { applyLook(); if (active) setTimeout(() => requestFit(), 0); }
   });
 </script>
 

@@ -1,0 +1,67 @@
+{
+  "testedCommit": "e97c2048e320d6c09fa1d556bd343c52deab0b58",
+  "platform": {
+    "macOS": "27.0 (26A428)",
+    "arch": "arm64",
+    "node": "24.13.0",
+    "rust": "1.95.0"
+  },
+  "candidate": {
+    "kind": "ad-hoc signed native debug app",
+    "version": "0.8.5",
+    "binarySha256": "b199fa89ef6bf141b4c30e989d620d1e51fae5312c712b57d4e4ea813621c139"
+  },
+  "automatedTests": {
+    "rustPassed": 259,
+    "rustIgnored": 1,
+    "frontendPassed": 55,
+    "frontendBuild": "PASS",
+    "nativeBundleBuild": "PASS"
+  },
+  "native": {
+    "approvalCycles": 18,
+    "fastDenyCycles": 12,
+    "fastDenyDelayMs": [
+      82,
+      81,
+      81,
+      81,
+      82,
+      80,
+      81,
+      80,
+      81,
+      80,
+      82,
+      81
+    ],
+    "fastDenyWindowSizes": [
+      [
+        1120,
+        688
+      ]
+    ],
+    "movingFramesDuringFastCycles": 302,
+    "gridComparisons": 38,
+    "allGridsAndCursorsMatch": true,
+    "remoteShell": "Bash 3.2.57(1)-release",
+    "remoteTerm": "xterm-256color",
+    "remoteSttyBeforeAfter": {
+      "rows": 41,
+      "cols": 137
+    },
+    "sameRemotePid": true,
+    "sameLocalPidAfterSSH": true,
+    "jsonEndingComparisons": 6,
+    "exactWidthBoundaryComparisons": 3,
+    "resizeObserverWarningsDuringFastCycles": 24,
+    "resizeObserverWarningsCapturedAfterProbeStart": 42
+  },
+  "limitations": [
+    "user actual remote environment unverified",
+    "physical keyboard IME unverified",
+    "separate canonical /bin/sh wrapped-text behavior not resolved",
+    "signed installed-app upgrade and public release not performed"
+  ],
+  "instrumentation": "Temporary native WebKit visible-DOM readout and bounded DOM deny-button clicks; no product transport overrides; removed after run."
+}
