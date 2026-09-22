@@ -74,4 +74,13 @@ npm run test:input -w @conn/collaboration-tests
 
 기본값은 로컬 Bash PTY입니다. 폐기 가능한 SSH 픽스처를 시험하려면 `CONN_AUTH_FIXTURE_RUNTIME`을 `.runtime` 폴더로 지정합니다. 합성 암호와 고정한 호스트 키를 사용하는 픽스처가 `127.0.0.1:22222`에서 실행 중이어야 합니다. 인증도 화면에 보이는 PTY로 입력하며 실제 MCP·프로덕션 UI·Rust 호스트를 사용합니다. 화면 행·커서 비교와 스크린샷은 저장소 밖에 남깁니다.
 
-브라우저 결과는 Linux Chromium 증거입니다. macOS WebKit·네이티브 운영체제 알림·설치·배포 완료를 입증하지 않습니다. 이전 네이티브 결과는 [SSH 입력 검증 기록](ssh-input-review-results.ko.md)에 따로 남겨 두었습니다.
+macOS 등에서 계정을 새로 만들지 않고 시험하려면 폐기 가능한 키 인증 OpenSSH 픽스처의 클라이언트 설정을 지정할 수 있습니다.
+
+```sh
+CONN_SSH_FIXTURE_CONFIG=/path/to/disposable/client.conf \
+  npm run test:input -w @conn/collaboration-tests
+```
+
+이 설정에는 `validation-host` 별칭, 루프백 주소, 시험 포트, 폐기 가능한 키와 고정한 호스트 키가 있어야 합니다. 원격 셸은 `remote$` 프롬프트를 제공해야 합니다. 스크립트가 `ssh -F <config> validation-host`를 화면으로 실행하며, 종료 후 로컬 셸 복귀까지 검사합니다. 실제 계정의 키·SSH 설정을 사용하거나 바꾸지 마세요. 설정 경로에는 영문·숫자·`_./-`만 허용합니다. 두 픽스처 변수를 함께 지정하면 키 인증 설정을 우선합니다.
+
+브라우저 결과는 실행한 운영체제의 Chromium 증거입니다. macOS WebKit·네이티브 운영체제 알림·설치·배포 완료를 입증하지 않습니다. 이번 [공통 런타임 macOS 실기 결과](shared-runtime-macos-validation-results.ko.md)와 이전 [SSH 입력 검증 기록](ssh-input-review-results.ko.md)은 별도로 구분합니다.

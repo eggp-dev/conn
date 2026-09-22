@@ -13,6 +13,7 @@ import {strict as assert} from 'node:assert';
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const state = mkdtempSync(join(tmpdir(), 'conn-input-rendering-'));
 const evidence = process.env.CONN_INPUT_REVIEW_OUTPUT ?? join(state, 'evidence');
+const sshFixture = Boolean(process.env.CONN_AUTH_FIXTURE_RUNTIME || process.env.CONN_SSH_FIXTURE_CONFIG);
 mkdirSync(evidence, {recursive: true});
 const binary = name => resolve(root, 'target/debug', name + (process.platform === 'win32' ? '.exe' : ''));
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -175,7 +176,17 @@ try {
   });
   await page.goto(metadata.url + '/#token=' + encodeURIComponent(metadata.bootstrapToken));
   await ready(); await delay(600);
-  if (process.env.CONN_AUTH_FIXTURE_RUNTIME) {
+  if (process.env.CONN_SSH_FIXTURE_CONFIG) {
+    // A disposable key-authenticated loopback fixture also works without
+    // installing a password-authenticated account on the macOS host.
+    const config = process.env.CONN_SSH_FIXTURE_CONFIG;
+    assert.ok(/^[A-Za-z0-9_./-]+$/.test(config), 'SSH fixture config path must contain no shell metacharacters');
+    assert.ok(existsSync(config), 'SSH fixture config must exist');
+    await human(`ssh -F ${config} validation-host`);
+    await until(async () => (await host().locator('.xterm-rows').innerText()).includes('remote$'), 'SSH fixture prompt missing');
+    await human('printf "REMOTE_READY_%s\\n" "$((6*7))"');
+    await until(async () => (await host().locator('.xterm-rows').innerText()).includes('REMOTE_READY_42'), 'SSH fixture ready marker missing');
+  } else if (process.env.CONN_AUTH_FIXTURE_RUNTIME) {
     const runtime = process.env.CONN_AUTH_FIXTURE_RUNTIME;
     const password = readFileSync(join(runtime, 'password'), 'utf8').trim();
     assert.ok(password.startsWith('SYNTHETIC_'), 'Only a disposable synthetic SSH fixture is supported');
@@ -244,7 +255,7 @@ try {
     assert.ok(printed.core.slice(0, printed.cursor.row).join('').endsWith(text.slice(-Math.min(length, printed.size.cols * 2))), 'Long command printed its expected final bytes');
     await capture(`output-${length}`);
   }
-  const prompt = process.env.CONN_AUTH_FIXTURE_RUNTIME ? 'remote$' : 'fixture$';
+  const prompt = sshFixture ? 'remote$' : 'fixture$';
   const cols = (await agent.tool('snapshot')).size.cols;
   for (const padding of [0, cols * 2]) {
     const body = JSON.stringify({padding: 'x'.repeat(padding), agentMode: {state: 'unavailable'}});
@@ -264,7 +275,7 @@ try {
     const size = (await agent.tool('snapshot')).size;
     const requestsBefore = resizes.length;
     for (let i = 0; i < 3; i++) {
-      await page.keyboard.press('Control+Shift+,');
+      await page.keyboard.press('ControlOrMeta+Shift+,');
       await page.getByRole('dialog', {name: 'Settings', exact: true}).waitFor(); await delay(350);
       assert.deepEqual((await agent.tool('snapshot')).size, size, 'Settings must not resize the PTY');
       await page.keyboard.press('Escape');
@@ -310,7 +321,7 @@ try {
   await until(async () => (await agent.tool('snapshot')).screen.join('').includes('EDITEND>'), 'Human cursor edit output missing');
   assert.equal((await agent.tool('snapshot')).controller.type, 'human');
   await grid('human-edited'); await capture('human-edited');
-  if (process.env.CONN_AUTH_FIXTURE_RUNTIME) {
+  if (sshFixture) {
     await human('exit');
     await until(async () => (await agent.tool('snapshot')).screen.some(row => row.trim() === 'fixture$'), 'Outer local shell prompt did not return');
     await human("printf 'LOCAL_BACK_%s\\n' 42");
@@ -319,8 +330,8 @@ try {
   }
   assert.equal(await page.locator('[data-request-key^="connection:"]').count(), 0, 'Persistent MCP must not request repeat admission');
   assert.deepEqual(errors, [], 'Browser runtime errors');
-  writeFileSync(join(evidence, 'transport.json'), JSON.stringify({resizes, outputFrames, pageErrors: errors, sshFixture: Boolean(process.env.CONN_AUTH_FIXTURE_RUNTIME)}, null, 2));
-  if (!process.env.CONN_AUTH_FIXTURE_RUNTIME) console.log('SKIP optional SSH fixture: CONN_AUTH_FIXTURE_RUNTIME is not set');
+  writeFileSync(join(evidence, 'transport.json'), JSON.stringify({resizes, outputFrames, pageErrors: errors, sshFixture}, null, 2));
+  if (!sshFixture) console.log('SKIP optional SSH fixture: CONN_AUTH_FIXTURE_RUNTIME / CONN_SSH_FIXTURE_CONFIG is not set');
   console.log(`PASS ${cases.length} production input/rendering scenarios\nEvidence: ${evidence}`);
 } catch (error) {
   if (page) { await page.screenshot({path: join(evidence, 'failure.png')}).catch(() => {}); writeFileSync(join(evidence, 'failure-dom.txt'), await page.locator('body').innerText().catch(() => '')); }

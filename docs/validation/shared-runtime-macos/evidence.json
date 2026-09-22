@@ -1,0 +1,191 @@
+{
+  "baseline": "7fa572385f92740ab2107f23e7fcfc081b56a79f",
+  "runtimeFix": "1d30c87d69b6231a9b3c37c171bebc7038f6b1a4",
+  "version": "0.8.6",
+  "testEnvironment": {
+    "os": "macOS 27.0",
+    "rust": "1.95.0",
+    "node": "24.13.0",
+    "nativeWindow": {
+      "width": 1120,
+      "height": 720
+    },
+    "localShell": "Bash",
+    "sshFixture": "Loopback OpenSSH, disposable key, remote Bash"
+  },
+  "results": {
+    "privateSessionVisibleTabs": 0,
+    "sharedBeforeControl": {
+      "isError": true,
+      "message": "not_controller: you do not hold control of this session — call terminal_request_control first (tools/list has changed)"
+    },
+    "afterHumanType": {
+      "isError": true,
+      "message": "not_controller: you do not hold control of this session — call terminal_request_control first (tools/list has changed)"
+    },
+    "afterHumanEnter": {
+      "isError": true,
+      "message": "not_controller: you do not hold control of this session — call terminal_request_control first (tools/list has changed)"
+    },
+    "firstSharedCommand": "pending",
+    "firstSharedCommandDecision": "granted",
+    "nextSafeCommand": "executed",
+    "approvalPanelOpen": {
+      "size": {
+        "cols": 137,
+        "rows": 30
+      },
+      "cursor": {
+        "col": 38,
+        "row": 29
+      },
+      "processAlive": true
+    },
+    "approvalPanelRestored": {
+      "size": {
+        "cols": 137,
+        "rows": 41
+      },
+      "cursor": {
+        "col": 8,
+        "row": 40
+      },
+      "processAlive": true
+    },
+    "nativeLocalLongHuman": {
+      "size": {
+        "cols": 137,
+        "rows": 41
+      },
+      "cursor": {
+        "col": 12,
+        "row": 40
+      },
+      "processAlive": true
+    },
+    "nativeSshLongInput": {
+      "typed": 3029
+    },
+    "nativeSshFollowingCommand": {
+      "cmd": "printf 'FINAL_AFTER_LONG_OK\\n한글 FINAL_LINE_TWO\\n'",
+      "status": "executed"
+    },
+    "release": {
+      "released": true
+    },
+    "webHostStop": {
+      "ptyChildrenBeforeStop": 2,
+      "survivors": 0
+    },
+    "webReloadAndHandoffVariable": "web_retained_42",
+    "webRestartVariable": "unset",
+    "nativeSshExit": {
+      "localPromptReturned": true,
+      "followupMarker": "NATIVE_LOCAL_RETURN_OK",
+      "processAlive": true
+    }
+  },
+  "automated": {
+    "rust": {
+      "passed": 274,
+      "ignored": 1
+    },
+    "nativeRust": {
+      "passed": 4,
+      "ignored": 1
+    },
+    "ui": 65,
+    "collaboration": 8,
+    "localInput": 23,
+    "sshInput": 24,
+    "gridCursor": 85,
+    "checkpoint": 984,
+    "appLifetime": "PASS"
+  },
+  "screenshots": [
+    {
+      "file": "native-03-initial-review.jpg",
+      "sha256": "fc286ae352b6184f75dc9d6514632092f24a66aec75cdf353bea92e3cc7edeb9",
+      "width": 1120,
+      "height": 720,
+      "sourcePhase": "baseline"
+    },
+    {
+      "file": "native-06-same-name-new-admission.jpg",
+      "sha256": "18a5fb6f2e0aff088eafb87e64501a79e6d23aae265c133003c8413bc348ced1",
+      "width": 1120,
+      "height": 720,
+      "sourcePhase": "baseline"
+    },
+    {
+      "file": "native-07-long-input-stall.jpg",
+      "sha256": "89cf4ba57ea2406c65c2756280081d56b2b17440e8fb0ad975e8bc8dea7fae80",
+      "width": 1120,
+      "height": 720,
+      "sourcePhase": "baseline"
+    },
+    {
+      "file": "native-08-long-input-fixed.jpg",
+      "sha256": "6c163e08166b76231f99d8d0e5ddada7aeb33f781487d87c4c856470fc2caee2",
+      "width": 1120,
+      "height": 720,
+      "sourcePhase": "initial FIFO fix before output coalescing"
+    },
+    {
+      "file": "native-09-ssh-unicode-edited.jpg",
+      "sha256": "70f321845fd8a9b1197e2bcb33cca407d8ae8ab28aba3eb28cded39bbb4cd614",
+      "width": 1120,
+      "height": 720,
+      "sourcePhase": "final runtime fix"
+    },
+    {
+      "file": "native-11-panel-review.jpg",
+      "sha256": "ff1ca00eeb0870ec17fd206fa973ce9f3e935f89d5795e05163ad59a05f6cb78",
+      "width": 1120,
+      "height": 720,
+      "sourcePhase": "final runtime fix"
+    },
+    {
+      "file": "native-13-restored-after-review.jpg",
+      "sha256": "50e6fc32c04664ac67aa9ca890654d7df12463100b130b7e9b0da8d38827e8e9",
+      "width": 1120,
+      "height": 720,
+      "sourcePhase": "final runtime fix"
+    },
+    {
+      "file": "native-14-final-long-ssh.jpg",
+      "sha256": "93ef07d167f9bed89c5d9abe2ed6dd8df47be767c8ee5abff207d73b563246c3",
+      "width": 1120,
+      "height": 720,
+      "sourcePhase": "final runtime fix"
+    },
+    {
+      "file": "native-15-background-agent-tab.jpg",
+      "sha256": "6a811bcdd554b58fba05453f23b6986d238a22c8845d3c93f1bb1b12ceaadc22",
+      "width": 1120,
+      "height": 720,
+      "sourcePhase": "final runtime fix"
+    },
+    {
+      "file": "native-17-local-human-long-restored.jpg",
+      "sha256": "0df4dbff857cd3d1995250ca4e6ce5cc454a15c6d8c2ab76ec610424d60e6b61",
+      "width": 1120,
+      "height": 720,
+      "sourcePhase": "final runtime fix"
+    },
+    {
+      "file": "web-04-handoff-retained.jpg",
+      "sha256": "e8587879ab34b4c2e95b63ccd09eda17b86c72f402049066bc01e484d7f0167d",
+      "width": 736,
+      "height": 583,
+      "sourcePhase": "final runtime fix"
+    },
+    {
+      "file": "web-06-host-restarted.jpg",
+      "sha256": "3aac131f9ce79a6d6a9dad068f7d048923197ea2476577f62aef7d8a70742258",
+      "width": 736,
+      "height": 863,
+      "sourcePhase": "final runtime fix"
+    }
+  ]
+}
