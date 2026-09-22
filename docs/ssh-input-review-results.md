@@ -55,6 +55,59 @@ acceptance in the user's installed macOS app and SSH environment. Resize/output 
 native keyboard-input ordering or physical-keyboard IME behavior. A separate `/bin/sh` canonical-input
 experiment left old wrapped text after approval denial; it remains open and is not identified as the photo's cause.
 
+### Native macOS verification of PR #64
+
+On 2026-09-22, a separate checkout of `codex/terminal-resize-order` was verified at
+`e97c2048e320d6c09fa1d556bd343c52deab0b58`.
+[CI for that commit](https://github.com/eggp-dev/conn/actions/runs/35705822838) passed: Rust on
+Linux/macOS/Windows, and desktop CI on Linux. The Mac application checks below are separate evidence.
+The [aggregate evidence](validation/macos-resize-order-results.json) contains no personal paths or raw output.
+
+**Environment and process identity:** macOS 27.0 (`26A428`), arm64, Node.js 24.13.0, Rust 1.95.0.
+Root `npm ci`, 259 Rust tests (one optional SSH test excluded), 55 frontend tests and the frontend build passed.
+An ad-hoc signed native bundle was built from `frontends/tauri` with
+`npm run tauri -- build --debug --bundles app --config <temporary override>`.
+The app name was `Conn Resize Validation`, identifier `dev.eggp.conn.resizevalidation`, with separate
+`CONN_CONFIG_DIR` and `CONN_SOCKET`. The executable was inside the new checkout at
+`frontends/tauri/src-tauri/target/debug/bundle/macos/Conn Resize Validation.app/Contents/MacOS/conn-desktop`;
+PID `34233` owned the test socket. Its SHA-256 was
+`b199fa89ef6bf141b4c30e989d620d1e51fae5312c712b57d4e4ea813621c139`.
+The displayed 0.8.5 version was not used to identify the candidate. Tests used the actual
+`tauri://localhost` WebKit application and Tauri IPC.
+
+**SSH and measurement:** SSH was entered through the existing Conn PTY into a separate loopback OpenSSH
+server with temporary keys and a pinned host key. The actual remote shell was
+`/bin/bash --noprofile --norc -i`, Bash `3.2.57(1)-release`, with `TERM=xterm-256color` and
+`LC_ALL=en_US.UTF-8`. Before/after `stty size` returned `41 137`. This exercises Bash line editing;
+it does not resolve the separate canonical `/bin/sh` behavior.
+Native captures and accessibility trees were inspected. A temporary WebKit-inspector probe recorded
+the actual visible DOM rows, cursor geometry, pane dimensions and motion locally for comparison with
+agent snapshots. Twelve rapid denials used a bounded temporary UI probe that clicked the actual DOM
+deny button 80–82 ms after each card appeared. No product transport, resize or output implementation
+was replaced or delayed. The inspector was closed during measurements, and both probes were removed afterward.
+
+| Native check | Result |
+| --- | --- |
+| Fixed-window approval dock | Kept the outer window at 1120×720 and WebKit content at 1120×688. Filled the screen to put the cursor at the bottom, then tested short and 478–1,678-character commands. Eighteen approval cycles included approval, denial, human interruption and twelve rapid denials. |
+| Actual motion and restoration | The rapid cycles retained a fixed window and recorded 302 frames of actual terminal movement. Columns stayed at 137; card height reduced 41 rows to 30, 26 or 20 and then restored them. The human hand-back bar correctly reserved space for a 38-row terminal. The final terminal filled its available pane. |
+| Visible/core parity | All 38 checkpoints matched full visible rows, cursor and row count across approvals, editing, output and shell return. These are native DOM comparisons, separate from browser-harness or parser-test counts. |
+| Human input | Used left/right movement, insertion, Backspace and Enter in a 1,221-character ASCII/Korean/emoji command, verifying `수정END>` output. The first arrow key reclaimed control with `human_input`; the next agent write returned `not_controller`. |
+| Command policy | Ordinary `printf` and `touch` executed automatically. **Allow this session** removed one disposable file; the second deletion under the same rule ran automatically. `recursive delete` and `privilege escalation` still required approval. A harmless `printf` containing dangerous text as an argument confirmed the deny rule. Actual deletions affected only two synthetic files. |
+| Human input during approval | Ctrl-C resolved the privileged request as `denied (human_input)` without execution and reclaimed control. This is not the protocol's cancelled state. |
+| Same shells | Remote Bash PID `34307` remained unchanged; SSH exit returned to the original local Bash PID `34253`. The screen identity also remained unchanged. |
+| Output endings | Six short/wrapped JSON comparisons covered no newline, LF and CRLF. Three additional comparisons used an exact 411-character = 137-column × 3 boundary: even without a newline, the prompt then wraps to the next row. No artificial newline was inserted. |
+
+**Remaining scope:** the twelve rapid denials recorded 24
+`ResizeObserver loop completed with undelivered notifications` warnings. The probe recorded 42 overall;
+the inspector displayed 46 including earlier warnings. No persistent grid/cursor disagreement appeared
+at the checked post-motion points, but the warning itself remains unresolved.
+Physical-keyboard Korean IME, the user's actual remote account/gateway and the separate canonical
+`/bin/sh` behavior remain unverified or unresolved. No running user Conn/SSH session was available,
+and no real-account authentication was attempted. No additional input/resize failure requiring a product
+change was reproduced, so product code was unchanged. Personal paths, keys, raw socket/DOM/audit logs
+and captures were not committed. This does not verify signed/notarized installed-app upgrades or a public
+release. Version remains 0.8.5 and the change remains Unreleased.
+
 ## Additional report: JSON followed immediately by the prompt
 
 A further photo shows the closing JSON braces immediately followed by a colored `[DEV]` prompt.
