@@ -308,7 +308,7 @@ def validate_web_archive(path: Path, version: str, sha: str | None = None):
             if not member.isfile() or name in files or member.size > 256 * 1024 * 1024:
                 raise ReleaseError("Invalid web archive member")
             files[name] = member
-        required = {"conn", "conn-web", "manifest.json", "SHA256SUMS", "README.md", "LICENSE", "ui/index.html"}
+        required = {"conn", "conn-web", "manifest.json", "SHA256SUMS", "README.md", "LICENSE", "ui/index.html", "ui/conn-icon.svg"}
         if not required.issubset(files) or any(name not in required and not name.startswith("ui/assets/") for name in files):
             raise ReleaseError("Unexpected web archive contents")
         manifest = json.load(archive.extractfile(files["manifest.json"]))

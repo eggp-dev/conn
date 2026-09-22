@@ -125,7 +125,7 @@ class ReleaseTests(unittest.TestCase):
         release.finalize(self.out, self.tag, self.sha, self.root)
 
     def web_archive(self, dirty=False, bad_hash=False):
-        data = {"conn": b"cli", "conn-web": b"server", "README.md": b"readme", "LICENSE": b"MIT", "ui/index.html": b"<html></html>", "ui/assets/app.js": b"code"}
+        data = {"conn": b"cli", "conn-web": b"server", "README.md": b"readme", "LICENSE": b"MIT", "ui/index.html": b"<html></html>", "ui/conn-icon.svg": b"<svg></svg>", "ui/assets/app.js": b"code"}
         data["manifest.json"] = json.dumps({"version":self.version, "profile":"release", "sourceDirty":dirty, "platform":"linux", "architecture":"x64", "sourceCommit":self.sha}).encode()
         data["SHA256SUMS"] = "".join(f"{hashlib.sha256(value).hexdigest()}  {name}\n" for name,value in data.items()).encode()
         if bad_hash: data["conn-web"] = b"changed server"
