@@ -43,8 +43,8 @@ Do not retain real addresses, accounts, command payloads or authentication respo
 
 - 2026-09-22: **still open after v0.8.5**. The user reports constrained width/height and misplaced input
   after updating/restarting, even with a fixed window when notification/approval bars animate. Resize
-  and output ordering defects were reproduced and fixed in the unreleased follow-up; the exact installed native/remote
-  environment remains unverified. See [dimension follow-up](ssh-input-review-results.md#terminal-dimensions-after-v085--unreleased).
+  and output ordering defects were reproduced and fixed in v0.8.6; the exact installed native/remote
+  environment remains unverified. See [dimension follow-up](ssh-input-review-results.md#terminal-dimensions-after-v085).
 - Problem: long paths and OAuth responses reportedly look broken when wrapped.
 - Scope: compare actual output, terminal grid, rendering and agent snapshots to locate the defect.
 - Acceptance: synthetic long paths, URLs, token-shaped strings, Korean/Unicode, paste, resize and

@@ -2,9 +2,9 @@
 
 [한국어](ssh-input-review-results.ko.md) · [Reproduce the tests](browser-testing.md#ssh-input-cursor-and-approval-regression)
 
-2026-09-22 · v0.8.5 patch based on v0.8.4 (`06143d0`).
+2026-09-22 · v0.8.5 fixes and v0.8.6 terminal-dimensions follow-up.
 
-## Terminal dimensions after v0.8.5 — unreleased
+## Terminal dimensions after v0.8.5
 
 The user confirmed the issue after updating and restarting, then clarified that both axes appear
 constrained when notification/approval bars animate, while the application window stays fixed.
@@ -50,7 +50,7 @@ has not been tested.
 - Earlier direct OpenSSH and nested interactive SSH probes each passed 18 input/approval cases at
   three widths. They do not establish correctness of the user's gateway implementation.
 
-This follow-up is unreleased and is not in published v0.8.5. The exact photographed corruption still needs
+The resize/output ordering fixes are included in v0.8.6; they were not in v0.8.5. The exact photographed corruption still needs
 acceptance in the user's installed macOS app and SSH environment. Resize/output tests do not establish
 native keyboard-input ordering or physical-keyboard IME behavior. A separate `/bin/sh` canonical-input
 experiment left old wrapped text after approval denial; it remains open and is not identified as the photo's cause.
@@ -106,7 +106,7 @@ Physical-keyboard Korean IME, the user's actual remote account/gateway and the s
 and no real-account authentication was attempted. No additional input/resize failure requiring a product
 change was reproduced, so product code was unchanged. Personal paths, keys, raw socket/DOM/audit logs
 and captures were not committed. This does not verify signed/notarized installed-app upgrades or a public
-release. Version remains 0.8.5 and the change remains Unreleased.
+release. At the time of this native run, version was 0.8.5 and the change was Unreleased.
 
 ## Additional report: JSON followed immediately by the prompt
 

@@ -2,7 +2,7 @@
 
 [English](platform-support.md) · 한국어 · [설치](getting-started.ko.md) · [릴리스](releasing.ko.md)
 
-Conn은 MIT 라이선스 소스와 네이티브 바이너리를 [GitHub Releases](https://github.com/eggp-dev/conn/releases/tag/v0.8.5)로 제공합니다. 모든 데스크톱 패키지는 같은 Rust 엔진과 Svelte UI를 사용하며 브라우저 하네스는 개발용 어댑터입니다.
+Conn은 MIT 라이선스 소스와 네이티브 바이너리를 [GitHub Releases](https://github.com/eggp-dev/conn/releases/tag/v0.8.6)로 제공합니다. 모든 데스크톱 패키지는 같은 Rust 엔진과 Svelte UI를 사용하며 브라우저 하네스는 개발용 어댑터입니다.
 
 ## 다음 프리뷰 릴리스 대상
 
