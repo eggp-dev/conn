@@ -18,7 +18,7 @@ export const copy = {
     os: { mac: "macOS", linux: "Linux", windows: "Windows" },
     windowsHint: "Download the installer for Windows x64",
     filmCaption: "One continuous take: a real SSH login, a real Claude Code session, real Conn.",
-    filmDisclosure: "Prepared scenario on a disposable server; still moments shortened.",
+    filmDisclosure: "Prepared scenario on a disposable server; still moments shortened. Recorded with an earlier version that reviewed every SSH command; current Autopilot follows command policy.",
     filmHow: "How it was recorded",
     promisesTitle: "Three things it will not do without you.",
     promises: [
@@ -90,7 +90,7 @@ export const copy = {
     os: { mac: "macOS", linux: "Linux", windows: "Windows" },
     windowsHint: "Windows x64 설치 파일 내려받기",
     filmCaption: "끊지 않은 한 테이크: 실제 SSH 로그인, 실제 Claude Code 세션, 실제 Conn.",
-    filmDisclosure: "일회용 서버에서 준비한 시나리오이며, 화면이 멈춘 구간은 줄였습니다.",
+    filmDisclosure: "일회용 서버에서 준비한 시나리오이며, 화면이 멈춘 구간은 줄였습니다. 모든 SSH 명령을 승인받던 이전 버전의 녹화이며, 현재 Autopilot은 명령 정책을 따릅니다.",
     filmHow: "촬영 방법",
     promisesTitle: "내 허락 없이는 하지 않는 세 가지.",
     promises: [

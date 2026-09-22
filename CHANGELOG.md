@@ -2,13 +2,20 @@
 
 ## Unreleased
 
+## 0.8.5 — Preview · 2026-09-22
+
 - Restore policy-based Autopilot in POSIX SSH: ordinary commands run, risky commands request approval, and deny rules remain blocked. Remote paths are never inspected as host files.
 - Make **Allow this session** work for SSH confirm rules and publish the allowance immediately. Programs requiring individual review explain that requirement instead of showing an inert button. The control indicator explains the selected collaboration mode.
 - Stop resizing the underlying terminal when opening the modal settings sheet. The obsolete side-panel width animation repeatedly resized SSH line editors and corrupted long input/cursor placement.
+- Keep approval actions visible while long command details scroll inside the common decision card.
 
-한국어: POSIX SSH의 Autopilot에서 일반 명령은 자동 실행하고 위험 명령은 승인을 받도록 수정했습니다. 세션 허용은 해당 확인 규칙에 적용하고 즉시 표시하며, 명령별 검토가 필요한 경우에는 이유를 안내합니다. 모달 설정 뒤에서 남아 있던 터미널 너비 변경을 제거해 재현된 긴 입력·커서 깨짐을 수정했습니다.
+한국어: POSIX SSH의 Autopilot에서 일반 명령은 자동 실행하고 위험 명령은 승인을 받도록 수정했습니다. 세션 허용은 해당 확인 규칙에 적용하고 즉시 표시하며, 명령별 검토가 필요한 경우에는 이유를 안내합니다. 모달 설정 뒤에서 남아 있던 터미널 너비 변경을 제거해 재현된 긴 입력·커서 깨짐을 수정했습니다. 긴 명령의 승인 내용은 카드 안에서 스크롤하고 승인 버튼은 계속 표시합니다.
 
-Validation and limits: [English](docs/ssh-input-review-results.md) · [한국어](docs/ssh-input-review-results.ko.md).
+Validation: 258 Rust tests, 48 frontend tests, 85 core/xterm comparisons, real SSH browser regressions and the 12-stage collaboration harness passed. On Apple Silicon macOS 27.0, the same product code was also exercised in an ad-hoc signed native debug app with real WebKit, Tauri IPC and loopback SSH: long input, cursor editing, approval/session allowances, takeover and original-shell return passed. Release artifact signing/notarization and installation checks are separate.
+
+Remaining coverage: physical-keyboard Korean IME composition and the user's exact SSH setup remain unverified. WebKit emitted ResizeObserver warnings without a persistent mismatch in the checked steps. Other macOS versions, Windows interactive GUI and full installed-app upgrades remain open. [Validation report](docs/ssh-input-review-results.md).
+
+한국어: Rust 258개·프런트엔드 48개·화면 비교 85회·실제 SSH 브라우저 회귀·협업 하네스 12단계를 통과했습니다. Apple Silicon macOS 27.0의 실제 WebKit·Tauri 디버그 앱과 SSH에서 긴 입력·커서 편집·승인·세션 허용·제어권 회수·원래 셸 복귀도 확인했습니다. 배포 파일 서명·공증과 설치 검사는 별도입니다. 실제 키보드 한글 IME 조합과 사용자의 정확한 SSH 환경은 미검증이며, ResizeObserver 경고가 관찰됐습니다. 다른 macOS 버전, Windows 대화형 UI와 설치된 앱의 전체 업그레이드 검증은 남아 있습니다. [검증 보고서](docs/ssh-input-review-results.ko.md).
 
 ## 0.8.4 — Preview · 2026-09-21
 

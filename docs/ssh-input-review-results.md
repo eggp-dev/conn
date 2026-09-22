@@ -2,7 +2,7 @@
 
 [한국어](ssh-input-review-results.ko.md) · [Reproduce the tests](browser-testing.md#ssh-input-cursor-and-approval-regression)
 
-2026-09-22 · Unreleased changes based on v0.8.4 (`06143d0`).
+2026-09-22 · v0.8.5 patch based on v0.8.4 (`06143d0`).
 
 ## Report and reproduced causes
 
@@ -28,7 +28,7 @@ Opening modal settings no longer resizes the underlying PTY. Actual window and c
 - The production UI with the real Rust backend and loopback SSH exercised 240–7,000-character input, Korean/emoji input, repeated settings open/close, long-command approval at a narrow viewport, session allowance scope, human cursor movement/insertion, takeover and return to the original local shell.
 - The existing collaboration-context harness covers the 12 tab, notice, sharing, reconnect and preparation stages.
 
-The browser tests above use Linux Chromium and remote Bash with UTF-8 locale. The native macOS run below is separate evidence. Neither establishes that every cause of the user's symptom is resolved. These changes have not been released.
+The browser tests above use Linux Chromium and remote Bash with UTF-8 locale. The native macOS run below is separate evidence. Neither establishes that every cause of the user's symptom is resolved. Release artifact validation is reported separately.
 
 ## Native macOS follow-up
 
@@ -62,4 +62,4 @@ Native accessibility trees and window captures were inspected; selected screen/c
 
 - **Physical-keyboard Korean IME composition remains unverified.** Automated keys produced composed `한글` in the textarea but initial consonants in the PTY. A temporary WebKit event trace contained no `compositionstart/update/end`; it recorded `insertText`/`insertReplacementText` with `isComposing=false` and key events. This delivery cannot establish success or failure for physical-keyboard composition, so no product workaround was added. Successful Unicode paste/editing is not an IME acceptance claim. The temporary trace was removed.
 - WebKit's inspector had accumulated `ResizeObserver loop completed with undelivered notifications` messages after window/dock changes. Checked screen/cursor/editing steps did not establish persistent disagreement; this is not an error-free-console claim.
-- The user's actual SSH server/shell setup, non-UTF-8 line editors, other macOS versions, and signed/notarized installed-app upgrades still need separate acceptance. Version remains 0.8.4 and changes remain Unreleased; this run is not a merge, tag or release.
+- The user's actual SSH server/shell setup, non-UTF-8 line editors, other macOS versions, and signed/notarized installed-app upgrades still need separate acceptance. At the time of this native run, the checkout was version 0.8.4 with changes under Unreleased; this run itself was not a merge, tag or release.
