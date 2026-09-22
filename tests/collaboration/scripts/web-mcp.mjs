@@ -61,6 +61,14 @@ class MCP {
   close() { this.child.stdin.end(); for (const p of this.pending.values()) clearTimeout(p.timer); this.pending.clear(); }
 }
 const ready = () => page.locator('.host:not([hidden])[data-terminal-ready="true"]').waitFor();
+async function decided(agent, approvalId, expected) {
+  const result = await until(async () => {
+    const current = await agent.tool('terminal_check_approval', {approvalId});
+    return current.state === 'pending' ? false : current;
+  }, `Approval ${approvalId} did not settle after the owner action`);
+  assert.ok(expected.includes(result.state), JSON.stringify(result));
+  return result;
+}
 const input = () => page.locator('.host:not([hidden]) .xterm-helper-textarea');
 async function human(text, enter = true) { await ready(); await input().focus(); await page.keyboard.insertText(text); if (enter) await page.keyboard.press('Enter'); }
 async function sharing(stop = false) {
@@ -119,8 +127,7 @@ async function approveControl(agent) {
   await page.locator('[data-request-key*="\u003acontrol:"] .primary').click();
   const result = await control;
   if (result.status === 'pending') {
-    const decided = await agent.tool('terminal_check_approval', { approvalId: result.approvalId });
-    assert.ok(['granted', 'executed'].includes(decided.state), JSON.stringify(decided));
+    await decided(agent, result.approvalId, ['granted', 'executed']);
   }
 }
 async function marker(agent, text, allowInitialReview = false) {
@@ -128,7 +135,7 @@ async function marker(agent, text, allowInitialReview = false) {
   const result = await agent.tool('terminal_send_key', { key: 'ENTER', intent: 'Print a synthetic verification marker.' });
   if (allowInitialReview && result.status === 'pending') {
     await page.locator('[data-request-key*="\u003areview:"] .btn.ok').click();
-    assert.equal((await agent.tool('terminal_check_approval', { approvalId: result.approvalId })).state, 'granted');
+    await decided(agent, result.approvalId, ['granted']);
   } else assert.equal(result.status, 'executed', JSON.stringify(result));
   return until(async () => { const snap = await agent.tool('terminal_snapshot'); return snap.screen?.some(row => row.trim() === text) ? snap : false; }, `Missing marker ${text}`);
 }
@@ -198,7 +205,7 @@ try {
   await page.screenshot({path:join(evidence,'command-review.png')});
   const deny = page.locator('[data-request-key*="\u003areview:"] button').filter({ hasText: /deny|reject/i }).first();
   await deny.click();
-  assert.equal((await agent.tool('terminal_check_approval', { approvalId: risk.approvalId })).state, 'denied');
+  await decided(agent, risk.approvalId, ['denied']);
   await agent.tool('terminal_interrupt'); await sleep(180);
   await marker(agent, 'AFTER_IDLE_INTERRUPT_OK');
   cases.push('risky command review and denial; idle Ctrl-C returns to a usable shell prompt');
