@@ -239,6 +239,56 @@ fn agent_submission_links_to_shell_execution_without_human_attribution() {
     );
 }
 
+// macOS PTYs have small buffers. Readline can block echoing a long input while
+// the parent is still writing it; the output reader must not wait for that
+// writer's session lock before draining more bytes from the PTY.
+fn long_input_does_not_block_output(agent: bool) {
+    use conn_core::session::ConnKind;
+    let h = Shell::new("/bin/bash", false);
+    let payload = "abcdef".repeat(500);
+    let command = format!("printf 'LONG_OUTPUT<%s>\\n' '{payload}'");
+    let session = h.engine.session();
+    if agent {
+        let mut s = session.lock();
+        s.register_conn(7, ConnKind::Agent, "long-input", Box::new(|_| {}));
+        s.agent_request_control(7).unwrap();
+    }
+    let (done, completion) = std::sync::mpsc::channel();
+    let writer = std::thread::spawn(move || {
+        let mut s = session.lock();
+        if agent { s.agent_type(7, &command).unwrap(); }
+        else { s.human_input(command.as_bytes()); }
+        drop(s);
+        let _ = done.send(());
+    });
+    let completed = completion.recv_timeout(Duration::from_secs(5)).is_ok();
+    if !completed {
+        // Kill independently of the session lock so a regression fails rather
+        // than leaving the test runner stuck in the same deadlock.
+        h.engine.terminate().unwrap();
+    }
+    assert!(completed, "long PTY input blocked the output reader");
+    writer.join().unwrap();
+    if agent { h.engine.session().lock().agent_send_key(7, "ENTER").unwrap(); }
+    else { h.engine.write_input(b"\r"); }
+    let expected = format!("LONG_OUTPUT<{payload}>\r\n");
+    h.until(|| String::from_utf8_lossy(&h.output.lock().unwrap()).contains(&expected));
+    if agent { h.engine.session().lock().agent_release_control(7).unwrap(); }
+    h.until(|| h.engine.session().lock().completion_prompt_ready());
+    h.send("printf 'NEXT_OUTPUT_OK\\n'");
+    h.until(|| String::from_utf8_lossy(&h.output.lock().unwrap()).contains("\r\nNEXT_OUTPUT_OK\r\n"));
+}
+
+#[test]
+fn long_agent_input_drains_pty_echo_without_deadlock() {
+    long_input_does_not_block_output(true);
+}
+
+#[test]
+fn long_human_paste_drains_pty_echo_without_deadlock() {
+    long_input_does_not_block_output(false);
+}
+
 #[test]
 fn bash_lifecycle_and_authentication_input() {
     lifecycle("/bin/bash");

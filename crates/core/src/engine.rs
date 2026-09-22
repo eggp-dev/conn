@@ -194,21 +194,42 @@ impl Engine {
 
         let exited = Arc::new(AtomicBool::new(false));
 
-        // PTY → session
+        // Drain the PTY independently of the session lock. A long input write
+        // holds that lock while readline echoes input; on macOS both PTY
+        // directions can fill, deadlocking write_all against the output reader.
+        // One FIFO consumer applies every chunk in order. Do not bound this
+        // channel with a blocking send: that would recreate the same cycle.
         let pty_done = Arc::new(AtomicBool::new(false));
+        let (output_tx, output_rx) = mpsc::channel::<Vec<u8>>();
         {
             let session = session.clone();
             let pty_done = pty_done.clone();
+            std::thread::Builder::new().name("ss-pty-output".into()).spawn(move || {
+                while let Ok(mut bytes) = output_rx.recv() {
+                    // Readline often echoes a byte at a time. Coalesce only
+                    // already queued bytes, with no delay and a bounded batch.
+                    while bytes.len() < 16384 {
+                        match output_rx.try_recv() {
+                            Ok(next) => bytes.extend_from_slice(&next),
+                            Err(_) => break,
+                        }
+                    }
+                    session.lock().pty_output(&bytes);
+                }
+                // Child exit must wait for application, not just the last read.
+                pty_done.store(true, Ordering::SeqCst);
+            })?;
+        }
+        {
             std::thread::Builder::new().name("ss-pty-read".into()).spawn(move || {
                 let mut buf = [0u8; 16384];
                 loop {
                     match pty_reader.read(&mut buf) {
                         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(1)),
                         Ok(0) | Err(_) => break,
-                        Ok(n) => session.lock().pty_output(&buf[..n]),
+                        Ok(n) => if output_tx.send(buf[..n].to_vec()).is_err() { break; },
                     }
                 }
-                pty_done.store(true, Ordering::SeqCst);
             })?;
         }
 
