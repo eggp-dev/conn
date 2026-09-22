@@ -12,6 +12,7 @@
     "test:collaboration": "node scripts/collaboration-test.mjs",
     "test:collaboration:harness": "node scripts/collaboration-harness-test.mjs",
     "test:context:harness": "node scripts/context-harness-test.mjs",
+    "test:input:harness": "node scripts/input-review-harness-test.mjs",
     "test:screen": "node scripts/screen-parity-test.mjs"
   },
   "dependencies": {

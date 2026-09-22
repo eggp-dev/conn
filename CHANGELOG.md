@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Restore policy-based Autopilot in POSIX SSH: ordinary commands run, risky commands request approval, and deny rules remain blocked. Remote paths are never inspected as host files.
+- Make **Allow this session** work for SSH confirm rules and publish the allowance immediately. Programs requiring individual review explain that requirement instead of showing an inert button. The control indicator explains the selected collaboration mode.
+- Stop resizing the underlying terminal when opening the modal settings sheet. The obsolete side-panel width animation repeatedly resized SSH line editors and corrupted long input/cursor placement.
+
+한국어: POSIX SSH의 Autopilot에서 일반 명령은 자동 실행하고 위험 명령은 승인을 받도록 수정했습니다. 세션 허용은 해당 확인 규칙에 적용하고 즉시 표시하며, 명령별 검토가 필요한 경우에는 이유를 안내합니다. 모달 설정 뒤에서 남아 있던 터미널 너비 변경을 제거해 재현된 긴 입력·커서 깨짐을 수정했습니다.
+
+Validation and limits: [English](docs/ssh-input-review-results.md) · [한국어](docs/ssh-input-review-results.ko.md).
+
 ## 0.8.4 — Preview · 2026-09-21
 
 - Keep pending requests, active control and recent agent activity visible across tabs. Clicking a notice opens the exact terminal and request; opening or switching an agent's tab preserves the person's current selection.

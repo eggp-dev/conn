@@ -409,6 +409,19 @@ fn real_ssh_login_injected_by_a_launcher_stays_secret_after_sharing() {
     }
     let audit=std::fs::read_to_string(h.state.config_dir.join("audit.jsonl")).unwrap();
     assert!(audit.contains("sharing_started")&&!audit.contains("fixture@127.0.0.1"),"startup arguments are not backfilled");
+    assert_eq!(shared["reviewRequired"],false,"a direct POSIX SSH launch uses command policy after sharing");
+    h.invoke_in_window("main","set_mode",json!({"session":id,"mode":"autopilot"})).unwrap();
+    h.invoke_in_window("main","set_control_gate",json!({"session":id,"ask":false})).unwrap();
+    h.invoke_in_window("main","set_pacing",json!({"session":id,"patch":{"enterGraceMs":0}})).unwrap();
+    agent.call("request_control",json!({"session":id,"reason":"Print a synthetic remote marker"})).unwrap();
+    agent.call("type",json!({"session":id,"text":"printf 'AGENT_REMOTE_%s\\n' 42"})).unwrap();
+    let executed=agent.call("send_key",json!({"session":id,"key":"ENTER","intent":"Print a synthetic remote marker"})).unwrap();
+    assert_eq!(executed["status"],"executed");
+    wait_for(||owner_output(&events,&id,"main").contains("AGENT_REMOTE_42"));
+    agent.call("type",json!({"session":id,"text":"sudo id"})).unwrap();
+    let pending=agent.call("send_key",json!({"session":id,"key":"ENTER","intent":"Verify privilege review without executing"})).unwrap();
+    assert_eq!(pending["status"],"pending");
+    // Stopping sharing cancels the pending command; no privileged command is run.
     h.invoke_in_window("main","set_sharing",json!({"session":id,"shared":false,"connectionIds":[]})).unwrap();
     assert!(agent.call("snapshot",json!({"session":id})).is_err());
     h.shutdown();

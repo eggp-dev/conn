@@ -141,19 +141,25 @@ events on Windows. The desktop shares the same Engine with xterm.js rendering.
 Closing a tab terminates its child process; it does not assume every shell accepts
 Ctrl-D as an exit command.
 
-Local POSIX shells retain existing command and filesystem policy analysis. Every
-remote or non-POSIX profile requires human review for each agent command, even
-when the normal policy default is allow. Session-wide approvals cannot remove
-that requirement. Deny matches still block execution; compound commands are
-rejected when command isolation is enabled. Remote cwd and file targets are not
-invented from the host filesystem.
+Local POSIX shells retain command and filesystem policy analysis. POSIX SSH
+sessions apply command policy without host filesystem inspection: in Autopilot,
+ordinary commands run and risky commands request approval. **Allow this session**
+lifts only the matching confirm label; deny rules remain in force. Co-pilot still
+requires acceptance of each proposal. Remote cwd, home and file targets are unknown.
+
+Other remote backends and non-POSIX profiles require review for every agent command;
+session allowances cannot remove that requirement. Command isolation remains enabled
+according to policy.
 
 The non-POSIX parser recognizes simple commands and dialect quoting for review;
 it does not expand PowerShell aliases, functions, nested scripts, or certify
 arbitrary syntax. As with existing policy, this is a guard against mistakes,
 not a security sandbox. Choosing a shell kind must match the executable.
-Starting a nested SSH client manually inside a local POSIX tab does not change
-that tab's profile; use an SSH profile for the remote review boundary.
+A direct SSH launch or a single `ssh` command identified by local Bash/Zsh
+integration uses remote command policy until that SSH process exits. This does
+not change the tab's profile, install remote hooks, or infer remote authentication.
+Without that integration, use an SSH profile to identify the remote execution target.
+An unclassified foreground program or lost SSH lifecycle requires individual review.
 
 The existing line-delimited JSON protocol uses Unix sockets on macOS/Linux and
 local Windows named pipes with an owner-only DACL and remote clients rejected.

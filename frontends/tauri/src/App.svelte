@@ -215,7 +215,6 @@
     else if (e.altKey && key === "ArrowRight") { e.preventDefault(); const n = nextNeedingAttention(); if (n) select(n); }
   }
 
-  $effect(() => { void st.settingsOpen; const h = setTimeout(() => terms[st.active]?.refit(), 250); return () => clearTimeout(h); });
 
   $effect(() => {
     if (!st.followSystem) return;
@@ -394,7 +393,7 @@
 
 <svelte:window onkeydown={onKey} />
 
-<main style:--handback-space={`${dockSpace}px`} style:--term-bottom={`${26 + dockSpace + timelineSpace}px`} class="app" class:agent={cur().controller.type === "agent"} class:asking={!!cur().ctlReq || !!cur().attention} style:--term-right={st.settingsOpen ? "616px" : "16px"} style:--agent={cur().controller.type === "agent" ? agentColor(cur().controller.agentId) : cur().ctlReq ? agentColor(cur().ctlReq?.agentId) : cur().attention ? agentColor(cur().attention?.agentId) : "#8b7cff"}>
+<main style:--handback-space={`${dockSpace}px`} style:--term-bottom={`${26 + dockSpace + timelineSpace}px`} class="app" class:agent={cur().controller.type === "agent"} class:asking={!!cur().ctlReq || !!cur().attention} style:--agent={cur().controller.type === "agent" ? agentColor(cur().controller.agentId) : cur().ctlReq ? agentColor(cur().ctlReq?.agentId) : cur().attention ? agentColor(cur().attention?.agentId) : "#8b7cff"}>
   {#each st.order as id (id)}
     {#if tab(id)?.statusReady}<Term bind:this={terms[id]} session={id} />{/if}
   {/each}

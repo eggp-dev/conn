@@ -53,7 +53,7 @@ Open **the C icon at the top left → Settings**.
 2. Under **Appearance → Language**, choose English or 한국어. Handoff effects can be disabled; the icon also respects the OS reduced-motion setting.
 3. Close Settings and open the **top-right control indicator**. For your first request, choose **Autopilot**, enable **Ask before granting**, and set **Grace** to 2 seconds.
 
-Autopilot allows agent execution within policy. **Co-pilot** lets you accept each proposed line with Enter; **Observe** allows reading without agent writes.
+Autopilot runs ordinary commands and asks for those flagged by policy, including in POSIX SSH. **Allow this session** skips the matching confirm rule in that terminal session; other rules remain in force. **Co-pilot** lets you accept each proposed line with Enter; **Observe** allows reading without agent writes.
 
 ## Connect your agent
 

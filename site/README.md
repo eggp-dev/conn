@@ -51,8 +51,8 @@ The footer says that the site counts visits and that the app has no telemetry. K
 
 ## Rules for the landing page
 
-- Every sentence in `src/i18n/landing.ts` is a promise the product keeps today. Inside SSH every
-  command is reviewed; locally the policy decides. Do not round that up.
+- Every sentence in `src/i18n/landing.ts` is a promise the product keeps today. POSIX SSH uses
+  command policy without inspecting remote files on the host. Do not round that up.
 - Product images are crops of the recorded take (`../media/demo/public/footage/remote/take.mp4`),
   not mock-ups. `../media/demo/RECORDING-REMOTE.md` says what was prepared.
 - The star count appears from 50 stars on; below that the button stands alone.

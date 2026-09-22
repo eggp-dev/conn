@@ -48,7 +48,7 @@ The timeline is not a screen recording or a backup of running processes. Command
 
 ## Does collaboration still work over SSH?
 
-Yes, within the ordinary session's existing screen and control permissions. Conn drives the SSH client in the shared terminal. Local shell integration records the outer `ssh` command; it does not install remote hooks or automatically record the remote shell's human commands. Remote profiles require command review. [Profiles and boundaries](backends.md)
+Yes, within the ordinary session's existing screen and control permissions. Conn drives the SSH client in the shared terminal. Local shell integration records the outer `ssh` command; it does not install remote hooks or automatically record the remote shell's human commands. In POSIX SSH, Autopilot runs ordinary commands and asks for commands flagged by policy. Allow this session applies only to the matching confirm rule. Conn does not inspect remote filesystem targets. [Profiles and boundaries](backends.md)
 
 ## Are external automation sessions shared too?
 
