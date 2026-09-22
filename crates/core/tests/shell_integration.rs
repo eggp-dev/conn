@@ -320,8 +320,8 @@ fn nested_foreground_commands_require_review_across_a_sharing_boundary() {
     let h=Shell::new("/bin/bash",false);let session=h.engine.session();
     assert!(!session.lock().review_required());
     assert!(matches!(session.lock().analyse_line("printf local").decision,Decision::Allow));
-    // SSH, editors and nested shells are all foreground programs from the outer
-    // shell's perspective. Do not apply this machine's filesystem assumptions.
+    // Unclassified programs, including editors and nested shells, still need
+    // review. Do not apply this machine's filesystem assumptions.
     h.send("/bin/sh");h.until(||h.starts().len()==1);
     {
         let mut s=session.lock();

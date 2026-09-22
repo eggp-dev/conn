@@ -1,5 +1,5 @@
 // Every sentence here is a promise the product keeps today. When behaviour changes, change the
-// sentence; do not round it up. (Inside SSH every command is reviewed; locally the policy decides.)
+// sentence; do not round it up. (POSIX SSH uses command policy without host filesystem inspection.)
 export type Lang = "en" | "ko";
 
 export const copy = {
@@ -18,7 +18,7 @@ export const copy = {
     os: { mac: "macOS", linux: "Linux", windows: "Windows" },
     windowsHint: "Download the installer for Windows x64",
     filmCaption: "One continuous take: a real SSH login, a real Claude Code session, real Conn.",
-    filmDisclosure: "Prepared scenario on a disposable server; still moments shortened.",
+    filmDisclosure: "Prepared scenario on a disposable server; still moments shortened. Recorded with an earlier version that reviewed every SSH command; current Autopilot follows command policy.",
     filmHow: "How it was recorded",
     promisesTitle: "Three things it will not do without you.",
     promises: [
@@ -30,7 +30,7 @@ export const copy = {
       {
         key: "deny",
         title: "Risky commands wait for you.",
-        body: "The agent types; running is a separate step you can see. Deletes, force pushes and privilege changes stop for your approval with the exact line and the agent's stated intent. Inside SSH, where Conn cannot see what a command will touch, every command waits.",
+        body: "The agent types; running is a separate step you can see. Deletes, force pushes and privilege changes stop for your approval with the exact line and the agent's stated intent. POSIX SSH follows the same command rules; remote files are not inspected.",
       },
       {
         key: "takeover",
@@ -90,7 +90,7 @@ export const copy = {
     os: { mac: "macOS", linux: "Linux", windows: "Windows" },
     windowsHint: "Windows x64 설치 파일 내려받기",
     filmCaption: "끊지 않은 한 테이크: 실제 SSH 로그인, 실제 Claude Code 세션, 실제 Conn.",
-    filmDisclosure: "일회용 서버에서 준비한 시나리오이며, 화면이 멈춘 구간은 줄였습니다.",
+    filmDisclosure: "일회용 서버에서 준비한 시나리오이며, 화면이 멈춘 구간은 줄였습니다. 모든 SSH 명령을 승인받던 이전 버전의 녹화이며, 현재 Autopilot은 명령 정책을 따릅니다.",
     filmHow: "촬영 방법",
     promisesTitle: "내 허락 없이는 하지 않는 세 가지.",
     promises: [
@@ -102,7 +102,7 @@ export const copy = {
       {
         key: "deny",
         title: "위험한 명령은 나를 기다립니다.",
-        body: "에이전트는 입력만 하고, 실행은 눈에 보이는 별도의 단계입니다. 삭제, 강제 푸시, 권한 변경은 정확한 명령 줄과 에이전트가 밝힌 의도를 보여 주며 승인을 기다립니다. Conn이 명령의 영향을 볼 수 없는 SSH 안에서는 모든 명령이 기다립니다.",
+        body: "에이전트는 입력만 하고, 실행은 눈에 보이는 별도의 단계입니다. 삭제, 강제 푸시, 권한 변경은 정확한 명령 줄과 에이전트가 밝힌 의도를 보여 주며 승인을 기다립니다. POSIX SSH에서도 같은 명령 규칙을 적용하며, 원격 파일은 검사하지 않습니다.",
       },
       {
         key: "takeover",

@@ -147,5 +147,7 @@
 <div class="host" bind:this={host} hidden={!active}></div>
 
 <style>
-  .host { position: absolute; inset: 44px var(--term-right, 16px) var(--term-bottom, 26px) 16px; padding: 0; transition: right .22s var(--ease); }
+  /* Settings is a modal, so opening it must not resize the underlying shell.
+     Real pane changes commit the grid once; never animate a PTY's dimensions. */
+  .host { position: absolute; inset: 44px 16px var(--term-bottom, 26px) 16px; padding: 0; }
 </style>

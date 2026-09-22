@@ -186,6 +186,7 @@ impl Engine {
 
         session.lock().set_output_frame_sink(cfg.output_frame);
         session.lock().set_execution_profile(profile);
+        session.lock().set_ssh_transport(std::path::Path::new(&plan.program).file_stem().is_some_and(|name| name == "ssh"));
         #[cfg(unix)]
         let integration = Arc::new(parking_lot::Mutex::new(integration));
         #[cfg(unix)]

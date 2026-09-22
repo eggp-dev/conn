@@ -42,6 +42,8 @@
       <button class:on={tb.mode === m} onclick={() => changeMode(m)} title={t(`mode.${m}.desc`)}>{t(`mode.${m}`)}</button>
     {/each}
   </div>
+  <p class="muted note">{t(`mode.${tb.mode}.desc`)}</p>
+  {#if tb.reviewRequired}<p class="muted note">{t('hold.review_required')}</p>{/if}
   {#if tb.effectiveMode !== tb.mode}<p class="muted note">→ {t(`mode.${tb.effectiveMode}`)}</p>{/if}
 
   <label class="row">

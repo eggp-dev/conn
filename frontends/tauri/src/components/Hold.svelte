@@ -41,7 +41,11 @@
       <span class="spacer"></span>
       <button class="btn ok" disabled={action.busy} onclick={() => decide("grant")}><kbd>a</kbd> {t("hold.approve")}</button>
       <button class="btn danger" disabled={action.busy} onclick={() => decide("deny")}><kbd>d</kbd> {t("hold.deny")}</button>
-      <button class="btn" disabled={action.busy || cur().reviewRequired} onclick={() => decide("allow_session")}><kbd>A</kbd> {t("hold.allow_session")}</button>
+      {#if cur().reviewRequired}
+        <span class="muted review-note">{t('hold.review_required')}</span>
+      {:else}
+        <button class="btn" disabled={action.busy} title={t('hold.allow_session_hint',{label:a.label})} onclick={() => decide("allow_session")}><kbd>A</kbd> {t("hold.allow_session")}</button>
+      {/if}
     {/snippet}
   </DecisionCard>
 {/if}
@@ -62,4 +66,5 @@
   .raw { color: var(--muted); white-space: pre-wrap; word-break: break-all; }
   .spacer { flex: 1; }
   .cwd { font-size: 11px; }
+  .review-note { flex-basis:100%; text-align:right; font-size:11px; }
 </style>

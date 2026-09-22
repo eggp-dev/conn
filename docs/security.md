@@ -63,11 +63,13 @@ Owner approval operations now live in the app, not public CLI/socket commands.
 ## A cooperative guard, not OS isolation
 
 Conn's policy combines pattern matching and structural analysis of submitted shell lines.
-Remote, non-POSIX and shared external-origin sessions require command review rather than
-resolving their targets against the host filesystem. In an integrated local shell,
-an unconfirmed foreground program (including SSH or an editor) also requires review
-until the trusted outer shell reports completion. Session allowances do not remove
-that review requirement. Explicit deny rules remain in force. See [backend boundaries](backends.md#execution-and-policy-boundaries).
+In POSIX SSH sessions, Autopilot applies command rules: ordinary commands run, confirm
+rules ask for approval, and deny rules block. A session allowance lifts only its matching
+confirm label. Remote cwd, home and filesystem targets are never resolved on the host.
+This also applies to direct SSH launches and an `ssh` command identified by local
+Bash/Zsh integration; the matching outer-shell exit restores local policy. Other remote
+backends, non-POSIX shells and unclassified foreground or external programs still require
+review for every command, without session allowances. Explicit deny rules remain in force. See [backend boundaries](backends.md#execution-and-policy-boundaries).
 
 Shell aliases/functions, variables, scripts, nested shells and interactive line editors
 can change what a submitted line does. Planned commands and intent are agent-supplied
@@ -228,6 +230,9 @@ from saved timeline data. Back up work as files/version control.
   기록합니다. 외부 세션에는 공유 전환 시 훅을 새로 설치하지 않습니다.
 - v0.7.0 프리뷰의 내장 OpenAI 명령 제안은 제거했습니다. Conn은 모델 요청을 보내거나
   API 키를 저장하지 않습니다. 그때 저장한 키는 OS 보안 저장소에서 직접 삭제해야 합니다.
+- POSIX SSH의 Autopilot은 명령 정책을 적용합니다. 일반 명령은 실행하고 위험 명령은
+  승인을 기다리며, 세션 허용은 해당 확인 규칙에만 적용합니다. 원격 파일은 로컬에서
+  검사하지 않습니다. 다른 원격 백엔드·비POSIX 셸·식별하지 못한 프로그램은 명령별 검토를 유지합니다.
 - 정책·공유 제한은 OS 격리가 아닙니다. 같은 계정의 다른 도구, 로그인된 원격 계정의
   권한, 자식 기록·argv·환경·과거 스냅샷까지 제거하지 않습니다.
 - 네이티브 화면과 외부 런처는 각 플랫폼에서 별도 검증해야 합니다.

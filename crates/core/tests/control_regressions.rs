@@ -4,7 +4,7 @@ mod common;
 use common::{Harness, SessionExt};
 use conn_core::affordance::Actor;
 use conn_core::approval::{ApprovalState, Decision};
-use conn_core::backend::{Profile, ShellKind};
+use conn_core::backend::{BackendKind, Profile, ShellKind};
 use conn_core::session::{AgentMode, ConnKind, ControlOutcome, KeyResult, ProposalState, ServerEvent, SessionError};
 use serde_json::json;
 
@@ -122,6 +122,35 @@ fn review_required_allow_session_rejection_keeps_request_pending() {
     assert_eq!(String::from_utf8_lossy(&h.pty.lock().unwrap()), "Write-Output hello");
     s.resolve_approval(&approval_id, Decision::Grant, "cli").unwrap();
     assert_eq!(String::from_utf8_lossy(&h.pty.lock().unwrap()), "Write-Output hello\r");
+}
+
+#[test]
+fn ssh_autopilot_uses_risk_rules_and_scoped_session_allow_without_local_paths() {
+    use conn_core::policy::Decision as PolicyDecision;
+    let mut h = Harness::new();
+    let mut profile = Profile::local("ssh".into(), "/bin/bash".into());
+    profile.backend = BackendKind::Ssh;
+    h.session.set_execution_profile(profile);
+    h.session.set_cwd_override(Some(std::env::temp_dir()));
+    h.agent(1, "ssh-agent");
+    let events = h.frontend("ui");
+    h.session.agent_request_control(1).unwrap();
+    assert!(!h.session.review_required());
+    h.session.agent_type(1, "printf ordinary").unwrap();
+    assert!(matches!(h.session.agent_send_key(1, "ENTER").unwrap(), KeyResult::Executed { .. }));
+    let analysis = h.session.analyse_line("rm missing-file");
+    assert!(analysis.cwd.is_none());
+    assert!(analysis.segments.iter().all(|segment| segment.targets.is_empty()));
+    assert!(matches!(analysis.decision, PolicyDecision::Confirm { .. }));
+    h.session.agent_type(1, "rm missing-file").unwrap();
+    let KeyResult::Pending { approval_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
+    h.session.resolve_approval(&approval_id, Decision::AllowSession, "frontend").unwrap();
+    assert!(events.lock().unwrap().iter().any(|event| matches!(event, ServerEvent::SessionAllowsChanged { allows } if allows == &["delete files"])));
+    assert!(matches!(h.session.analyse_line("rm another-file").decision, PolicyDecision::Allow));
+    assert!(matches!(h.session.analyse_line("sudo id").decision, PolicyDecision::Confirm { .. }));
+    assert!(matches!(h.session.analyse_line("rm -rf /").decision, PolicyDecision::Deny { .. }));
+    assert!(matches!(h.session.analyse_line("echo first; sudo id").decision, PolicyDecision::Deny { .. }));
+    assert!(matches!(h.session.analyse_line("python -c 'print(1)'").decision, PolicyDecision::Confirm { .. }));
 }
 
 #[test]

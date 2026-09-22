@@ -430,6 +430,8 @@ pub struct Session {
     surface_id: String,
     external_writer_active: bool,
     execution_profile: Option<crate::backend::Profile>,
+    ssh_transport: bool,
+    ssh_foreground_sequence: Option<u64>,
     authority: Authority,
     policy: PolicyStore,
     approvals: ApprovalQueue,
@@ -518,6 +520,8 @@ impl Session {
     fn with_origin(cfg: SessionConfig, external_private: bool) -> Self {
         Self {
             external_origin: external_private,
+            ssh_transport: false,
+            ssh_foreground_sequence: None,
             participation: Participation::new(external_private),
             participation_listener: None,
             surface_generation: 1,
@@ -586,9 +590,23 @@ impl Session {
     }
 
     pub fn review_required(&self) -> bool {
+        if self.remote_policy() { return false; }
         self.external_origin || self.execution_profile.as_ref().is_some_and(|profile| profile.needs_review())
+            || self.ssh_foreground_sequence.is_some()
             || (self.shell_integration.state == "active" && (!self.shell_prompt_confirmed || self.shell_submission_inflight))
     }
+
+    /// SSH changes where commands and paths are interpreted, not the selected
+    /// collaboration mode. Use POSIX policy without inspecting the host filesystem.
+    fn remote_policy(&self) -> bool {
+        self.execution_profile.as_ref().is_some_and(|profile| {
+            profile.shell == crate::backend::ShellKind::Posix
+                && (profile.backend == crate::backend::BackendKind::Ssh || self.ssh_transport
+                    || (self.shell_integration.state == "active" && self.ssh_foreground_sequence.is_some()))
+        })
+    }
+
+    pub(crate) fn set_ssh_transport(&mut self, ssh: bool) { self.ssh_transport = ssh; }
 
     pub fn completion_prompt_ready(&self) -> bool {
         self.participation.shared && self.process_alive && self.shell_integration.state == "active" && self.shell_command.is_none()
@@ -641,8 +659,9 @@ impl Session {
         if !self.process_alive { return; }
         // Lifecycle sequence alone is retained privately. It identifies the outer
         // shell's foreground program without retaining its command or arguments.
-        let matching_end = kind == "end" && self.shell_foreground_sequence.is_some()
-            && self.shell_foreground_sequence == text.parse::<u64>().ok();
+        let ended_sequence = text.parse::<u64>().ok();
+        let matching_end = kind == "end" && ended_sequence.is_some()
+            && (self.shell_foreground_sequence == ended_sequence || self.ssh_foreground_sequence == ended_sequence);
         let record_start = self.participation.shared && self.shell_recording_ready && self.shell_recording_armed;
         match kind {
             "ready" => {
@@ -654,18 +673,24 @@ impl Session {
             }
             "start" => {
                 self.shell_foreground_sequence = Some(sequence);
+                // Retain only transport identity, including during a private login.
+                // A word containing "ssh" (or a compound script) is not an SSH launch.
+                let segments = crate::analysis::analyse_line(text);
+                self.ssh_foreground_sequence = (segments.len() == 1 && segments[0].command.as_deref() == Some("ssh")).then_some(sequence);
                 self.shell_prompt_confirmed = false;
                 self.shell_recording_ready = false;
                 self.shell_recording_armed = false;
             }
             "end" if matching_end => {
                 self.shell_foreground_sequence = None;
+                self.ssh_foreground_sequence = None;
                 self.shell_submission_inflight = false;
                 self.shell_prompt_confirmed = true;
                 self.shell_recording_ready = self.participation.shared && self.shell_integration.state == "active";
                 self.shell_recording_armed = false;
             }
             "gap" | "unavailable" => {
+                self.shell_integration.state = "unavailable".into();
                 self.shell_prompt_confirmed = false;
                 self.shell_recording_ready = false;
                 self.shell_recording_armed = false;
@@ -794,6 +819,7 @@ impl Session {
     }
 
     fn analyse(&self, cmd: &str) -> crate::policy::LineAnalysis {
+        if self.remote_policy() { return self.policy.analyse(cmd, None, None); }
         if self.review_required() {
             let shell = self.execution_profile.as_ref().filter(|p| p.needs_review()).map_or(crate::backend::ShellKind::Custom, |p| p.shell);
             return self.policy.analyse_external(cmd, shell);
@@ -1853,6 +1879,7 @@ impl Session {
         if decision == ApprovalDecision::AllowSession {
             self.policy.allow_for_session(&req.label);
             self.audit.record("human", "session_allow", json!({ "label": req.label }));
+            self.broadcast(ServerEvent::SessionAllowsChanged { allows: self.policy.session_allows() });
         }
         Ok(ApprovalInfo { approval_id: req.id, state: req.state, cmd: req.cmd, label: req.label })
     }
@@ -2021,5 +2048,73 @@ impl Session {
 
     pub fn screen(&self) -> &ScreenModel {
         &self.screen
+    }
+}
+
+
+#[cfg(test)]
+mod ssh_policy_tests {
+    use super::*;
+    use crate::backend::{Profile, ShellKind};
+
+    fn session() -> Session {
+        let mut s = Session::new(SessionConfig {
+            rows: 24, cols: 80, audit: Audit::null(),
+            policy: PolicyStore::from_policy(crate::policy::Policy::parse(crate::policy::EXAMPLE_POLICY).unwrap()),
+            pty_writer: Box::new(Vec::<u8>::new()), master: None,
+            pacing: Pacing::default(), shell_pid: None,
+        });
+        s.set_execution_profile(Profile::local("local".into(), "/bin/bash".into()));
+        s.set_cwd_override(Some(std::env::temp_dir()));
+        s.shell_event(1, "ready", "bash", "", "");
+        s
+    }
+
+    #[test]
+    fn nested_ssh_uses_remote_rules_until_its_matching_exit() {
+        let mut s = session();
+        s.set_shared(false).unwrap();
+        s.shell_event(2, "start", "/usr/bin/ssh example-host", "/private", "");
+        s.set_shared(true).unwrap();
+        assert!(!s.review_required());
+        let analysis = s.analyse_line("rm file");
+        assert!(analysis.cwd.is_none());
+        assert!(matches!(analysis.decision, PolicyDecision::Confirm { .. }));
+        s.shell_event(3, "end", "99", "", "0");
+        assert!(s.remote_policy(), "an unrelated end cannot change the target");
+        s.shell_event(4, "end", "2", "", "0");
+        assert!(!s.remote_policy());
+        assert!(s.analyse_line("printf local").cwd.is_some());
+    }
+
+    #[test]
+    fn lost_ssh_lifecycle_requires_review_without_using_local_paths() {
+        let mut s = session();
+        s.shell_event(2, "start", "ssh example-host", "", "");
+        s.shell_event(4, "gap", "", "", "");
+        assert!(s.review_required());
+        let analysis = s.analyse_line("printf remote");
+        assert!(analysis.cwd.is_none());
+        assert!(matches!(analysis.decision, PolicyDecision::Confirm { .. }));
+        s.shell_event(5, "end", "2", "", "0");
+        assert!(!s.remote_policy());
+        assert!(!s.review_required());
+    }
+
+    #[test]
+    fn other_foreground_programs_and_non_posix_ssh_still_require_review() {
+        for command in ["printf ssh", "ssh host; printf local", "sh", "vim file"] {
+            let mut s = session();
+            s.shell_event(2, "start", command, "", "");
+            assert!(!s.remote_policy(), "{command}");
+            assert!(s.review_required(), "{command}");
+        }
+        let mut s = session();
+        let mut profile = Profile::local("remote".into(), "pwsh".into());
+        profile.backend = crate::backend::BackendKind::Ssh;
+        profile.shell = ShellKind::PowerShell;
+        s.set_execution_profile(profile);
+        s.set_ssh_transport(true);
+        assert!(s.review_required());
     }
 }

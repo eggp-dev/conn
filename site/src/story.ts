@@ -39,7 +39,7 @@ export const storyCopy: Record<Lang, StoryCopy> = {
     lines: [
       ["You log in.", "Your password never reaches your agent."],
       ["It asks to join. Once.", "Until you allow it, it learns nothing about your sessions."],
-      ["On your server, every command waits for you.", "You see the exact line and what the agent says it is for."],
+      ["Risky commands on your server wait for you.", "You see the exact line and what the agent says it is for."],
       ["It wants to delete the whole cache.", "The card is waiting. So is the keyboard."],
       ["You say no. Then you just type.", "Your keystroke takes the terminal back."],
       ["It reads what you did, and finishes the job.", "The cache is intact, control is back with you, and there is a record."],
@@ -56,7 +56,7 @@ export const storyCopy: Record<Lang, StoryCopy> = {
     lines: [
       ["로그인은 내가 합니다.", "암호는 에이전트에게 가지 않습니다."],
       ["참여해도 되는지 묻습니다. 한 번만.", "허용하기 전에는 세션에 대해 아무것도 알 수 없습니다."],
-      ["내 서버에서는 모든 명령이 나를 기다립니다.", "정확한 명령 줄과 에이전트가 밝힌 의도를 보고 결정합니다."],
+      ["내 서버의 위험한 명령은 나를 기다립니다.", "정확한 명령 줄과 에이전트가 밝힌 의도를 보고 결정합니다."],
       ["캐시를 통째로 지우겠다고 합니다.", "카드가 기다리고 있습니다. 키보드도요."],
       ["안 됩니다. 그리고 그냥 직접 칩니다.", "키를 누르는 순간 터미널은 다시 내 것입니다."],
       ["내가 한 일을 읽고, 작업을 끝냅니다.", "캐시는 그대로이고, 제어권은 내게 돌아왔으며, 기록이 남습니다."],
