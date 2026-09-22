@@ -27,6 +27,8 @@ target/debug/conn --socket /path/to/state/conn.sock mcp --agent-id your-agent
 
 ## 빌드된 패키지 운영
 
+[릴리스 다운로드](https://github.com/eggp-dev/conn/releases)에 Linux x64 독립 웹 압축 파일을 제공합니다. 압축을 풀고 아래 실행 명령을 사용하면 됩니다. 다른 대상이나 개발용 빌드에만 개발 도구가 필요합니다. 서버·MCP CLI·UI·소스 매니페스트·라이선스·체크섬을 함께 제공합니다.
+
 ```sh
 npm run package:web
 ```
@@ -84,3 +86,6 @@ CONN_SSH_FIXTURE_CONFIG=/path/to/disposable/client.conf \
 이 설정에는 `validation-host` 별칭, 루프백 주소, 시험 포트, 폐기 가능한 키와 고정한 호스트 키가 있어야 합니다. 원격 셸은 `remote$` 프롬프트를 제공해야 합니다. 스크립트가 `ssh -F <config> validation-host`를 화면으로 실행하며, 종료 후 로컬 셸 복귀까지 검사합니다. 실제 계정의 키·SSH 설정을 사용하거나 바꾸지 마세요. 설정 경로에는 영문·숫자·`_./-`만 허용합니다. 두 픽스처 변수를 함께 지정하면 키 인증 설정을 우선합니다.
 
 브라우저 결과는 실행한 운영체제의 Chromium 증거입니다. macOS WebKit·네이티브 운영체제 알림·설치·배포 완료를 입증하지 않습니다. 이번 [공통 런타임 macOS 실기 결과](shared-runtime-macos-validation-results.ko.md)와 이전 [SSH 입력 검증 기록](ssh-input-review-results.ko.md)은 별도로 구분합니다.
+
+
+같은 SSH 픽스처에 복합 명령으로 진입하려면 입력 검사 명령에 `CONN_SSH_COMPOUND_ENTRY=1`을 추가한다. 한글 검사는 원격 UTF-8 로케일(예: `LC_ALL=C.UTF-8`)이 필요하다. 사용자 서버가 아닌 폐기 가능한 픽스처에만 설정한다.

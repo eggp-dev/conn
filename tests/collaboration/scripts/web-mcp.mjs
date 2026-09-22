@@ -74,11 +74,45 @@ async function sharing(stop = false) {
   else { await page.locator('.sharing input[type="checkbox"]').first().check(); await page.locator('.sharing footer .btn:not(.ghost)').click(); }
   await page.locator('.sharing').waitFor({ state: 'hidden' });
 }
+let verifiedControlUx = false;
 async function approveControl(agent) {
+  await input().focus();
+  const beforeGrid = await page.locator('.host:not([hidden])').boundingBox();
   const control = agent.tool('terminal_request_control', { reason: 'Verify the shared shell through the production web owner.' });
   control.catch(() => {});
   // Control may return a pollable pending result before the UI acts.
   await page.locator('[data-request-key*="\u003acontrol:"] .primary').waitFor();
+  if (!verifiedControlUx) {
+    const panel = page.locator('.control-morph');
+    assert.equal(await page.locator('.interaction-dock [data-request-key*="\u003acontrol:"]').count(), 0);
+    assert.equal(await input().evaluate(el => el === document.activeElement), true, 'new request must not steal typing focus');
+    const afterGrid = await page.locator('.host:not([hidden])').boundingBox();
+    assert.deepEqual([afterGrid.width,afterGrid.height], [beforeGrid.width,beforeGrid.height], 'badge morph never changes the PTY layout');
+    await page.screenshot({path:join(evidence,'control-open.png')});
+    await panel.getByRole('button',{name:'Later',exact:true}).click();
+    await panel.waitFor({state:'hidden'});
+    assert.equal(await page.locator('button.dot.pending').count(), 1, 'collapsed request remains pending');
+    await page.screenshot({path:join(evidence,'control-collapsed.png')});
+    await page.locator('button.dot.pending').click();
+    await panel.waitFor();
+    await page.keyboard.press('Escape');
+    await panel.waitFor({state:'hidden'});
+    await page.emulateMedia({reducedMotion:'reduce'});
+    await page.setViewportSize({width:640,height:420});
+    await page.locator('button.dot.pending').click();
+    await panel.waitFor();
+    const box = await panel.boundingBox();
+    assert.ok(box.x >= 0 && box.x+box.width <= 640 && box.y+box.height <= 420, 'compact request remains inside the viewport');
+    const primaryBox = await panel.locator('.primary').boundingBox();
+    assert.ok(primaryBox && primaryBox.y + primaryBox.height < 420, 'compact request keeps the decision buttons on screen');
+    await sleep(400);
+    await page.screenshot({path:join(evidence,'control-compact-reduced.png')});
+    await page.setViewportSize({width:1280,height:800});
+    await page.emulateMedia({reducedMotion:'no-preference'});
+    await sleep(600);
+    verifiedControlUx = true;
+    cases.push('badge control morph, no focus or PTY resize, collapse/reopen/Escape, compact and reduced motion');
+  }
   await page.locator('[data-request-key*="\u003acontrol:"] .primary').click();
   const result = await control;
   if (result.status === 'pending') {
@@ -125,12 +159,20 @@ try {
   cases.push('owner input and private-shell transition');
 
   const agent = new MCP('web-collaboration'); await agent.start();
+  await page.locator('[data-request-key^="connection:"]').waitFor();
+  await until(async () => {
+    const card = await page.locator('.connection-dock').boundingBox();
+    const terminal = await page.locator('.host:not([hidden])').boundingBox();
+    return card && terminal && terminal.y >= card.y + card.height;
+  }, 'Connection admission must reserve space instead of hiding the prompt');
+  await page.screenshot({path:join(evidence,'connection-admission.png')});
   await page.locator('[data-request-key^="connection:"] .primary').click();
   const hidden = await agent.tool('terminal_list_tabs'); assert.equal(hidden.tabs, 0, JSON.stringify(hidden));
   await agent.tool('terminal_request_attention', { reason: 'Choose a shell for the collaboration test.' });
   await page.locator('[data-request-key^="preparation:"]').waitFor();
   await sharing();
   await until(async () => (await agent.tool('terminal_list_tabs')).tabs === 1, 'Shared shell not visible');
+  await page.locator('[data-request-key^="preparation:"]').waitFor({state:'hidden'});
   await approveControl(agent);
   writeFileSync(join(evidence, 'first-snapshot.json'), JSON.stringify(await agent.tool('terminal_snapshot'), null, 2));
   // Sharing invalidates knowledge of the private shell's command context. Review
@@ -144,12 +186,28 @@ try {
   await agent.tool('terminal_type', { text: 'rm -rf ./synthetic-only' });
   const risk = await agent.tool('terminal_send_key', { key: 'ENTER', intent: 'Exercise a risky-command denial in the isolated test directory.' });
   assert.equal(risk.status, 'pending');
+  const reviewCard = page.locator('[data-request-key*="\u003areview:"]');
+  assert.equal(await reviewCard.getByRole('button',{name:'Run once',exact:true}).count(), 1);
+  assert.equal(await reviewCard.locator('.scope-choice').getAttribute('open'), null, 'broad grant stays behind an explicit scope choice');
+  await sleep(600);
+  assert.deepEqual(await page.locator('.app').evaluate(el=>[el.scrollLeft,el.scrollTop]),[0,0],'focus after a compact-window transition must not pan the application frame');
+  await page.screenshot({path:join(evidence,'command-review.png')});
   const deny = page.locator('[data-request-key*="\u003areview:"] button').filter({ hasText: /deny|reject/i }).first();
   await deny.click();
   assert.equal((await agent.tool('terminal_check_approval', { approvalId: risk.approvalId })).state, 'denied');
   await agent.tool('terminal_interrupt'); await sleep(180);
   await marker(agent, 'AFTER_IDLE_INTERRUPT_OK');
   cases.push('risky command review and denial; idle Ctrl-C returns to a usable shell prompt');
+  await agent.tool('terminal_type', {text:'rm ./synthetic-only'});
+  const typingRisk = await agent.tool('terminal_send_key', {key:'ENTER',intent:'Verify human typing preempts pending execution.'});
+  assert.equal(typingRisk.status,'pending');
+  await human('a',false);
+  await until(async () => (await agent.tool('terminal_check_approval',{approvalId:typingRisk.approvalId})).state === 'denied', 'typing did not deny the pending command');
+  await page.keyboard.press('Control+c'); await sleep(180);
+  await approveControl(agent);
+  await marker(agent,'AFTER_HUMAN_LETTER_OK');
+  cases.push('typing a in the shell takes over instead of approving an execution');
+
 
   const long = 'long-' + 'abcdef'.repeat(500);
   await agent.tool('terminal_type', { text: `printf '%s\\n' '${long}'` });

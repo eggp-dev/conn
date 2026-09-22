@@ -1,7 +1,7 @@
 <script lang="ts">
   import { useConnApp } from '../runtime/context';
   const app = useConnApp();
-  const { resolveReview, cmd, onOutput, listen, st, tab, THEMES, applyTheme } = app;
+  const { cmd, onOutput, listen, st, tab, THEMES, applyTheme } = app;
 
   import { DOCK_MOTION_MS, dockOffsetFrames, reducedMotion } from "../lib/motion";
   import { appShortcut, shortcutKey } from "../lib/shortcuts";
@@ -104,11 +104,8 @@
         if (data === "\r") { send("accept_proposal", { session, proposalId: tb.proposal.id }); return; }
         if (data === "\x1b") { send("reject_proposal", { session, proposalId: tb.proposal.id }); return; }
       }
-      if (!!tb.shared && tb.approval) {
-        const map: Record<string, string> = { a: "grant", y: "grant", d: "deny", n: "deny", "\x1b": "deny", A: "allow_session" };
-        const d = data === "A" && tb.reviewRequired ? undefined : map[data];
-        if (d) { void resolveReview(session, tb.approval.id, d); return; }
-      }
+      // Terminal typing always belongs to the human. A late approval must not
+      // turn an intended "a"/"A" keystroke into an execution or a broad grant.
       if (!!tb.shared && tb.grace) {
         if (data === "\r") { send("execute_now", { session, execId: tb.grace.execId }); return; }
         if (data === "\x1b") { send("cancel_exec", { session, execId: tb.grace.execId }); return; }
@@ -179,5 +176,5 @@
 <style>
   /* Settings is a modal, so opening it must not resize the underlying shell.
      Real pane changes commit the grid once; never animate a PTY's dimensions. */
-  .host { position: absolute; inset: 44px 16px var(--term-bottom, 26px) 16px; padding: 0; }
+  .host { position: absolute; inset: var(--term-top, 44px) 16px var(--term-bottom, 26px) 16px; padding: 0; }
 </style>

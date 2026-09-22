@@ -14,7 +14,7 @@ export type SessionSnapshot = {
   proposal: Proposal | null;
   controlRequests: ControlRequest[];
 };
-const approvalState = (a: Approval, at = Date.now()): NonNullable<TabState['approval']> => ({ id: a.id, agentId: a.agentId, cmd: a.cmd, label: a.label, at, intent: a.intent ?? undefined, analysis: a.analysis ?? undefined });
+const approvalState = (a: Approval, at = Date.now()): NonNullable<TabState['approval']> => ({ id: a.id, agentId: a.agentId, cmd: a.cmd, label: a.label, review: a.review, at, intent: a.intent ?? undefined, analysis: a.analysis ?? undefined });
 const proposalState = (p: Proposal): NonNullable<TabState['proposal']> => ({ id: p.proposalId, agentId: p.agentId, text: p.text, ready: p.state === 'ready', intent: p.intent ?? undefined });
 const controlState = (c: ControlRequest): NonNullable<TabState['ctlReq']> => ({ id: c.requestId, agentId: c.agentId, reason: c.reason ?? undefined, originalRequest: c.originalRequest ?? undefined });
 function clearDecisions(t: TabState) {

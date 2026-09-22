@@ -3,6 +3,9 @@
   const app = useConnApp();
   const { t: tr, fmtMs, cmd, st, cur, toast } = app;
 
+  import { tick } from 'svelte';
+  import ControlRequest from './ControlRequest.svelte';
+  import { badgeMorph } from '../lib/motion';
   import { shortcutLabel } from "../lib/shortcuts";
   // The island: a dot in the top-right corner that says who has the conn. When
   // something happens it pops to the centre, rolls a short message in, then
@@ -10,6 +13,18 @@
   import { agentColor } from '../lib/themes';
   let { onopen, onnotice }: { onopen: () => void; onnotice: (target?: import("../lib/collaboration/activity").NoticeTarget) => void } = $props();
   const t = $derived(cur());
+  let badge = $state<HTMLButtonElement>();
+  let requestPanel = $state<HTMLElement>();
+  let collapsedKey = $state('');
+  const requestKey = $derived(t.ctlReq ? `${t.id}:control:${t.ctlReq.id}` : '');
+  const controlOpen = $derived(!!requestKey && requestKey !== collapsedKey && !st.centerOpen && !st.settingsOpen && !st.paletteOpen && !st.sharingOpen);
+  export async function revealControl() { collapsedKey = ''; await tick(); requestPanel?.focus(); }
+  function collapse() { collapsedKey = requestKey; badge?.focus(); }
+  function requestKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); collapse(); }
+  }
+  function openBadge() { if (t.ctlReq) void revealControl(); else onopen(); }
+
   let stopping = $state(false);
   async function stopExternal() {
     if (stopping) return;
@@ -45,18 +60,30 @@
   </div>
 {:else}
 <!-- dot (idle state) -->
-<button class="dot" class:agent={isAgent} class:facts={showLabel} class:typing={t.typing} class:hidden={!!st.announcement} class:dead={!t.processAlive}
-        style:--c={color} onclick={onopen} title={`${label} · ${shortcutLabel("⌘K")}`}>
+<button class="dot" class:agent={isAgent} class:facts={showLabel} class:typing={t.typing} class:pending={!!t.ctlReq} class:hidden={controlOpen || (!!st.announcement && !t.ctlReq)} class:dead={!t.processAlive}
+        bind:this={badge} tabindex={controlOpen ? -1 : 0} aria-expanded={controlOpen} aria-label={t.ctlReq ? tr("ctl.asks") : label} style:--c={t.ctlReq ? agentColor(t.ctlReq.agentId) : color} onclick={openBadge} title={`${label} · ${shortcutLabel("⌘K")}`}>
   {#if t.approval}
     <svg class="ring" viewBox="0 0 22 22"><circle cx="11" cy="11" r="9" fill="none" stroke="var(--line)" stroke-width="2"/><circle cx="11" cy="11" r="9" fill="none" stroke="var(--warn)" stroke-width="2" stroke-dasharray={C} stroke-dashoffset={C * (1 - ring)} transform="rotate(-90 11 11)"/></svg>
   {/if}
   <span class="core"></span>
-  <span class="lbl">{label}</span>
+  <span class="lbl">{t.ctlReq ? tr("ctl.waiting", {agent:t.ctlReq.agentId}) : label}</span>
 </button>
 {/if}
 
+{#if controlOpen && t.ctlReq}
+  {#key requestKey}
+    <div class="control-morph" bind:this={requestPanel} data-request-key={requestKey} role="alertdialog" aria-label={tr('ctl.asks')} tabindex="-1" onkeydown={requestKeydown} style:--c={agentColor(t.ctlReq.agentId)} transition:badgeMorph={badge}>
+      <div class="morph-surface"></div>
+      <div class="morph-content">
+        <header><div><span class="eyebrow">{tr('ctl.asks')}</span><strong>{t.ctlReq.agentId}</strong><span class="shell-name">{t.title}</span></div><button class="btn ghost mini" onclick={collapse}>{tr('ctl.collapse')}</button></header>
+        <ControlRequest />
+      </div>
+    </div>
+  {/key}
+{/if}
+
 <!-- pill (announcement) -->
-{#if st.announcement}
+{#if st.announcement && !t.ctlReq}
   {#key st.announcement.id}
     <button class="pill {st.announcement.kind}" style:--c={st.announcement.color} style:--ms="{st.announcement.ms}ms" onclick={()=>onnotice(st.announcement?.target)}>
       <span class="core"></span>
@@ -69,6 +96,18 @@
 {/if}
 
 <style>
+  .dot.pending { border-color:var(--c); }
+  .dot.pending .lbl { color:var(--fg); }
+  .control-morph { position:absolute; z-index:25; top:44px; right:14px; width:min(470px, calc(100% - 28px)); outline:none; font-size:13px; --morph-x:0px; --morph-y:0px; --morph-sx:1; --morph-sy:1; --morph-radius:14px; --morph-content:1; }
+  .morph-surface { position:absolute; inset:0; border:1px solid color-mix(in srgb,var(--c) 55%,var(--line)); background:var(--surface); border-radius:var(--morph-radius); box-shadow:var(--shadow),0 0 24px color-mix(in srgb,var(--c) 12%,transparent); transform-origin:top left; transform:translate(var(--morph-x),var(--morph-y)) scale(var(--morph-sx),var(--morph-sy)); pointer-events:none; }
+  .morph-content { position:relative; padding:18px; max-height:min(540px, calc(100dvh - 64px)); overflow:auto; opacity:var(--morph-content); }
+  .control-morph:focus-visible .morph-surface { outline:2px solid var(--c); outline-offset:3px; }
+  .control-morph header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:14px; }
+  .control-morph header>div { display:grid; gap:4px; min-width:0; }
+  .eyebrow { font-size:11px; color:var(--muted); }
+  .control-morph strong { color:var(--c); font-size:18px; overflow-wrap:anywhere; }
+  .shell-name { color:var(--muted); font-size:11px; overflow-wrap:anywhere; }
+
   .private { position: absolute; top: 12px; right: 14px; z-index: 21; display: flex; align-items: center; gap: 7px; min-height: 26px; max-width: min(55vw, 360px); padding: 0 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 11.5px; }
   .private span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .private svg { flex-shrink: 0; }
@@ -87,7 +126,7 @@
   .dot.dead .core { background: var(--danger); }
   @keyframes ring { 0% { transform: scale(.6); opacity: .8; } 70%, 100% { transform: scale(2.2); opacity: 0; } }
   .lbl { font-size: 11.5px; color: var(--muted); max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0; transition: max-width .3s var(--ease), opacity .2s; }
-  .dot:hover .lbl, .dot.agent .lbl, .dot.facts .lbl { max-width: 320px; opacity: 1; }
+  .dot:hover .lbl, .dot.agent .lbl, .dot.facts .lbl, .dot.pending .lbl { max-width: 320px; opacity: 1; }
   .dot.agent .lbl { color: var(--c); }
   .ring { position: absolute; left: 1px; top: 1px; width: 22px; height: 22px; }
 

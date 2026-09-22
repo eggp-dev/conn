@@ -25,7 +25,7 @@ try {
  await two.locator('.app[data-runtime-online="true"]').waitFor();
  const first=one.locator('.decision-card .primary'),second=two.locator('.decision-card .primary');
  await first.waitFor();await second.waitFor();
- assert.equal(await first.innerText(),'Allow');assert.equal(await second.innerText(),'Allow');
+ assert.equal(await first.innerText(),'Allow shared screen access');assert.equal(await second.innerText(),'Allow shared screen access');
  await first.click();
  await one.locator('.decision-card[aria-busy="true"]').waitFor();
  assert.equal(await first.isDisabled(),true);assert.equal(await second.isEnabled(),true,'same request ID in another mount stays actionable');
@@ -39,7 +39,7 @@ try {
  await one.getByRole('menuitem',{name:/^Settings/}).click();
  await one.locator('.category-list').getByRole('button',{name:'Appearance',exact:true}).click();
  await one.getByRole('button',{name:'한국어',exact:true}).click();
- assert.equal(await one.locator('.decision-card .primary').innerText(),'허용');
+ assert.equal(await one.locator('.decision-card .primary').innerText(),'공유 화면 접근 허용');
  assert.equal(await two.locator('.sheet').count(),0,'opening settings affects only the target root');
  assert.equal(await page.evaluate(()=>window.appLifetime.inspect('one').saved['ss:lang']),'ko');
  assert.equal(await page.evaluate(()=>window.appLifetime.inspect('two').saved['ss:lang']),'en');
@@ -64,7 +64,7 @@ try {
  await page.evaluate(()=>{window.appLifetime.mount('one','en');window.appLifetime.releaseRetired();});
  await one.locator('.app[data-runtime-online="true"]').waitFor();
  const fresh=one.locator('.decision-card .primary');await fresh.waitFor();
- assert.equal(await fresh.innerText(),'Allow');assert.equal(await fresh.isEnabled(),true,'remount gets a fresh request map even before old pending work finishes');
+ assert.equal(await fresh.innerText(),'Allow shared screen access');assert.equal(await fresh.isEnabled(),true,'remount gets a fresh request map even before old pending work finishes');
  assert.equal(await page.getByText('late-event',{exact:true}).count(),0,'late events from a retired host never reach a new mount');
  assert.deepEqual(errors,[]);
  await page.evaluate(async()=>{await window.appLifetime.unmount('one');await window.appLifetime.unmount('two');});

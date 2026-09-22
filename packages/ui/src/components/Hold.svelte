@@ -13,7 +13,9 @@
 
 
 {#if cur().approval}
-  <DecisionCard requestKey={`${st.active}:review:${a.id}`} agent={a.agentId} label={a.label} busy={action.busy} error={action.error}>
+  <DecisionCard requestKey={`${st.active}:review:${a.id}`} agent={a.agentId} label={t("hold.title")} busy={action.busy} error={action.error}>
+    <p class="policy-reason">{a.label === 'Review command in this shell/remote environment' ? t('hold.context_reason') : a.label}</p>
+    {#if a.review?.reason === 'unverified_shell' && a.label !== 'Review command in this shell/remote environment'}<p class="scope-note">{t('hold.context_reason')}</p>{:else if a.review?.remote}<p class="scope-note">{t('hold.remote_reason')}</p>{/if}
     <p class="reason">{a.intent || t("hold.no_intent")}</p>
     {#if targets.length}
       <ul class="targets">
@@ -40,18 +42,26 @@
     {#snippet actions()}
       {#if a.analysis?.cwd}<span class="muted cwd">cwd {a.analysis.cwd}</span>{/if}
       <span class="spacer"></span>
-      <button class="btn ok" disabled={action.busy} onclick={() => decide("grant")}><kbd>a</kbd> {t("hold.approve")}</button>
-      <button class="btn danger" disabled={action.busy} onclick={() => decide("deny")}><kbd>d</kbd> {t("hold.deny")}</button>
-      {#if cur().reviewRequired}
-        <span class="muted review-note">{t('hold.review_required')}</span>
-      {:else}
-        <button class="btn" disabled={action.busy} title={t('hold.allow_session_hint',{label:a.label})} onclick={() => decide("allow_session")}><kbd>A</kbd> {t("hold.allow_session")}</button>
+      <button class="btn ok" disabled={action.busy} onclick={() => decide("grant")}>{t("hold.approve")}</button>
+      <button class="btn danger" disabled={action.busy} onclick={() => decide("deny")}>{t("hold.deny")}</button>
+      {#if a.review?.allowSession}
+        <details class="scope-choice">
+          <summary>{t('hold.more_scope')}</summary>
+          <p>{t('hold.allow_session_hint', {label:a.label})}</p>
+          <button class="btn" disabled={action.busy} onclick={() => decide('allow_session')}>{t('hold.allow_session')}</button>
+        </details>
       {/if}
     {/snippet}
   </DecisionCard>
 {/if}
 
 <style>
+  .policy-reason { margin:0; font-weight:600; color:var(--warn); }
+  .scope-note { margin:0; color:var(--muted); font-size:12px; }
+  .scope-choice { flex-basis:100%; font-size:11px; color:var(--muted); border-top:1px solid var(--line); padding-top:8px; }
+  .scope-choice :global(.btn) { white-space:normal; max-width:100%; text-align:left; }
+  .scope-choice summary { cursor:pointer; width:fit-content; margin-left:auto; }
+  .scope-choice p { line-height:1.5; }
   ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
   .targets li { min-width:0; flex-wrap:wrap; display: flex; gap: 8px; align-items: center; }
   .targets .k { color: var(--muted); font-size: 11px; width: 28px; }

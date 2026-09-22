@@ -182,7 +182,7 @@ try {
     const config = process.env.CONN_SSH_FIXTURE_CONFIG;
     assert.ok(/^[A-Za-z0-9_./-]+$/.test(config), 'SSH fixture config path must contain no shell metacharacters');
     assert.ok(existsSync(config), 'SSH fixture config must exist');
-    await human(`ssh -F ${config} validation-host`);
+    await human(`${process.env.CONN_SSH_COMPOUND_ENTRY === "1" ? "printf PRE_SSH; " : ""}ssh -F ${config} validation-host`);
     await until(async () => (await host().locator('.xterm-rows').innerText()).includes('remote$'), 'SSH fixture prompt missing');
     await human('printf "REMOTE_READY_%s\\n" "$((6*7))"');
     await until(async () => (await host().locator('.xterm-rows').innerText()).includes('REMOTE_READY_42'), 'SSH fixture ready marker missing');
@@ -291,7 +291,8 @@ try {
   await agent.tool('type', {text: `rm -- '${absent}'`});
   const approval = await agent.tool('send_key', {key: 'ENTER', intent: 'Remove an absent synthetic fixture path.'});
   assert.equal(approval.status, 'pending');
-  const allowSession = page.getByRole('button', {name: 'A allow this session', exact: true});
+  await page.locator('.scope-choice summary').click();
+  const allowSession = page.getByRole('button', {name: 'Allow this command category for this session', exact: true});
   await allowSession.waitFor(); await page.setViewportSize({width: 700, height: 540}); await delay(600);
   const box = await allowSession.boundingBox();
   assert.ok(box && box.y >= 0 && box.y + box.height <= 540, 'Long review keeps approval actions visible');

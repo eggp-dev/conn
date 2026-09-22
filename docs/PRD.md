@@ -13,6 +13,33 @@ request, work together. Settings use progressive disclosure; English and Korean
 share the same components and motion. Extensions support this path without turning
 the terminal into a configuration dashboard.
 
+## Human-manageable collaboration — product invariant
+
+Conn's core value is the UX and affordances that let a person understand and
+effectively manage an agent working in their shared, real PTY.
+
+> People must understand what an agent can do now and what their next choice
+> changes without memorizing the internal permission model. Repeated requests
+> must not train people to approve without thinking.
+
+- Make the current agent, target shell, activity and way to reclaim input control discoverable.
+- Present the same decision consistently; distinguish different permissions through
+  titles, scope and action labels, never through color or disclosure alone.
+- Work within an existing grant continues. A new decision explains what differs
+  from the previous grant. Reducing repetition must not bypass command review or
+  silently broaden permission.
+- Keep admission, participation, control and command review separate internally,
+  while presenting a coherent collaboration flow.
+- Notifications locate requests; decision surfaces explain choices. Opening a
+  notification never grants permission.
+- Delayed status updates must not change a pending decision's target, scope or
+  available actions. Explain genuine condition changes and reject stale choices.
+- Preserve Conn's visual effects and space-opening motion without repetitive
+  emphasis that dulls meaning or disrupts terminal input, geometry or focus.
+
+Established 2026-09-23 as a design and review requirement, not a claim that all
+current behavior complies. See the [control experience audit and proposal](control-experience.md).
+
 ## Responsibilities
 
 | Concept | Owns |

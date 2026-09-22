@@ -199,37 +199,45 @@ impl Engine {
         // directions can fill, deadlocking write_all against the output reader.
         // One FIFO consumer applies every chunk in order. Do not bound this
         // channel with a blocking send: that would recreate the same cycle.
-        let pty_done = Arc::new(AtomicBool::new(false));
-        let (output_tx, output_rx) = mpsc::channel::<Vec<u8>>();
+        enum Output { Bytes(Vec<u8>), Fence(mpsc::Sender<()>) }
+        let pty_read_done = Arc::new(AtomicBool::new(false));
+        let (output_tx, output_rx) = mpsc::channel::<Output>();
+        let exit_output = output_tx.clone();
         {
             let session = session.clone();
-            let pty_done = pty_done.clone();
             std::thread::Builder::new().name("ss-pty-output".into()).spawn(move || {
-                while let Ok(mut bytes) = output_rx.recv() {
+                while let Ok(message) = output_rx.recv() {
+                    let mut bytes = match message {
+                        Output::Bytes(bytes) => bytes,
+                        Output::Fence(done) => { let _ = done.send(()); continue; }
+                    };
+                    let mut fence = None;
                     // Readline often echoes a byte at a time. Coalesce only
                     // already queued bytes, with no delay and a bounded batch.
                     while bytes.len() < 16384 {
                         match output_rx.try_recv() {
-                            Ok(next) => bytes.extend_from_slice(&next),
+                            Ok(Output::Bytes(next)) => bytes.extend_from_slice(&next),
+                            Ok(Output::Fence(done)) => { fence = Some(done); break; }
                             Err(_) => break,
                         }
                     }
                     session.lock().pty_output(&bytes);
+                    if let Some(done) = fence { let _ = done.send(()); }
                 }
-                // Child exit must wait for application, not just the last read.
-                pty_done.store(true, Ordering::SeqCst);
             })?;
         }
         {
+            let pty_read_done = pty_read_done.clone();
             std::thread::Builder::new().name("ss-pty-read".into()).spawn(move || {
                 let mut buf = [0u8; 16384];
                 loop {
                     match pty_reader.read(&mut buf) {
                         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(1)),
                         Ok(0) | Err(_) => break,
-                        Ok(n) => if output_tx.send(buf[..n].to_vec()).is_err() { break; },
+                        Ok(n) => if output_tx.send(Output::Bytes(buf[..n].to_vec())).is_err() { break; },
                     }
                 }
+                pty_read_done.store(true, Ordering::SeqCst);
             })?;
         }
 
@@ -257,9 +265,14 @@ impl Engine {
             std::thread::Builder::new().name("ss-child-wait".into()).spawn(move || {
                 let code = child.wait().ok().map(|s| s.exit_code());
                 let deadline = Instant::now() + Duration::from_millis(300);
-                while !pty_done.load(Ordering::SeqCst) && Instant::now() < deadline {
+                while !pty_read_done.load(Ordering::SeqCst) && Instant::now() < deadline {
                     std::thread::sleep(Duration::from_millis(10));
                 }
+                // A slow consumer may have much more than 300ms of output
+                // already queued. Fence that output before publishing exit. The
+                // read deadline only bounds descendants holding the slave open.
+                let (done, applied) = mpsc::channel();
+                if exit_output.send(Output::Fence(done)).is_ok() { let _ = applied.recv(); }
                 #[cfg(unix)]
                 { let mut integration = integration.lock();
                   if let Some(hook) = integration.as_mut() { hook.drain(&mut session.lock(), pid); }

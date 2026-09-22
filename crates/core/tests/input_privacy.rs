@@ -87,3 +87,61 @@ fn real_hidden_password_input_in_an_ordinary_tab_is_not_audited() {
     assert!(!format!("{:?}",events.lock().unwrap()).contains("SYNTHETIC"));
     assert!(engine.session().lock().input_line().is_empty());
 }
+
+#[test]
+fn empty_cursor_motion_is_not_pending_and_erasure_requires_visible_evidence() {
+    let mut h = Harness::new();
+    h.session.pty_output(b"prompt$ ");
+    for key in [b"\x1b[D".as_slice(), b"\x0c", b"\x7f", b"\x17"] {
+        h.session.human_input(key);
+        assert!(!h.session.status().input_pending);
+    }
+    h.session.human_input(b"abc");
+    h.session.pty_output(b"abc");
+    h.session.human_input(b"\x7f\x7f\x7f");
+    assert!(h.session.status().input_pending, "keys alone never certify erasure");
+    h.session.pty_output(b"\x08\x08\x08\x1b[K");
+    assert!(!h.session.status().input_pending, "the shared grid returned to its empty boundary");
+    assert!(h.session.input_line().is_empty());
+}
+
+#[test]
+fn home_then_ctrl_u_keeps_suffix_blocked_and_redraw_does_not_clear_it() {
+    let mut h = Harness::new(); h.agent(1, "agent");
+    h.session.pty_output(b"prompt$ ");
+    h.session.human_input(b"printf human"); h.session.pty_output(b"printf human");
+    h.session.human_input(b"\x01\x15"); h.session.pty_output(b"\x1b[9G");
+    assert!(h.session.status().input_pending);
+    h.session.human_input(b"\x0c"); h.session.pty_output(b"\x1b[2J\x1b[Hprompt$ printf human\x1b[9G");
+    h.session.agent_request_control(1).unwrap();
+    assert!(matches!(h.session.agent_type(1, "echo agent"), Err(SessionError::InputPending)));
+    assert!(matches!(h.session.agent_send_key(1, "ENTER"), Err(SessionError::InputPending)));
+    // Delete the suffix at Home; only its actual echo can reopen input.
+    h.session.human_input(b"\x0b"); h.session.pty_output(b"\x1b[K");
+    assert!(!h.session.status().input_pending);
+    assert!(!format!("{:?}", h.audit_events()).contains("printf human"));
+}
+
+#[test]
+fn hidden_or_unechoed_input_is_not_inferred_from_empty_screen() {
+    let mut h = Harness::new();
+    h.session.pty_output(b"Password: ");
+    h.session.human_input(b"SYNTHETIC_SECRET");
+    h.session.human_input(b"\x15");
+    h.session.pty_output(b"\x07");
+    assert!(h.session.status().input_pending, "no visible edit was observed");
+    assert!(h.session.input_line().is_empty());
+    assert!(!format!("{:?}", h.audit_events()).contains("SYNTHETIC_SECRET"));
+    h.session.human_input(b"\x03");
+    assert!(!h.session.status().input_pending);
+}
+
+#[test]
+fn typing_and_erasing_echoed_in_one_chunk_recovers_without_a_cancel() {
+    let mut h = Harness::new();
+    h.session.pty_output(b"prompt$ ");
+    h.session.human_input(b"x");
+    h.session.human_input(b"\x7f");
+    h.session.pty_output(b"x\x08 \x08");
+    assert!(!h.session.status().input_pending);
+}

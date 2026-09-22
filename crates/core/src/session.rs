@@ -22,7 +22,7 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::affordance::{affordances_for, Actor, Affordance, AffordanceState};
-use crate::approval::{ApprovalQueue, ApprovalRequest, ApprovalState, Decision as ApprovalDecision};
+use crate::approval::{ApprovalQueue, ApprovalRequest, ApprovalState, ReviewContext, ReviewReason, Decision as ApprovalDecision};
 use crate::audit::Audit;
 use crate::authority::{Authority, AuthorityError, ConnId, Controller, Lease, RevokeReason};
 use crate::config::Pacing;
@@ -191,7 +191,7 @@ pub enum SessionError {
     Authority(#[from] AuthorityError),
     #[error("the shell process has exited")]
     ProcessExited,
-    #[error("shell input is pending; clear or cancel it before changing mode")]
+    #[error("shell input is pending; ask the human to finish or explicitly cancel their input before continuing")]
     InputPending,
     #[error("invalid input: {0}")]
     InvalidInput(String),
@@ -435,6 +435,7 @@ pub struct Session {
     surface_id: String,
     external_writer_active: bool,
     execution_profile: Option<crate::backend::Profile>,
+    profile_revision: u64,
     ssh_transport: bool,
     ssh_foreground_sequence: Option<u64>,
     authority: Authority,
@@ -442,7 +443,7 @@ pub struct Session {
     approvals: ApprovalQueue,
     screen: ScreenModel,
     input: InputTracker,
-    human_input_pending: bool,
+    human_input: crate::human_input::HumanInput,
     shell_integration: crate::shell_integration::IntegrationStatus,
     shell_command: Option<crate::shell_integration::RunningCommand>,
     // Content-free state closes the input-to-async-shell-hook interval.
@@ -540,7 +541,7 @@ impl Session {
             approvals: ApprovalQueue::new(Duration::from_secs(cfg.pacing.approval_ttl_secs)),
             screen: ScreenModel::new(cfg.rows, cfg.cols),
             input: InputTracker::new(),
-            human_input_pending: false,
+            human_input: Default::default(),
             shell_integration: crate::shell_integration::IntegrationStatus::unavailable(if external_private { "private_session" } else { "unsupported_shell" }),
             shell_command: None,
             shell_prompt_confirmed: false,
@@ -574,6 +575,7 @@ impl Session {
             last_agent: None,
             last_agent_cmd: None,
             execution_profile: None,
+            profile_revision: 0,
             shell_pid: cfg.shell_pid,
             cwd_override: None,
             attended: true,
@@ -615,8 +617,40 @@ impl Session {
         self.execution_profile.as_ref().is_some_and(|profile| {
             profile.shell == crate::backend::ShellKind::Posix
                 && (profile.backend == crate::backend::BackendKind::Ssh || self.ssh_transport
-                    || (self.shell_integration.state == "active" && self.ssh_foreground_sequence.is_some()))
+                    || (self.shell_integration.state == "active" && self.foreground_ssh().unwrap_or(self.ssh_foreground_sequence.is_some())))
         })
+    }
+
+    fn foreground_id(&self) -> Option<i32> {
+        #[cfg(unix)]
+        { return self.master.as_ref()?.process_group_leader().filter(|pid| *pid > 0); }
+        #[cfg(not(unix))]
+        None
+    }
+
+    /// The actual foreground process is stronger evidence than the complete
+    /// shell history entry (which may contain `printf ...; ssh ...`). Inspect
+    /// only executable identity, never argv, environment or authentication data.
+    fn foreground_ssh(&self) -> Option<bool> {
+        #[cfg(unix)]
+        {
+            let pid = self.foreground_id()?;
+            #[cfg(target_os = "linux")]
+            return std::fs::read_link(format!("/proc/{pid}/exe")).ok()
+                .map(|path| path.file_name().is_some_and(|name| name == "ssh"));
+            #[cfg(target_os = "macos")]
+            {
+                let mut path = [0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+                // SAFETY: owned writable buffer, valid size, no pointers retained.
+                let len = unsafe { libc::proc_pidpath(pid, path.as_mut_ptr().cast(), path.len() as u32) };
+                if len <= 0 { return None; }
+                let end = path.iter().position(|b| *b == 0).unwrap_or(path.len());
+                let path = std::str::from_utf8(&path[..end]).ok()?;
+                return Some(std::path::Path::new(path).file_name().is_some_and(|name| name == "ssh"));
+            }
+        }
+        #[allow(unreachable_code)]
+        None
     }
 
     pub(crate) fn set_ssh_transport(&mut self, ssh: bool) { self.ssh_transport = ssh; }
@@ -765,7 +799,7 @@ impl Session {
     pub fn write_external(&mut self, bytes: &[u8]) -> Result<(), SessionError> {
         if !self.external_writer_active() { return Err(SessionError::NotAvailable("session unavailable".into())); }
         self.write_terminal_response(bytes)?;
-        if !bytes.is_empty() { self.human_input_pending = !matches!(bytes.last(), Some(b'\r' | b'\n' | 3 | 21)); }
+        if !bytes.is_empty() { self.human_input.note(bytes, &self.screen, self.input.has_pending()); }
         Ok(())
     }
 
@@ -821,7 +855,7 @@ impl Session {
 
     /// The shell's current directory, read from the process (`lsof -d cwd`) so
     /// `cd` history does not have to be tracked. None when unknown.
-    pub fn set_execution_profile(&mut self, profile: crate::backend::Profile) { self.execution_profile = Some(profile); }
+    pub fn set_execution_profile(&mut self, profile: crate::backend::Profile) { self.profile_revision = self.profile_revision.wrapping_add(1); self.execution_profile = Some(profile); }
 
     pub fn shell_cwd(&self) -> Option<std::path::PathBuf> {
         if self.execution_profile.as_ref().is_some_and(|p|p.backend != crate::backend::BackendKind::Local) { return None; }
@@ -866,7 +900,7 @@ impl Session {
             // submitted. Only cancellation/empty Enter at a confirmed idle
             // prompt can finish without a shell-authored command lifecycle.
             let idle_input = bytes == b"\x03" || (bytes.iter().all(|byte| matches!(byte, b'\r' | b'\n'))
-                && !self.human_input_pending && !self.input.has_pending());
+                && !self.human_input.pending && !self.input.has_pending());
             self.shell_idle_recovery = idle_input && self.shell_foreground_sequence.is_none()
                 && self.ssh_foreground_sequence.is_none()
                 && (self.shell_idle_recovery || (self.shell_prompt_confirmed && !self.shell_submission_inflight));
@@ -988,7 +1022,7 @@ impl Session {
         if self.is_private() {
             if !bytes.is_empty() {
                 self.revoke_external();
-                self.human_input_pending = !matches!(bytes.last(), Some(b'\r' | b'\n' | 3 | 21));
+                self.human_input.note(bytes, &self.screen, self.input.has_pending());
             }
             if self.process_alive { self.write_pty(bytes); }
             return;
@@ -1027,8 +1061,8 @@ impl Session {
         // Human bytes may be a password, an editor buffer, or a shell command.
         // Retain only whether a line may be unfinished, never its contents.
         if !bytes.is_empty() {
+            self.human_input.note(bytes, &self.screen, self.input.has_pending());
             self.input.reset();
-            self.human_input_pending = !matches!(bytes.last(), Some(b'\r' | b'\n' | 3 | 21));
         }
     }
 
@@ -1049,9 +1083,9 @@ impl Session {
     pub fn pty_output(&mut self, bytes: &[u8]) {
         if bytes.is_empty() { return; }
         self.output_seq = self.output_seq.saturating_add(1);
-        if self.screen.process(bytes) {
-            self.screen_dirty = true;
-        }
+        let (changed, moved) = self.screen.process_observing(bytes, self.human_input.watch_column());
+        if changed { self.screen_dirty = true; }
+        self.human_input.output(&self.screen, moved);
         self.write_output(bytes);
     }
 
@@ -1417,7 +1451,7 @@ impl Session {
         if self.mode == mode { return Ok(()); }
         // A mode switch must not leave physical shell input behind a ghost proposal.
         // Refuse rather than assume Ctrl-U has the same meaning in every shell/TUI.
-        if self.human_input_pending || self.input.has_pending() { return Err(SessionError::InputPending); }
+        if self.human_input.pending || self.input.has_pending() { return Err(SessionError::InputPending); }
         self.mode = mode;
         match mode {
             AgentMode::Observe => {
@@ -1528,7 +1562,7 @@ impl Session {
         }
         // Attention changes can impose a Co-pilot cap without an explicit mode
         // switch. Never append a proposal to pre-existing physical shell input.
-        if self.human_input_pending || self.input.has_pending() { return Err(SessionError::InputPending); }
+        if self.human_input.pending || self.input.has_pending() { return Err(SessionError::InputPending); }
         let cmd = p.text.trim().to_string();
         let col = self.screen.cursor().col;
         self.input.feed(p.text.as_bytes(), col);
@@ -1652,7 +1686,7 @@ impl Session {
             return Err(SessionError::InvalidInput("text must not contain control characters".into()));
         }
         self.check_writer(conn, Affordance::Type)?;
-        if self.human_input_pending { return Err(SessionError::InputPending); }
+        if self.human_input.pending { return Err(SessionError::InputPending); }
         if self.effective_mode() == AgentMode::Copilot {
             self.proposal_mut(conn).text.push_str(text);
             self.last_agent_write = Some(Instant::now());
@@ -1661,6 +1695,7 @@ impl Session {
         }
         self.shell_recording_armed |= self.shell_recording_ready && self.shell_prompt_confirmed;
         let col = self.screen.cursor().col;
+        if !self.input.has_pending() { self.human_input.remember_empty(&self.screen); }
         self.input.feed(text.as_bytes(), col);
         self.write_pty(text.as_bytes());
         self.note_agent_write(conn, text.len());
@@ -1679,7 +1714,7 @@ impl Session {
             return self.agent_interrupt(conn).map(|_| KeyResult::Sent);
         }
         self.check_writer(conn, Affordance::SendKey)?;
-        if self.human_input_pending { return Err(SessionError::InputPending); }
+        if self.human_input.pending { return Err(SessionError::InputPending); }
         if self.effective_mode() == AgentMode::Observe {
             return Err(SessionError::WrongMode(AgentMode::Observe));
         }
@@ -1775,7 +1810,14 @@ impl Session {
             }
             PolicyDecision::Confirm { label } => {
                 self.last_agent_cmd = Some(cmd.clone());
-                let req = self.approvals.create_with(&agent_id, conn, &cmd, &label, Instant::now(), intent.clone(), Some(analysis)).clone();
+                let review = ReviewContext {
+                    reason: if self.review_required() { ReviewReason::UnverifiedShell } else { ReviewReason::CommandPolicy },
+                    allow_session: !self.review_required(),
+                    remote: self.remote_policy(),
+                    profile_revision: self.profile_revision,
+                    foreground: self.foreground_id(),
+                };
+                let req = self.approvals.create_with(&agent_id, conn, &cmd, &label, Instant::now(), intent.clone(), Some(analysis), review).clone();
                 self.audit.record(
                     &agent_id,
                     "approval_requested",
@@ -1864,7 +1906,7 @@ impl Session {
         self.reject_proposal_if(|p| p.conn == conn, "interrupted");
         self.write_pty(b"\x03");
         self.input.reset();
-        self.human_input_pending = false;
+        self.human_input.reset();
         let name = self.agent_name(conn);
         self.audit.record(&name, "interrupt", json!({}));
         self.note_agent_write(conn, 1);
@@ -1896,14 +1938,24 @@ impl Session {
     /// Human decision on a pending approval. `by` is recorded in the audit log
     /// (e.g. "cli", "frontend").
     pub fn resolve_approval(&mut self, id: &str, decision: ApprovalDecision, by: &str) -> Result<ApprovalInfo, SessionError> {
-        if self.approvals.get(id).is_none() {
-            return Err(SessionError::NotFound(id.to_string()));
-        }
-        if decision == ApprovalDecision::AllowSession && self.review_required() {
-            return Err(SessionError::InvalidInput("this shell or remote environment requires review for every command; allow_session is unavailable".into()));
+        let request = self.approvals.get(id).ok_or_else(|| SessionError::NotFound(id.to_string()))?;
+        if decision == ApprovalDecision::AllowSession && (!request.review.allow_session || self.review_required()
+            || request.review.remote != self.remote_policy()) {
+            return Err(SessionError::InvalidInput("review_scope_unavailable: this request cannot allow a command category for the session".into()));
         }
         if decision != ApprovalDecision::Deny {
             self.require_shared()?;
+            if request.review.remote != self.remote_policy()
+                || request.review.profile_revision != self.profile_revision
+                || request.review.foreground != self.foreground_id()
+                || (request.review.reason == ReviewReason::CommandPolicy && self.review_required()) {
+                return Err(SessionError::InvalidInput("review_context_changed: dismiss this request and submit the command again".into()));
+            }
+            match self.analyse(&request.cmd).decision {
+                PolicyDecision::Deny { .. } => return Err(SessionError::InvalidInput("review_context_changed: current policy denies this command".into())),
+                PolicyDecision::Confirm { ref label } if label != &request.label => return Err(SessionError::InvalidInput("review_context_changed: the command needs a new review".into())),
+                _ => {}
+            }
         }
         let state = match decision {
             ApprovalDecision::Grant | ApprovalDecision::AllowSession => ApprovalState::Granted,
@@ -2032,7 +2084,7 @@ impl Session {
             output_seq: self.output_seq,
             surface_available: self.participation.shared,
             completion_prompt_ready: self.completion_prompt_ready(),
-            input_pending: self.human_input_pending || self.input.has_pending(),
+            input_pending: self.human_input.pending || self.input.has_pending(),
             external_input_available: self.external_writer_active(),
             profile_id: self.execution_profile.as_ref().map(|p|p.id.clone()),
             profile_name: self.execution_profile.as_ref().map(|p|p.name.clone()),

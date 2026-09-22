@@ -25,6 +25,8 @@ Keep the MCP process alive across steps. Starting a new process creates a new co
 
 ## Operate a built package
 
+The release includes a prebuilt Linux x64 web archive in [release downloads](https://github.com/eggp-dev/conn/releases). Extract it and use the command below; building is only necessary for other targets or local development. The archive contains the same-build server, MCP CLI, UI, source manifest, license and checksums.
+
 ```sh
 npm run package:web
 ```
@@ -73,3 +75,6 @@ npm run test:input -w @conn/collaboration-tests
 The default is a local Bash PTY. For the disposable SSH fixture, set `CONN_AUTH_FIXTURE_RUNTIME` to its `.runtime` directory. The fixture must already listen on `127.0.0.1:22222` with a synthetic password and pinned known-hosts file. Authentication is typed into the visible PTY. The test uses real MCP, the production UI and Rust host, and stores rendered row/cursor comparisons and screenshots outside the checkout.
 
 Browser results are Linux Chromium evidence. They do not establish macOS WebKit, native window-manager notifications, native installation or release completion. Previous native results remain documented separately in [SSH input review results](ssh-input-review-results.md).
+
+
+To test the same SSH fixture through compound shell entry, add `CONN_SSH_COMPOUND_ENTRY=1` to the input-test command. Unicode cases require a UTF-8 remote locale (for example `LC_ALL=C.UTF-8`); configure only the disposable fixture, not a user server.

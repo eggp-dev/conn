@@ -51,7 +51,7 @@ impl Session {
         {
             return Ok(());
         }
-        if shared && (self.input.has_pending() || self.human_input_pending) {
+        if shared && (self.input.has_pending() || self.human_input.pending) {
             return Err(SessionError::InputPending);
         }
         Ok(())
@@ -86,7 +86,7 @@ impl Session {
         let unfinished_agent_input = self.input.has_pending();
         self.revoke_external();
         self.cancel_agent_work("sharing_changed");
-        self.human_input_pending |= unfinished_agent_input && self.input.has_pending();
+        self.human_input.pending |= unfinished_agent_input && self.input.has_pending();
         if !shared {
             self.audit.record(
                 "human",

@@ -23,6 +23,24 @@ pub enum Decision {
     AllowSession,
 }
 
+/// Stable choices and context captured with the command, never inferred from a
+/// later status poll. The owner still revalidates authority when deciding.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewContext {
+    pub reason: ReviewReason,
+    pub allow_session: bool,
+    pub remote: bool,
+    #[serde(skip)]
+    pub(crate) profile_revision: u64,
+    #[serde(skip)]
+    pub(crate) foreground: Option<i32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewReason { CommandPolicy, UnverifiedShell }
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ApprovalRequest {
     pub id: String,
@@ -32,6 +50,7 @@ pub struct ApprovalRequest {
     pub conn: ConnId,
     pub cmd: String,
     pub label: String,
+    pub review: ReviewContext,
     #[serde(rename = "requestedAt")]
     pub requested_at: String,
     #[serde(skip)]
@@ -59,7 +78,7 @@ impl ApprovalQueue {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn create_with(&mut self, agent_id: &str, conn: ConnId, cmd: &str, label: &str, now: Instant, intent: Option<String>, analysis: Option<crate::policy::LineAnalysis>) -> &ApprovalRequest {
+    pub fn create_with(&mut self, agent_id: &str, conn: ConnId, cmd: &str, label: &str, now: Instant, intent: Option<String>, analysis: Option<crate::policy::LineAnalysis>, review: ReviewContext) -> &ApprovalRequest {
         self.seq += 1;
         self.items.push(ApprovalRequest {
             id: format!("apr-{}", self.seq),
@@ -67,6 +86,7 @@ impl ApprovalQueue {
             conn,
             cmd: cmd.to_string(),
             label: label.to_string(),
+            review,
             requested_at: chrono::Local::now().format("%H:%M:%S").to_string(),
             created: now,
             state: ApprovalState::Pending,

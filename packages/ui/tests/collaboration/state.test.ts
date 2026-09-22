@@ -102,3 +102,15 @@ test('sharing revocation immediately clears collaboration and private snapshots 
   applySessionEvent(t,{session:'one',event:'control_requested',request:{requestId:'late',agentId:'one'}});
   assert.equal(t.ctlReq,null);assert.deepEqual(t.agents,[]);
 });
+
+test('approval choices follow the request even when the global shell status changes later', () => {
+  for (const allowSession of [true, false]) {
+    const t = view();
+    const request = { id:'review-context', agentId:'agent', cmd:'rm fixture', label:'delete files', review: { reason: allowSession ? 'command_policy' as const : 'unverified_shell' as const, allowSession, remote:false } };
+    applySessionEvent(t, {session:'one', event:'approval_requested', request});
+    assert.equal(t.approval?.review?.allowSession, allowSession);
+    applySessionSnapshot(t, {...snapshot(), reviewRequired:allowSession, pending:[request]}, 'Private');
+    assert.equal(t.approval?.review?.allowSession, allowSession);
+    assert.equal(t.approval?.label, 'delete files');
+  }
+});

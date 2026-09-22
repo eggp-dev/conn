@@ -29,13 +29,13 @@ curl -fsSL https://conn.eggp.dev/install.sh | sh
 
 No Rust or Node.js required; the agent connector is included. Both install the same signed release files as the downloads below, and the app updates itself afterwards. Windows: use the installer.
 
-| Platform | v0.8.6 preview |
+| Platform | v0.8.7 preview |
 |---|---|
-| macOS · Apple Silicon | [Download for Mac](https://github.com/eggp-dev/conn/releases/download/v0.8.6/conn-v0.8.6-aarch64-apple-darwin-desktop.dmg) |
-| Windows · x64 | [Download installer](https://github.com/eggp-dev/conn/releases/download/v0.8.6/conn-v0.8.6-x86_64-pc-windows-msvc-setup.exe) |
-| Ubuntu · x64 | [Download .deb](https://github.com/eggp-dev/conn/releases/download/v0.8.6/conn-v0.8.6-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggp-dev/conn/releases/download/v0.8.6/conn-v0.8.6-x86_64-unknown-linux-gnu-desktop.AppImage) |
+| macOS · Apple Silicon | [Download for Mac](https://github.com/eggp-dev/conn/releases/download/v0.8.7/conn-v0.8.7-aarch64-apple-darwin-desktop.dmg) |
+| Windows · x64 | [Download installer](https://github.com/eggp-dev/conn/releases/download/v0.8.7/conn-v0.8.7-x86_64-pc-windows-msvc-setup.exe) |
+| Ubuntu · x64 | [Download .deb](https://github.com/eggp-dev/conn/releases/download/v0.8.7/conn-v0.8.7-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggp-dev/conn/releases/download/v0.8.7/conn-v0.8.7-x86_64-unknown-linux-gnu-desktop.AppImage) |
 
-Mac downloads are signed and notarized. Windows previews are unsigned. Linux builds use Ubuntu 24.04, and the AppImage updates in-app while the `.deb` updates by installing a new package; Intel Mac distribution is paused. [Installation and updates](docs/getting-started.md) · [All assets and checksums](https://github.com/eggp-dev/conn/releases/tag/v0.8.6)
+Mac downloads are signed and notarized. Windows previews are unsigned. Linux builds use Ubuntu 24.04, and the AppImage updates in-app while the `.deb` updates by installing a new package; Intel Mac distribution is paused. [Installation and updates](docs/getting-started.md) · [All assets and checksums](https://github.com/eggp-dev/conn/releases/tag/v0.8.7)
 
 ## First five minutes
 

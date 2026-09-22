@@ -4,6 +4,8 @@ export function failureKey(error: unknown): string {
   const message = String(error);
   const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : '';
   if (['outcome_unknown', 'outcome_pending'].includes(code) || /outcome_(unknown|pending)/.test(message)) return 'decision.outcomeUnknown';
+  if (message.includes('review_context_changed')) return 'decision.contextChanged';
+  if (message.includes('review_scope_unavailable')) return 'decision.scopeUnavailable';
   if (message.includes('sharing_changed')) return 'sharing.changed';
   if (message.includes('history_unavailable')) return 'sharing.historyUnavailable';
   if (message.includes('input_pending') || message.includes('shell input is pending')) return 'sharing.pendingInput';

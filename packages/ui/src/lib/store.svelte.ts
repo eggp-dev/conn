@@ -44,7 +44,7 @@ export type TabState = {
   agents: string[];
   typing: boolean;
   proposal: null | { id: string; agentId: string; text: string; ready: boolean; intent?: string };
-  approval: null | { id: string; agentId: string; cmd: string; label: string; at: number; intent?: string; analysis?: Analysis };
+  approval: null | { id: string; agentId: string; cmd: string; label: string; review?: import("./collaboration/events").ReviewContext; at: number; intent?: string; analysis?: Analysis };
   grace: null | { execId: string; cmd: string; ms: number; start: number; intent?: string };
   ctlReq: null | { id: string; agentId: string; reason?: string; originalRequest?: import("./timeline").OriginalRequest };
   lastAgent: null | { agentId: string; lastCmd?: string; connected: boolean };

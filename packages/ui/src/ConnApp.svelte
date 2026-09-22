@@ -29,7 +29,7 @@
   import Ghost from "./components/Ghost.svelte";
   import Hold from "./components/Hold.svelte";
   import GraceBar from "./components/GraceBar.svelte";
-  import ControlRequest from "./components/ControlRequest.svelte";
+  let island = $state<Island>();
   import AdmissionRequest from "./components/AdmissionRequest.svelte";
   import HandbackChip from "./components/HandbackChip.svelte";
   import Timeline from "./components/Timeline.svelte";
@@ -120,6 +120,7 @@
       if (!current) { toast(tr('activity.gone')); return; }
       await select(target.session,!target.requestId);
       if (!requestStillPending(current,target)) { toast(tr('activity.resolved')); return; }
+      if (target.kind === "control") await island?.revealControl();
       if(target.requestId && target.kind) await focusRequest(`${target.session}:${target.kind}:${target.requestId}`);
     } else {
       const live=st.activity.connections.find(a=>a.connId===target.connId);
@@ -151,9 +152,9 @@
       { id: "sharing", group: "view", label: tr(c.shared ? "sharing.manage" : "sharing.start"), aliases: ["share", "private", "공유", "비공유"], run: () => { st.sharingOpen = true; } },
       { id: "take", group: "conn", now: c.controller.type === "agent", label: tr("a.take"), hint: tr("a.take.hint"), aliases: ["take", "revoke", "회수", "뺏기", "제어권"], run: () => cmd("take"), when: () => cur().controller.type === "agent" },
       { id: "handback", group: "conn", now: c.handback, label: tr("a.handback", { agent: holder }), keys: shortcutLabel("⌘⏎"), aliases: ["hand back", "give back", "되돌려주기", "다시"], run: () => chip?.handBack(), when: () => !!cur().lastAgent && cur().controller.type === "human" },
-      { id: "approve", group: "approval", now: true, label: tr("a.approve", { label: c.approval?.label ?? "" }), hint: c.approval?.cmd, keys: "a", aliases: ["approve", "grant", "승인"], run: () => approval && resolveReview(c.id, approval.id, "grant"), when: () => !!cur().approval },
-      { id: "deny", group: "approval", now: true, danger: true, label: tr("a.deny", { label: c.approval?.label ?? "" }), keys: "d", aliases: ["deny", "거부"], run: () => approval && resolveReview(c.id, approval.id, "deny"), when: () => !!cur().approval },
-      { id: "allow-session", group: "approval", now: true, label: tr("a.allow_session", { label: c.approval?.label ?? "" }), keys: "A", aliases: ["allow", "session", "세션 허용"], run: () => approval && resolveReview(c.id, approval.id, "allow_session"), when: () => !!cur().approval && !cur().reviewRequired },
+      { id: "approve", group: "approval", now: true, label: tr("a.approve", { label: c.approval?.label ?? "" }), hint: c.approval?.cmd, aliases: ["approve", "grant", "승인"], run: () => approval && resolveReview(c.id, approval.id, "grant"), when: () => !!cur().approval },
+      { id: "deny", group: "approval", now: true, danger: true, label: tr("a.deny", { label: c.approval?.label ?? "" }), aliases: ["deny", "거부"], run: () => approval && resolveReview(c.id, approval.id, "deny"), when: () => !!cur().approval },
+      { id: "allow-session", group: "approval", now: true, label: tr("a.allow_session", { label: c.approval?.label ?? "" }), aliases: ["allow", "session", "세션 허용"], run: () => approval && resolveReview(c.id, approval.id, "allow_session"), when: () => cur().approval?.review?.allowSession === true },
       { id: "ctl-grant", group: "conn", now: true, label: tr("a.ctl.grant", { agent: c.ctlReq?.agentId ?? "" }), hint: c.ctlReq?.reason, aliases: ["allow", "grant", "허용"], run: () => control && resolveControl({ session: c.id, requestId: control.id }, "grant"), when: () => !!cur().ctlReq },
       { id: "ctl-deny", group: "conn", now: true, danger: true, label: tr("a.ctl.deny", { agent: c.ctlReq?.agentId ?? "" }), aliases: ["deny", "거부"], run: () => control && resolveControl({ session: c.id, requestId: control.id }, "deny"), when: () => !!cur().ctlReq },
       ...st.order.map((id, i) => {
@@ -195,6 +196,7 @@
   ];
 
   let dockHeight = $state(0);
+  let connectionHeight = $state(0);
   let timelineHeight = $state(0);
   const dockSpace = $derived(dockHeight);
   const timelineSpace = $derived(!cur().shared || !st.timelineOpen || !timelineHeight ? 0 : timelineHeight + 10);
@@ -438,7 +440,7 @@
 
 <svelte:window onkeydown={onKey} />
 
-<main use:app.setRoot data-runtime-online={st.backendOnline} data-active-session={st.active} style:--handback-space={`${dockSpace}px`} style:--term-bottom={`${26 + dockSpace + timelineSpace}px`} class="app" class:agent={cur().controller.type === "agent"} class:asking={!!cur().ctlReq || !!cur().attention} style:--agent={cur().controller.type === "agent" ? agentColor(cur().controller.agentId) : cur().ctlReq ? agentColor(cur().ctlReq?.agentId) : cur().attention ? agentColor(cur().attention?.agentId) : "#8b7cff"}>
+<main use:app.setRoot data-runtime-online={st.backendOnline} data-active-session={st.active} style:--term-top={`${44 + connectionHeight}px`} style:--handback-space={`${dockSpace}px`} style:--term-bottom={`${26 + dockSpace + timelineSpace}px`} class="app" class:agent={cur().controller.type === "agent"} class:asking={!!cur().ctlReq || !!cur().attention} style:--agent={cur().controller.type === "agent" ? agentColor(cur().controller.agentId) : cur().ctlReq ? agentColor(cur().ctlReq?.agentId) : cur().attention ? agentColor(cur().attention?.agentId) : "#8b7cff"}>
   {#each st.order as id (id)}
     {#if tab(id)?.statusReady}<Term bind:this={terms[id]} session={id} />{/if}
   {/each}
@@ -447,8 +449,9 @@
     <HandoffWash />
   {/if}
   <TabStrip onselect={select} onclose={closeTab} onnew={openTab} onsettings={() => openSettings(st.settingsTab)} onpalette={() => { st.settingsOpen = false; st.centerOpen = false; st.paletteOpen = true; }} ontimeline={() => { st.timelineOpen = !st.timelineOpen; }} />
-  {#if st.active}<Island onnotice={navigateNotice} onopen={() => { st.paletteOpen = false; st.centerOpen = !st.centerOpen; }} />{/if}
-  <div class="interaction-dock" bind:clientHeight={dockHeight}><CollaborationActivity onselect={(session)=>void navigateNotice({session})} /><TerminalPreparation focused={focusedConnection} onchoose={choosePreparation} onnew={newPreparation} />{#if !st.settingsOpen}<AdmissionRequest focused={focusedConnection} />{/if}{#if cur().shared}<ControlRequest /><Hold /><Ghost /><GraceBar /><HandbackChip bind:this={chip} />{/if}</div>
+  {#if st.active}<Island bind:this={island} onnotice={navigateNotice} onopen={() => { st.paletteOpen = false; st.centerOpen = !st.centerOpen; }} />{/if}
+  <div class="connection-dock" bind:clientHeight={connectionHeight}>{#if !st.settingsOpen}<AdmissionRequest focused={focusedConnection} />{/if}</div>
+  <div class="interaction-dock" bind:clientHeight={dockHeight}><CollaborationActivity onselect={(session)=>void navigateNotice({session})} /><TerminalPreparation focused={focusedConnection} onchoose={choosePreparation} onnew={newPreparation} />{#if cur().shared}<Hold /><Ghost /><GraceBar /><HandbackChip bind:this={chip} />{/if}</div>
   {#if !!cur().shared}
   <Timeline bind:height={timelineHeight} />
   {/if}
@@ -460,9 +463,12 @@
 </main>
 
 <style>
+  .connection-dock { position:absolute; top:38px; left:0; right:0; z-index:24; max-height:35vh; overflow:auto; }
   .interaction-dock { position:absolute; left:0; right:0; bottom:26px; z-index:19; max-height:45vh; overflow:auto; }
 
-  .app { position: relative; width: 100vw; height: 100vh; overflow: hidden; background: var(--bg); color: var(--fg); }
+  /* This frame never scrolls. Focus must not pan the entire application toward
+     an animated/offscreen terminal input; inner terminal/panel scrollers own it. */
+  .app { position: relative; width: 100vw; height: 100vh; overflow: hidden; overflow: clip; background: var(--bg); color: var(--fg); }
   .frame { position: absolute; inset: 6px; border-radius: 12px; pointer-events: none; z-index: 5;
     border: 1.5px solid var(--agent);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--agent) 35%, transparent), inset 0 0 70px color-mix(in srgb, var(--agent) 16%, transparent), 0 0 0 1px color-mix(in srgb, var(--agent) 20%, transparent);

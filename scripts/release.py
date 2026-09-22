@@ -13,7 +13,7 @@ import hashlib
 import io
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
@@ -285,7 +285,49 @@ def signature_text(path: Path) -> str:
 
 def release_names(version: str) -> list[str]:
     return sorted([name for target in TARGETS for name in asset_names(version, target) + updater_names(version, target)] +
-                  [signing_name(version, target) for target in TARGETS if target.endswith("apple-darwin")] + ["latest.json"])
+                  [signing_name(version, target) for target in TARGETS if target.endswith("apple-darwin")] + ["latest.json", web_asset(version)])
+
+
+def web_asset(version: str) -> str:
+    return f"conn-web-v{version}-x86_64-unknown-linux-gnu.tar.gz"
+
+
+def validate_web_archive(path: Path, version: str, sha: str | None = None):
+    """Verify a self-contained, same-build bundle without extracting or running it."""
+    prefix = f"conn-web-{version}-linux-x64/"
+    with tarfile.open(path, "r:gz") as archive:
+        files = {}
+        for member in archive.getmembers():
+            if member.isdir() and member.name.rstrip("/") == prefix.rstrip("/"):
+                continue
+            if not member.name.startswith(prefix) or ".." in PurePosixPath(member.name).parts:
+                raise ReleaseError("Unsafe web archive path")
+            name = member.name[len(prefix):]
+            if member.isdir():
+                continue
+            if not member.isfile() or name in files or member.size > 256 * 1024 * 1024:
+                raise ReleaseError("Invalid web archive member")
+            files[name] = member
+        required = {"conn", "conn-web", "manifest.json", "SHA256SUMS", "README.md", "LICENSE", "ui/index.html"}
+        if not required.issubset(files) or any(name not in required and not name.startswith("ui/assets/") for name in files):
+            raise ReleaseError("Unexpected web archive contents")
+        manifest = json.load(archive.extractfile(files["manifest.json"]))
+        if manifest.get("version") != version or manifest.get("profile") != "release" or manifest.get("sourceDirty") is not False or manifest.get("platform") != "linux" or manifest.get("architecture") != "x64" or (sha and manifest.get("sourceCommit") != sha):
+            raise ReleaseError("Web archive build identity does not match the release")
+        if not all(files[name].mode & 0o111 for name in ("conn", "conn-web")):
+            raise ReleaseError("Web archive executables are not executable")
+        lines = archive.extractfile(files["SHA256SUMS"]).read().decode("utf-8").splitlines()
+        checks = {}
+        for line in lines:
+            match = re.fullmatch(r"([0-9a-f]{64})  (.+)", line)
+            if not match or match[2] in checks:
+                raise ReleaseError("Invalid web archive checksums")
+            checks[match[2]] = match[1]
+        if set(checks) != set(files) - {"SHA256SUMS"}:
+            raise ReleaseError("Incomplete web archive checksums")
+        for name, checksum in checks.items():
+            if hashlib.file_digest(archive.extractfile(files[name]), "sha256").hexdigest() != checksum:
+                raise ReleaseError("Web archive checksum mismatch")
 
 
 def updater_manifest(artifacts: Path, version: str):
@@ -499,6 +541,7 @@ def finalize(artifacts: Path, tag: str, sha: str | None = None, root: Path = ROO
     missing = set(expected) - {"latest.json"} - found
     if extras or missing:
         raise ReleaseError(f"Release asset mismatch; missing={sorted(missing)}, unexpected={sorted(extras)}")
+    validate_web_archive(regular_file(artifacts / web_asset(version), artifacts), version, sha)
     manifest = updater_manifest(artifacts, version)
     if (artifacts / "latest.json").is_symlink():
         raise ReleaseError("Refusing a symlink updater manifest")
@@ -538,6 +581,7 @@ def draft(artifacts: Path, tag: str, sha: str, root: Path = ROOT) -> str:
     if not artifacts.is_dir() or {p.name for p in artifacts.iterdir()} != set(expected) | {"SHA256SUMS", "release-notes.md"}:
         raise ReleaseError("Expected only the complete finalized asset set; run finalize first")
     assets = [regular_file(artifacts / name, artifacts) for name in expected]
+    validate_web_archive(artifacts / web_asset(version), version, sha)
     for target in TARGETS:
         if target.endswith("apple-darwin"):
             validate_signing_report(artifacts / signing_name(version, target), version, target, artifacts, sha)

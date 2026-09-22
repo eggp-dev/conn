@@ -23,3 +23,12 @@ export function dockOffsetFrames(distance: number): Keyframe[] {
     return { offset: progress, transform: `translateY(${distance * (1 - cubicOut(progress))}px)` };
   });
 }
+
+/** Only the surface morphs; text fades independently and the PTY never resizes. */
+export function badgeMorph(node: HTMLElement, anchor: HTMLElement | undefined) {
+  const to = node.getBoundingClientRect();
+  const from = anchor?.getBoundingClientRect() ?? to;
+  return { duration: reducedMotion() ? 0 : 320, easing: cubicOut,
+    css: (t: number) => `--morph-x:${(from.left-to.left)*(1-t)}px;--morph-y:${(from.top-to.top)*(1-t)}px;--morph-sx:${t+(1-t)*from.width/Math.max(1,to.width)};--morph-sy:${t+(1-t)*from.height/Math.max(1,to.height)};--morph-radius:${14+30*(1-t)}px;--morph-content:${Math.max(0,(t-.55)/.45)};`
+  };
+}

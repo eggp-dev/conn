@@ -36,6 +36,7 @@
 <style>
   .tabs { position: absolute; top: 0; left: 0; right: 0; height: 44px; z-index: 18; display: flex; align-items: center; gap: 4px; padding: 8px 64px 6px 16px; }
   .tabs.private { padding-right: min(380px, 56vw); }
+  .tabs:has(:global(.app-menu .menu)) { z-index: 29; }
   .new:disabled { opacity: .4; cursor: default; }
   .tablist { display: flex; align-items: center; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
   .tab { flex-shrink: 0; display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 10px 0 9px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; max-width: 340px; transition: background .15s, color .15s, border-color .15s; }

@@ -2,7 +2,7 @@
 import {spawn,execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {cpSync,readFileSync,writeFileSync,mkdirSync,mkdtempSync,readdirSync,statSync,existsSync} from 'node:fs';
-import {dirname,resolve,relative,join} from 'node:path';
+import {dirname,resolve,relative,join,basename} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
 import assert from 'node:assert/strict';
@@ -11,11 +11,13 @@ const npm=process.platform==='win32'?'npm.cmd':'npm';
 const executable=process.platform==='win32'?'.exe':'';
 const debug=process.argv.includes('--debug');
 const profile=debug?'debug':'release';
+const archiveRelease=process.argv.includes('--release-archive');
+if(archiveRelease)assert.ok(!debug && process.platform==='linux' && process.arch==='x64','Release archives currently support verified Linux x64 release builds only.');
 const version=JSON.parse(readFileSync(join(root,'frontends/web/package.json'),'utf8')).version;
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 function run(program,args){execFileSync(program,args,{cwd:root,stdio:'inherit'});}
 function sourceIdentity(){
- const paths=execFileSync('git',['ls-files','--cached','--others','--exclude-standard','-z'],{cwd:root,encoding:'utf8'}).split('\0').filter(p=>p&&existsSync(join(root,p))&&statSync(join(root,p)).isFile()&&(/^(Cargo\.(toml|lock)|package(-lock)?\.json)$/.test(p)||/^(crates|vendor|packages\/ui|frontends\/web|scripts\/package-web)/.test(p))).sort();
+ const paths=execFileSync('git',['ls-files','--cached','--others','--exclude-standard','-z'],{cwd:root,encoding:'utf8'}).split('\0').filter(p=>p&&existsSync(join(root,p))&&statSync(join(root,p)).isFile()&&(/^(Cargo\.(toml|lock)|package(-lock)?\.json)$/.test(p)||/^(crates|vendor|packages|frontends\/web|scripts\/package-web)/.test(p))).sort();
  const hash=createHash('sha256');for(const path of paths)hash.update(path+'\0').update(readFileSync(join(root,path))).update('\0');return hash.digest('hex');
 }
 const source=sourceIdentity();
@@ -23,8 +25,10 @@ run(npm,['run','build','-w','@conn/web']);
 run('cargo',['build','--locked',...(debug?[]:['--release']),'-p','conn-web','-p','conn']);
 assert.equal(sourceIdentity(),source,'Sources changed during packaging; rerun to build a coherent UI/server/MCP bundle.');
 const base=join(root,'release-artifacts');mkdirSync(base,{recursive:true});
-const bundle=mkdtempSync(join(base,`conn-web-${version}-${process.platform}-${process.arch}${debug?'-debug':''}-`));
+const bundle=archiveRelease ? join(mkdtempSync(join(tmpdir(),'conn-web-release-')),`conn-web-${version}-linux-x64`) : mkdtempSync(join(base,`conn-web-${version}-${process.platform}-${process.arch}${debug?'-debug':''}-`));
+mkdirSync(bundle,{recursive:true});
 for(const name of ['conn-web','conn'])cpSync(join(root,'target',profile,name+executable),join(bundle,name+executable));
+cpSync(join(root,'LICENSE'),join(bundle,'LICENSE'));
 cpSync(join(root,'frontends/web/dist'),join(bundle,'ui'),{recursive:true});
 const contract=JSON.parse(execFileSync(join(bundle,'conn-web'+executable),['contract'],{encoding:'utf8'}));
 for(const name of ['conn-web','conn'])assert.match(execFileSync(join(bundle,name+executable),['--version'],{encoding:'utf8'}),new RegExp(`^${name} ${version.replaceAll('.','\\.')}\\s*$`));
@@ -42,6 +46,12 @@ try{
  const assets=[...content.matchAll(/(?:src|href)="([^"#]+\.(?:js|css))"/g)].map(match=>match[1]);assert.ok(assets.length,'No built assets referenced');
  for(const asset of assets){const response=await fetch(new URL(asset,metadata.url));assert.equal(response.status,200,asset);assert.ok((await response.arrayBuffer()).byteLength,asset);}
  const info=await(await fetch(new URL('/api/info',metadata.url))).json();assert.equal(info.buildVersion,version);assert.equal(info.authenticated,false);
- writeFileSync(join(base,`${relative(base,bundle)}-verification.json`),JSON.stringify({bundle,version,profile,staticRoutes:'passed',assets:assets.length,cliVersion:'passed',serverVersion:'passed',protocol:contract.protocol,requiresBuildToolsAtRuntime:false},null,2)+'\n');
+ writeFileSync(archiveRelease ? join(dirname(bundle),'verification.json') : join(base,`${relative(base,bundle)}-verification.json`),JSON.stringify({bundle,version,profile,staticRoutes:'passed',assets:assets.length,cliVersion:'passed',serverVersion:'passed',protocol:contract.protocol,requiresBuildToolsAtRuntime:false},null,2)+'\n');
+ if(archiveRelease){
+  const archive=join(base,`conn-web-v${version}-x86_64-unknown-linux-gnu.tar.gz`);
+  assert.ok(!existsSync(archive),'Refusing to overwrite an existing release archive.');
+  run('tar',['-czf',archive,'-C',dirname(bundle),basename(bundle)]);
+  console.log(`Release archive: ${archive}`);
+ }
  console.log(`Packaged and verified: ${bundle}`);
 }finally{server.kill('SIGTERM');await Promise.race([new Promise(resolve=>server.once('exit',resolve)),new Promise(resolve=>setTimeout(()=>{if(server.exitCode===null)server.kill('SIGKILL');resolve();},3000))]);}

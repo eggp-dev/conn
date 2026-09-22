@@ -2,7 +2,8 @@ import type { Mode, Pacing } from '../bridge';
 import type { Analysis } from '../store.svelte';
 import type { OriginalRequest } from '../timeline';
 
-export type Approval = { id: string; agentId: string; cmd: string; label: string; intent?: string | null; analysis?: Analysis | null };
+export type ReviewContext = { reason: "command_policy" | "unverified_shell"; allowSession: boolean; remote: boolean };
+export type Approval = { id: string; agentId: string; cmd: string; label: string; review?: ReviewContext; intent?: string | null; analysis?: Analysis | null };
 export type ControlRequest = { requestId: string; agentId: string; reason?: string | null; originalRequest?: OriginalRequest | null };
 export type Proposal = { proposalId: string; agentId: string; text: string; state: 'drafting' | 'ready' | 'executed' | 'rejected' | 'denied'; intent?: string | null };
 type Resolution = 'pending' | 'granted' | 'denied' | 'expired';

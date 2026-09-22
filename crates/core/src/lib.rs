@@ -39,3 +39,5 @@ pub mod shell_integration;
 pub use config::Pacing;
 pub use engine::{Engine, EngineConfig, LaunchSpec};
 pub use session::{ServerEvent, Session, SessionConfig, SharedSession};
+
+mod human_input;
