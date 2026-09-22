@@ -89,3 +89,5 @@ CONN_SSH_FIXTURE_CONFIG=/path/to/disposable/client.conf \
 
 
 같은 SSH 픽스처에 복합 명령으로 진입하려면 입력 검사 명령에 `CONN_SSH_COMPOUND_ENTRY=1`을 추가한다. 한글 검사는 원격 UTF-8 로케일(예: `LC_ALL=C.UTF-8`)이 필요하다. 사용자 서버가 아닌 폐기 가능한 픽스처에만 설정한다.
+
+빌드된 배포 파일 자체를 검사하려면 `CONN_TEST_WEB_BUNDLE=/path/to/conn-web-0.8.7-linux-x64 npm run test:collaboration`을 실행한다. 구성 요소를 다시 빌드하지 않으며, 별도 상태 디렉터리에서 묶음의 실제 UI·서버·지속 MCP CLI를 사용한다.

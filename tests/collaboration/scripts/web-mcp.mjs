@@ -12,7 +12,10 @@ import { strict as assert } from 'node:assert';
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const state = mkdtempSync(join(tmpdir(), 'conn-web-mcp-'));
 const evidence = join(state, 'evidence'); mkdirSync(evidence);
-const binary = name => resolve(root, 'target/debug', name + (process.platform === 'win32' ? '.exe' : ''));
+// Point the unchanged production flow at an extracted release to verify the
+// shipped UI/server/MCP together, without rebuilding any of those components.
+const bundle = process.env.CONN_TEST_WEB_BUNDLE;
+const binary = name => resolve(bundle ?? join(root, 'target/debug'), name + (process.platform === 'win32' ? '.exe' : ''));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(run, message, ms = 12_000) {
   const start = Date.now(); let value;
@@ -22,7 +25,7 @@ async function until(run, message, ms = 12_000) {
 writeFileSync(join(state, 'profiles.json'), JSON.stringify({ version: 1, revision: 0, defaultProfile: 'test', profiles: [{ id: 'test', name: 'Local collaboration test', backend: 'local', shell: 'posix', program: '/bin/bash', args: ['--noprofile', '--norc', '-i'], cwd: state, env: { PS1: 'conn-test$ ', HISTFILE: '/dev/null', HISTCONTROL: '' } }] }));
 writeFileSync(join(state, 'app.json'), JSON.stringify({ mode: 'autopilot', gate: true, pacing: { enterGraceMs: 0, minWriteIntervalMs: 0, leaseTtlSecs: 120, approvalTtlSecs: 120 } }));
 const log = openSync(join(state, 'server.log'), 'w');
-const server = spawn(binary('conn-web'), ['serve', '--state-dir', state, '--port', '0', '--ui-dir', resolve(root, 'frontends/web/dist'), '--setup-home', join(state, 'setup-home')], { stdio: ['ignore', log, log] });
+const server = spawn(binary('conn-web'), ['serve', '--state-dir', state, '--port', '0', '--ui-dir', bundle ? resolve(bundle, 'ui') : resolve(root, 'frontends/web/dist'), '--setup-home', join(state, 'setup-home')], { stdio: ['ignore', log, log] });
 let browser, context, page;
 const agents = [], failures = [], cases = [], frames = [];
 let rejectNextInput = false, rejectedInput = false;
@@ -187,6 +190,7 @@ try {
   const risk = await agent.tool('terminal_send_key', { key: 'ENTER', intent: 'Exercise a risky-command denial in the isolated test directory.' });
   assert.equal(risk.status, 'pending');
   const reviewCard = page.locator('[data-request-key*="\u003areview:"]');
+  await reviewCard.getByRole('button',{name:'Run once',exact:true}).waitFor();
   assert.equal(await reviewCard.getByRole('button',{name:'Run once',exact:true}).count(), 1);
   assert.equal(await reviewCard.locator('.scope-choice').getAttribute('open'), null, 'broad grant stays behind an explicit scope choice');
   await sleep(600);

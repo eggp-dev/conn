@@ -78,3 +78,5 @@ Browser results are Linux Chromium evidence. They do not establish macOS WebKit,
 
 
 To test the same SSH fixture through compound shell entry, add `CONN_SSH_COMPOUND_ENTRY=1` to the input-test command. Unicode cases require a UTF-8 remote locale (for example `LC_ALL=C.UTF-8`); configure only the disposable fixture, not a user server.
+
+To exercise an extracted release without rebuilding its components, run `CONN_TEST_WEB_BUNDLE=/path/to/conn-web-0.8.7-linux-x64 npm run test:collaboration`. The test still uses disposable state and drives the real packaged UI, server and persistent MCP CLI.
