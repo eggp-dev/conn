@@ -38,6 +38,27 @@ fn native_output_is_sequenced_and_renderer_cannot_inject_observations() {
     assert_eq!(h.invoke("status",json!({"session":id})).unwrap()["surfaceAvailable"],true);
 }
 #[test]
+fn resize_is_ordered_with_owner_output_even_when_the_shell_is_silent() {
+    use base64::Engine as _;
+    let (_dir,h,output,id)=setup();
+    h.invoke("resize",json!({"session":id,"rows":27,"cols":104})).unwrap();
+    let marker=output.lock().unwrap().iter().rposition(|v|v["data"]==""&&v["size"]==json!({"rows":27,"cols":104})).expect("silent resize frame");
+    h.invoke("input",json!({"session":id,"data":"printf '\\nSYNTHETIC_RESIZE_OUTPUT\\n'\n"})).unwrap();
+    let deadline=Instant::now()+Duration::from_secs(4);
+    loop {
+        let entries=output.lock().unwrap();
+        let bytes:Vec<u8>=entries[marker+1..].iter().flat_map(|v|base64::engine::general_purpose::STANDARD.decode(v["data"].as_str().unwrap()).unwrap()).collect();
+        if String::from_utf8_lossy(&bytes).contains("SYNTHETIC_RESIZE_OUTPUT") {
+            assert!(entries[marker..].iter().all(|v|v["size"]==json!({"rows":27,"cols":104})));
+            assert!(entries.windows(2).all(|w|w[0]["outputSeq"].as_u64()<w[1]["outputSeq"].as_u64()));
+            break;
+        }
+        drop(entries);assert!(Instant::now()<deadline);std::thread::sleep(Duration::from_millis(10));
+    }
+    h.invoke("resize",json!({"session":id,"rows":38,"cols":104})).unwrap();
+    assert!(output.lock().unwrap().iter().any(|v|v["data"]==""&&v["size"]==json!({"rows":38,"cols":104})));
+}
+#[test]
 fn sharing_changes_keep_same_process_and_private_input_is_not_retroactive() {
     let (dir,h,_output,id)=setup();
     h.invoke("set_sharing",json!({"session":id,"shared":false,"connectionIds":[]})).unwrap();

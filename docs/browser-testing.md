@@ -107,8 +107,11 @@ already be listening on `127.0.0.1:22222`; the test accepts only its synthetic
 password and pinned known-hosts file. It authenticates through the same visible PTY
 and uses remote Bash with `LC_ALL=C.UTF-8` and `TERM=xterm-256color`.
 
-Coverage includes long ASCII/Unicode input, settings modal open/close without PTY
-resizing, a long risky command held for approval while resizing the window, the
+Coverage includes long ASCII/Unicode input, short/wrapped JSON with no trailing newline versus
+LF/CRLF (including prompt placement), settings modal open/close without PTY
+resizing, intentionally delayed resizes to expose native IPC and output ordering, and fixed-window
+approval open/deny with actual terminal motion and a delayed dock shrink. It also checks pane coverage
+at several emulated pixel densities, a long risky command held for approval while resizing the window, the
 session-allow button and its limited scope, a separate risk still requesting approval,
 policy denial, human cursor movement/insertion, takeover, and return from SSH to the
 original local shell. No privileged command is approved. This is Linux Chromium

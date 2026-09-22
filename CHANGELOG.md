@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Keep terminal resizes and shell output in the same order, including when an approval dock opens and closes in a fixed window. Retain dock motion while preventing delayed sizes and asynchronous redraws from desynchronizing the visible grid and cursor. The exact installed macOS/gateway report remains open; see the [follow-up](docs/ssh-input-review-results.md#terminal-dimensions-after-v085--unreleased).
+
+한국어: 고정 창에서 승인 바가 열리고 닫힐 때도 터미널 크기 변경과 셸 출력을 같은 순서로 반영합니다. 모션은 유지하면서 지연된 크기 변경과 비동기 재출력으로 화면·커서가 어긋나는 결함을 수정했습니다. 사용자의 설치된 macOS·중간 접속 환경에서 나타난 정확한 문제는 아직 미해결입니다. [후속 조사](docs/ssh-input-review-results.ko.md#v085-이후-터미널-크기-후속-조사--미배포)를 참고하세요.
+
 ## 0.8.5 — Preview · 2026-09-22
 
 - Restore policy-based Autopilot in POSIX SSH: ordinary commands run, risky commands request approval, and deny rules remain blocked. Remote paths are never inspected as host files.

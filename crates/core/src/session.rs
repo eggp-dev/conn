@@ -402,6 +402,7 @@ pub struct OutputFrame {
     pub data: Vec<u8>,
     pub output_seq: u64,
     pub generation: u64,
+    pub size: crate::screen::Size,
 }
 pub type OutputFrameSink = Box<dyn Fn(&OutputFrame) + Send + Sync>;
 
@@ -851,9 +852,13 @@ impl Session {
 
     fn write_output(&mut self, bytes: &[u8]) {
         if bytes.is_empty() { return; }
+        self.emit_output_frame(bytes);
+    }
+
+    fn emit_output_frame(&mut self, bytes: &[u8]) {
         self.output_seq = self.output_seq.saturating_add(1);
         if let Some(sink) = &self.output_frame_sink {
-            sink(&OutputFrame { data: bytes.to_vec(), output_seq: self.output_seq, generation: self.surface_generation });
+            sink(&OutputFrame { data: bytes.to_vec(), output_seq: self.output_seq, generation: self.surface_generation, size: self.screen.size() });
         }
     }
 
@@ -1025,6 +1030,9 @@ impl Session {
     pub fn resize(&mut self, rows: u16, cols: u16) {
         self.screen.resize(rows, cols);
         self.screen_dirty = true;
+        // Order renderer dimensions with PTY bytes under the same session lock.
+        // An IPC acknowledgement alone can overtake output event delivery.
+        self.emit_output_frame(&[]);
         if let Some(m) = &self.master {
             let _ = m.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 });
         }

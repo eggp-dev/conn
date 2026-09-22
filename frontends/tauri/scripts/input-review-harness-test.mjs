@@ -30,6 +30,26 @@ async function until(test,what){for(let i=0;i<100;i++){if(await test())return;aw
 async function allow(agent){await page.locator('.decision-card .primary').click();await until(async()=>(await state()).activity.connections.some(a=>a.connId===agent.hello.conn),'admission resolved');}
 // fill() cannot deliver terminal input; keyboard insertion emits the real onData path.
 async function typeHuman(text){const input=page.locator('.xterm-helper-textarea:visible');await input.click();await page.keyboard.insertText(text);await input.press('Enter');await delay(300);}
+// Native IPC uses independent workers; the browser server serializes commands.
+// A delayed transport request exposes an old size overtaking a newer one.
+async function delayFirstResize(milliseconds){
+ await page.evaluate(milliseconds=>{
+  const send=WebSocket.prototype.send;let delayNextResize=true;
+  window.__requestedTerminalSizes=[];
+  window.__restoreResizeTransport=()=>{WebSocket.prototype.send=send;};
+  WebSocket.prototype.send=function(data){
+   const message=JSON.parse(data);
+   if(message.name==='resize'){
+    window.__requestedTerminalSizes.push({rows:message.args.rows,cols:message.args.cols});
+    if(delayNextResize){delayNextResize=false;setTimeout(()=>send.call(this,data),milliseconds);return;}
+   }
+   return send.call(this,data);
+  };
+ },milliseconds);
+}
+async function restoreResizeTransport(){
+ await page.evaluate(()=>{window.__restoreResizeTransport();delete window.__restoreResizeTransport;delete window.__requestedTerminalSizes;});
+}
 async function grid(agent,label){
  await delay(700);
  const snapshot=await agent.call('snapshot');
@@ -43,8 +63,8 @@ async function grid(agent,label){
   return {row:Array.from(row.parentElement.children).indexOf(row),col:Math.round((cell.getBoundingClientRect().left-screen.getBoundingClientRect().left)/(screen.clientWidth/cols))};
  },snapshot.size.cols);
  const result={label,size:snapshot.size,core:snapshot.screen,visible:rows,cursor:snapshot.cursor,visibleCursor:cursor,equal:JSON.stringify(snapshot.screen)===JSON.stringify(rows)};
- assert.deepEqual(cursor,snapshot.cursor,`${label}: user and agent cursor positions agree`);
- writeFileSync(join(output,`grid-${label}.json`),JSON.stringify(result,null,2));return result;
+ writeFileSync(join(output,`grid-${label}.json`),JSON.stringify(result,null,2));
+ assert.deepEqual(cursor,snapshot.cursor,`${label}: user and agent cursor positions agree`);return result;
 }
 try{
  for(let i=0;!existsSync(join(dir,'connection.json'));i++){if(i>100||server.exitCode!==null)throw Error('Rust startup failed');await delay(100)}
@@ -66,6 +86,68 @@ try{
  const agent=await connect('input-repro');await allow(agent);
  const control=agent.call('request_control',{reason:'Reproduce long command rendering.'});control.catch(()=>{});
  await page.locator('.decision-card .primary').click();await control;await delay(500);
+ await delayFirstResize(350);
+ try {
+  await page.setViewportSize({width:700,height:640});await delay(80);
+  await page.setViewportSize({width:860,height:640});await delay(700);
+  const requested=await page.evaluate(()=>window.__requestedTerminalSizes);
+  assert.ok(requested.length>=2 && requested[0].cols<requested.at(-1).cols,'exercise narrow then wide resize');
+  assert.deepEqual((await agent.call('snapshot')).size,requested.at(-1),'late resize must not restore an obsolete PTY size');
+  assert.ok((await grid(agent,'delayed-resize')).equal);
+  await capture('delayed-resize');
+ } finally { await restoreResizeTransport(); }
+ // Moving between displays can change pixel density without changing CSS pane
+ // width. Verify the grid still fills the pane, not just core/renderer agreement.
+ const metrics=await context.newCDPSession(page);
+ for(const deviceScaleFactor of [1.25,1.5,2,1]){
+  await metrics.send('Emulation.setDeviceMetricsOverride',{width:860,height:640,deviceScaleFactor,mobile:false});await delay(350);
+  const geometry=await page.evaluate(()=>{
+   const host=document.querySelector('.host:not([hidden])');
+   const screen=host.querySelector('.xterm-screen');
+   return {hostWidth:host.clientWidth,screenWidth:screen.clientWidth,dpr:devicePixelRatio};
+  });
+  assert.ok(geometry.hostWidth-geometry.screenWidth>=0 && geometry.hostWidth-geometry.screenWidth<=32,`terminal fills pane after density change: ${JSON.stringify(geometry)}`);
+  assert.ok((await grid(agent,`density-${deviceScaleFactor}`)).equal);
+ }
+ await metrics.detach();
+ // A fixed window still resizes its PTY when the approval dock opens/closes.
+ // Fill the screen so the cursor moves and the terminal's actual motion runs.
+ await agent.call('type',{text:"printf 'synthetic row\\n%.0s' {1..70}"});
+ assert.equal((await agent.call('send_key',{key:'ENTER',intent:'Fill the fixture screen to exercise dock motion.'})).status,'executed');
+ const beforeDock=await grid(agent,'before-dock-motion');assert.ok(beforeDock.equal);
+ for(const latency of [0,500]){
+ await delayFirstResize(latency);
+ await page.evaluate(()=>{
+  window.__dockFrames=[];
+  const sample=()=>{
+   const host=document.querySelector('.host:not([hidden])');
+   window.__dockFrames.push({width:innerWidth,height:innerHeight,hostHeight:host.clientHeight,screenHeight:host.querySelector('.xterm-screen').clientHeight,transform:getComputedStyle(host).transform});
+   window.__dockFrame=requestAnimationFrame(sample);
+  };sample();
+ });
+ try {
+  await agent.call('type',{text:`rm -- '${join(dir,'missing-dock-'+('x'.repeat(120)))}'`});
+  const review=await agent.call('send_key',{key:'ENTER',intent:'Exercise approval motion without executing the fixture command.'});
+  assert.equal(review.status,'pending');
+  const deny=page.locator('.decision-card .btn.danger');await deny.waitFor();await delay(latency?10:90);
+  await deny.click({force:true});
+  await until(async()=>(await agent.call('check_approval',{approvalId:review.approvalId})).state==='denied','dock review denied');
+  const afterDock=await grid(agent,`after-dock-motion-${latency}`);
+  const motion=await page.evaluate(()=>({frames:window.__dockFrames,sizes:window.__requestedTerminalSizes}));
+  writeFileSync(join(output,`dock-motion-${latency}.json`),JSON.stringify(motion,null,2));
+  assert.ok(motion.frames.every(f=>f.width===860&&f.height===640),'window stays fixed throughout dock motion');
+  if(!latency)assert.ok(motion.frames.some(f=>f.transform!=='none'&&f.transform!=='matrix(1, 0, 0, 1, 0, 0)'),'exercise actual terminal motion');
+  assert.ok(motion.sizes.length>=2&&motion.sizes[0].rows<motion.sizes.at(-1).rows,'exercise dock shrink then restore');
+  assert.ok(motion.sizes.every(s=>s.cols===beforeDock.size.cols),'dock motion leaves terminal width unchanged');
+  assert.deepEqual(afterDock.size,motion.sizes.at(-1),'late dock shrink must not replace the restored terminal size');
+  const finalFrame=motion.frames.at(-1);
+  assert.ok(finalFrame.hostHeight-finalFrame.screenHeight>=0&&finalFrame.hostHeight-finalFrame.screenHeight<32,'restored terminal fills the available height');
+  assert.ok(afterDock.equal);await capture(`fixed-window-dock-motion-${latency}`);
+ } finally {
+  await page.evaluate(()=>{cancelAnimationFrame(window.__dockFrame);delete window.__dockFrame;delete window.__dockFrames;});
+  await restoreResizeTransport();
+ }
+ }
  for(const length of [240,700,1500,3500,7000]){
   const text='abcdefghijklmnopqrst'.repeat(Math.ceil(length/20)).slice(0,length);
   await agent.call('type',{text:`printf '%s\\n' '${text}'`});
@@ -73,6 +155,26 @@ try{
   const execution=await agent.call('send_key',{key:'ENTER',intent:'Print synthetic fixture output.'});
   assert.equal(execution.status,'executed','ordinary SSH command executes in Autopilot');
   await delay(500);assert.ok((await grid(agent,`printed-${length}`)).equal);await capture(`output-${length}`);
+ }
+ // A response without a trailing newline legitimately shares its last line
+ // with a Bash prompt. Preserve that distinction; never invent a newline.
+ const prompt=process.env.CONN_AUTH_FIXTURE_RUNTIME?'remote$':'fixture$';
+ const cols=(await agent.call('snapshot')).size.cols;
+ for(const padding of [0,cols*2]){
+  const body=JSON.stringify({padding:'x'.repeat(padding),agentMode:{state:'unavailable'}});
+  for(const [ending,format] of [['none','%s'],['lf','%s\\n'],['crlf','%s\\r\\n']]){
+   await agent.call('type',{text:`printf '${format}' '${body}'`});
+   assert.equal((await agent.call('send_key',{key:'ENTER',intent:'Compare synthetic JSON output with and without a trailing newline.'})).status,'executed');
+   const label=`line-ending-${ending}-${padding?'wrapped':'short'}`;
+   const result=await grid(agent,label);assert.ok(result.equal);
+   const last=result.visible[result.cursor.row];
+   if(ending==='none')assert.ok(last.endsWith(`}}${prompt}`),'no newline: prompt follows the final JSON bytes');
+   else {
+    assert.equal(last,prompt,'newline: prompt starts on a separate line');
+    assert.ok(result.visible[result.cursor.row-1].endsWith('}}'),'newline preserves the preceding JSON ending');
+   }
+   await capture(label);
+  }
  }
  // The modal settings sheet must leave the underlying PTY dimensions alone.
  for(const text of ['long-input/'.repeat(100), '한글/경로/🙂/'.repeat(65)]){
