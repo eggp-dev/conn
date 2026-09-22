@@ -119,6 +119,9 @@ jobs:
       - name: Package Linux or Windows assets
         if: runner.os != 'macOS'
         run: python scripts/release.py package --target ${{ matrix.target }} --out release-artifacts
+      - name: Build and verify standalone Linux web package
+        if: runner.os == 'Linux'
+        run: npm run package:web -- --release-archive
       - name: Sign final updater artifacts
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

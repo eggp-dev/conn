@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.8.7 — Preview · 2026-09-23
+
+- Ship the shared UI/runtime refactor: native and standalone web mount the same Svelte app and use the same Rust owner, input ordering, permission decisions and lifecycle. A Linux x64 web archive includes the host, matching MCP CLI and UI; it runs locally without a build toolchain.
+- Distinguish shared-screen admission, shell control and command execution. Control requests expand from the Conn badge and collapse without granting or denying; command review stays below the terminal. Session-wide allowances require opening an explicit scope choice. Ordinary terminal letters no longer approve a newly arrived command request.
+- Bind approval reasons and available choices to the request, preserve the command's risk label in uncertain shells, and recheck the shell context and policy before executing. Detect the actual foreground SSH executable on Linux/macOS so compound shell entries do not silently receive a different remote command policy.
+- Recover input after visible Backspace/Delete/Ctrl-W/Ctrl-U erasure, including coalesced echoes. Empty cursor motion no longer blocks collaboration; Home followed by Ctrl-U keeps remaining input protected. No human command line or hidden input is reconstructed or logged.
+- Include the macOS long-input PTY deadlock fix and keep queued output ahead of the process-exit notification. Linux desktop startup defaults to the compatible WebKit DMA-BUF path, honoring an explicit environment override.
+
+한국어: 네이티브·웹의 공통 UI와 Rust 런타임을 배포합니다. 연결은 공유 화면 접근, 뱃지에서 펼쳐지는 요청은 입력 제어권, 하단 카드는 이번 명령 실행으로 구별합니다. 요청별 사유·승인 범위를 고정하고, 원격 환경 안내가 삭제 등 위험 사유를 덮어쓰지 않도록 했습니다. 빈 입력·커서 이동의 오판과 Home 후 Ctrl-U에 남는 입력의 보호를 함께 수정했습니다. Mac 긴 입력 교착 수정, 마지막 출력과 종료 알림의 순서 보장, Linux WebKit 시작 호환 설정도 포함합니다. Linux 독립 웹 패키지는 개발 도구 없이 로컬에서 실행할 수 있습니다.
+
+Validation and limits: [release verification](docs/release-0.8.7-validation.md). The earlier macOS native audit covers the shared-runtime/deadlock changes at `5df5e36`; this release's new control UI and input-state fixes are additionally tested on Linux with the real Rust web host, common UI and persistent MCP. They have not been re-run interactively on macOS. The user's gateway, physical IME, native notification center and complete installed-app upgrades remain separate acceptance work. The output queue remains unbounded; the report records the measured finite-load test, not a guarantee for indefinitely stalled consumers.
+
+한국어: [릴리스 검증 기록](docs/release-0.8.7-validation.md)에 자동 검사·브라우저·Mac 실기 범위를 구분했습니다. 새 제어 UI와 입력 판정을 Mac에서 다시 대화형 검증했다고 주장하지 않습니다. 사용자 게이트웨이·물리 IME·네이티브 알림·설치 앱 전체 업그레이드는 별도 인수 범위입니다.
+
 ## 0.8.6 — Preview · 2026-09-22
 
 - Keep terminal dimensions and shell output in the same order when an approval bar opens and closes, including in a fixed window. This fixes reproduced stale sizes and cursor disagreement after delayed resizes and shell redraws while retaining the existing motion.

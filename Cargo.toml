@@ -1,19 +1,19 @@
 [workspace]
 resolver = "2"
 exclude = ["vendor/vt100"]
-members = ["crates/core", "crates/cli", "crates/frontend", "crates/browser-harness", "frontends/tauri/src-tauri"]
+members = ["crates/core", "crates/cli", "crates/frontend", "crates/web", "frontends/tauri/src-tauri"]
 # The desktop shell needs the platform webview toolchain; plain `cargo test` stays on the portable crates.
-default-members = ["crates/core", "crates/cli", "crates/frontend", "crates/browser-harness"]
+default-members = ["crates/core", "crates/cli", "crates/frontend", "crates/web"]
 
 [workspace.package]
-version = "0.8.6"
+version = "0.8.7"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/eggp-dev/conn"
 
 [workspace.dependencies]
-conn-core = { path = "crates/core", version = "0.8.6" }
-conn-frontend = { path = "crates/frontend", version = "0.8.6" }
+conn-core = { path = "crates/core", version = "0.8.7" }
+conn-frontend = { path = "crates/frontend", version = "0.8.7" }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "time", "macros", "signal"] }
 portable-pty = "0.8"
 vt100 = { path = "vendor/vt100", version = "0.15.2" }

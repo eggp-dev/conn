@@ -87,7 +87,9 @@ fn human_input_cancels_grace_window() {
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "echo hi").unwrap();
     let KeyResult::Scheduled { exec_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
+    h.session.pty_output(b"echo hi");
     h.session.human_input(b"\x15");
+    h.session.pty_output(b"\r\x1b[K");
     let (state, reason) = h.session.exec_state(&exec_id).unwrap();
     assert_eq!(state, ExecState::Cancelled);
     assert_eq!(reason.as_deref(), Some("human_input"));

@@ -1,5 +1,5 @@
 //! Native window adapter; command behavior lives in conn-frontend.
-use conn_frontend::Harness;
+use conn_frontend::{AppRuntime, OwnerHello, OwnerMeta, OwnerRequest};
 use serde_json::Value;
 use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
@@ -16,24 +16,34 @@ mod linux;
 #[tauri::command]
 async fn dispatch(
     window: tauri::WebviewWindow,
-    state: State<'_, Arc<Harness>>,
+    state: State<'_, Arc<AppRuntime>>,
     name: String,
     args: Value,
+    meta: OwnerMeta,
 ) -> Result<Value, String> {
     let harness = state.inner().clone();
     let label = window.label().to_owned();
-    tauri::async_runtime::spawn_blocking(move || harness.invoke_in_window(&label, &name, args))
+    tauri::async_runtime::spawn_blocking(move || harness.invoke_owner(&label, OwnerRequest { name, args, meta }))
         .await
         .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn owner_attach(window: tauri::WebviewWindow, state: State<'_, Arc<AppRuntime>>, protocol: u32, takeover: bool) -> Result<OwnerHello, String> {
+    let runtime = state.inner().clone(); let label = window.label().to_owned();
+    tauri::async_runtime::spawn_blocking(move || runtime.owner_attach(&label, protocol, takeover)).await.map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn owner_outcome(window: tauri::WebviewWindow, state: State<'_, Arc<AppRuntime>>, epoch: u64, operation_id: u64) -> Result<Value, String> {
+    state.owner_outcome(window.label(), epoch, operation_id)
 }
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(updates::Updates::new())
-        .invoke_handler(tauri::generate_handler![dispatch, updates::app_update])
+        .invoke_handler(tauri::generate_handler![dispatch, owner_attach, owner_outcome, updates::app_update])
         .setup(|app| {
             let handle = app.handle().clone();
-            let harness = Arc::new(Harness::new(
+            let harness = Arc::new(AppRuntime::new(
                 std::env::var_os("CONN_CONFIG_DIR").map(std::path::PathBuf::from).unwrap_or_else(conn_core::paths::config_dir),
                 conn_core::paths::socket_path(),
                 Arc::new(move |name, value| {
@@ -52,7 +62,7 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            let Some(harness) = window.try_state::<Arc<Harness>>() else {
+            let Some(harness) = window.try_state::<Arc<AppRuntime>>() else {
                 return;
             };
             match event {
@@ -65,7 +75,7 @@ pub fn run() {
         .expect("error while building Conn")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
-                app.state::<Arc<Harness>>().shutdown();
+                app.state::<Arc<AppRuntime>>().shutdown();
             }
         });
 }

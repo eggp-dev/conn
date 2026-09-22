@@ -30,14 +30,19 @@ class CiScopeTests(unittest.TestCase):
         self.assertEqual(ci_scope.scope("pull_request", ["plugin/skills/conn/SKILL.md"])["rust"], ALL)
 
     def test_frontend_only_changes_build_one_desktop_and_skip_rust(self):
-        self.assertEqual(ci_scope.scope("pull_request", ["frontends/tauri/src/App.svelte", "docs/faq.md"]), {"rust": [], "desktop": [LINUX]})
+        for path in ("packages/ui/src/App.svelte", "frontends/tauri/src/nativePorts.ts",
+                     "frontends/web/src/webPorts.ts", "tests/collaboration/owner.test.mjs"):
+            with self.subTest(path=path):
+                self.assertEqual(ci_scope.scope("pull_request", [path, "docs/faq.md"]), {"rust": [], "desktop": [LINUX]})
 
     def test_the_npm_workspace_root_is_frontend_but_shared_packages_are_not_assumed_light(self):
         self.assertEqual(ci_scope.scope("pull_request", ["package-lock.json", "package.json", ".npmrc"]), {"rust": [], "desktop": [LINUX]})
         self.assertEqual(ci_scope.classify("packages/themes/builtin-themes.json"), "native")
 
     def test_rust_pull_requests_test_everywhere_but_build_one_desktop(self):
-        self.assertEqual(ci_scope.scope("pull_request", ["crates/core/src/ipc.rs"]), {"rust": ALL, "desktop": [LINUX]})
+        for path in ("crates/core/src/ipc.rs", "crates/web/src/main.rs", "crates/frontend/src/owner.rs"):
+            with self.subTest(path=path):
+                self.assertEqual(ci_scope.scope("pull_request", [path]), {"rust": ALL, "desktop": [LINUX]})
 
     def test_platform_specific_paths_get_every_desktop_before_merging(self):
         for path in ("frontends/tauri/src-tauri/src/lib.rs", ".github/workflows/ci.yml", "crates/frontend/src/automation.rs", "scripts/check_macos_scripting.py"):

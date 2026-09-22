@@ -82,13 +82,15 @@ jobs:
           sh -n scripts/install.sh
           ! CONN_VERSION="latest" sh scripts/install.sh > /dev/null 2>&1
       - run: python -m unittest discover -s tests/release -v
-      - run: npm test
-        working-directory: frontends/tauri
+      - run: npm run test:ui
+      - run: node scripts/check-ui-boundaries.mjs
+      - run: node scripts/generate-owner-contract.mjs --check
       - name: Core and renderer screen parity
         run: npm run test:screen
-        working-directory: frontends/tauri
+        working-directory: packages/ui
       - run: npm run build
         working-directory: frontends/tauri
+      - run: npm run build:web
       - name: The website builds, including the pages it generates from docs/
         run: npm ci && npm run build
         working-directory: site
@@ -169,14 +171,14 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install the lockfile-pinned test browser
         run: npx playwright install chromium --with-deps
-        working-directory: frontends/tauri
-      - run: cargo build --locked -p conn-browser-harness
+        working-directory: tests/collaboration
+      - run: cargo build --locked -p conn-web -p conn
+      - run: npm run build:web
+      - run: npm run test:checkpoint -w @conn/ui
+      - run: npm run test:app-lifetime -w @conn/ui
       - run: npm run test:collaboration
-        working-directory: frontends/tauri
-      - run: npm run test:collaboration:harness
-        working-directory: frontends/tauri
-      - run: npm run test:context:harness
-        working-directory: frontends/tauri
+      - run: npm run test:input -w @conn/collaboration-tests
+      - run: npm run package:web -- --debug
   required:
     name: Required checks
     if: always()

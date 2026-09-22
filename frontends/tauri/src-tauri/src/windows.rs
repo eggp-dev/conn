@@ -1,4 +1,4 @@
-//! Native presentation; sessions and ownership stay in the shared Harness.
+//! Native presentation; sessions and ownership stay in the shared AppRuntime.
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     mpsc, Arc,

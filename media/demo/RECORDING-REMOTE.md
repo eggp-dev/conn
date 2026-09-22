@@ -20,7 +20,7 @@ Visible prompts, the five cards with the agent's stated reasons, frame counts an
 
 ## Reproduce
 
-Requires the repository built (`cargo build -p conn -p conn-browser-harness`), frontend dependencies, Google Chrome, Docker (the fixture builds a small image from `scripts/remote/Dockerfile.staging`), FFmpeg, Pillow, and an authenticated `claude` CLI. `setup-fixture.sh` creates the loopback-only server with its fake service, the `ssh staging` alias used by the film shell, a synthetic password and the Conn profile; it touches none of your own SSH or Conn settings. Raw frames, the agent transcript and the synthetic password stay outside the repository. Remove the server afterwards with `docker rm -f conn-film-staging`.
+Requires the repository built (`cargo build -p conn -p conn-web`), the built web UI (`npm run build:web`), Google Chrome, Docker (the fixture builds a small image from `scripts/remote/Dockerfile.staging`), FFmpeg, Pillow, and an authenticated `claude` CLI. `setup-fixture.sh` creates the loopback-only server with its fake service, the `ssh staging` alias used by the film shell, a synthetic password and the Conn profile; it touches none of your own SSH or Conn settings. Raw frames, the agent transcript and the synthetic password stay outside the repository. Remove the server afterwards with `docker rm -f conn-film-staging`.
 
 ```sh
 scripts/remote/setup-fixture.sh /tmp/conn-film                          # SSH server, `ssh staging` alias, synthetic password, Conn profile

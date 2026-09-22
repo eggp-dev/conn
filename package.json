@@ -3,11 +3,20 @@
   "private": true,
   "workspaces": [
     "frontends/tauri",
+    "frontends/web",
     "site",
     "media/demo",
-    "packages/*"
+    "packages/*",
+    "tests/collaboration"
   ],
   "engines": {
     "node": ">=24"
+  },
+  "scripts": {
+    "dev:web": "npm run dev -w @conn/web",
+    "build:web": "npm run build -w @conn/web",
+    "test:ui": "npm test -w @conn/ui",
+    "test:collaboration": "npm test -w @conn/collaboration-tests",
+    "package:web": "node scripts/package-web.mjs"
   }
 }

@@ -509,8 +509,14 @@ impl PolicyStore {
                     }
                 }
             }
-            if !matches!(decision, Decision::Deny {..}) { decision=worst.clone(); }
-            if matches!(decision, Decision::Deny {..}) { worst=decision.clone(); }
+            // Keep the command's risk label. Environment uncertainty is a
+            // separate request reason, not a replacement for "delete files".
+            match &decision {
+                Decision::Deny { .. } => worst = decision.clone(),
+                Decision::Confirm { .. } if !matches!(worst, Decision::Deny { .. }) => worst = decision.clone(),
+                Decision::Allow => decision = Decision::Confirm { label: "Review command in this shell/remote environment".into() },
+                _ => {}
+            }
             verdicts.push(SegmentVerdict {text:segment.text.clone(),command:segment.command.clone(),opaque:Some("Target syntax or filesystem requires human review".into()),decision,targets:vec![]});
         }
         let isolation_violation = self.policy.isolate_dangerous && segments.len()>1;

@@ -2,6 +2,9 @@
 
 English · [한국어](product-backlog.ko.md) · [Existing refactor plan](collaboration-refactor-plan.md)
 
+Latest handoff: [2026-09-23 Mac fixes, Linux regressions and remaining work](shared-runtime-follow-up.md).
+Keep the dated records below separate from the installed public release's status.
+
 ## 2026-09-21 — Feedback from real remote-shell collaboration
 
 Status: essential collaboration scope implemented and verified in the shared harness for v0.8.4.
@@ -41,6 +44,9 @@ Do not retain real addresses, accounts, command payloads or authentication respo
 
 ### UX-01 · Display fidelity for long output
 
+- 2026-09-23: The unreleased common-runtime branch fixes the Mac long-input deadlock and validates
+  native local/loopback SSH input and fixed-window approval panels. Linux regressions also pass.
+  See the [handoff summary](shared-runtime-follow-up.md); the user's gateway and physical IME remain unverified.
 - 2026-09-22: **still open after v0.8.5**. The user reports constrained width/height and misplaced input
   after updating/restarting, even with a fixed window when notification/approval bars animate. Resize
   and output ordering defects were reproduced and fixed in v0.8.6; the exact installed native/remote
@@ -61,6 +67,10 @@ Do not retain real addresses, accounts, command payloads or authentication respo
 
 ### UX-03 · Explain waiting and lease state
 
+- 2026-09-23: The [control experience audit and proposal](control-experience.md)
+  defines scope clarity, consistent pending requests and validation under the
+  [product invariant](PRD.md). The direction uses a Conn-badge morph for control
+  requests and retains bottom command review. This records design, not completed UI changes.
 - Problem: admission, control approval, command review and lease expiry create friction or ambiguity.
 - Scope: consistently explain the reason, waiting actor, next action and lease expiration.
 - Acceptance: cover renewal, expiry, denial, cancellation and human takeover. Remaining time agrees

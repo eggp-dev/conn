@@ -2,7 +2,7 @@
 
 English · [한국어](platform-support.ko.md) · [Install](getting-started.md) · [Release](releasing.md)
 
-Conn provides its MIT-licensed source and native binaries through [GitHub Releases](https://github.com/eggp-dev/conn/releases/tag/v0.8.6). All desktop packages use the same Rust engine and Svelte UI. The browser harness is a development adapter.
+Conn provides its MIT-licensed source and native binaries through [GitHub Releases](https://github.com/eggp-dev/conn/releases/tag/v0.8.7). All desktop packages use the same Rust engine and Svelte UI. The browser harness is a development adapter.
 
 ## Targets for upcoming preview releases
 
@@ -59,3 +59,7 @@ SSH, Docker, WSL and Git Bash are profile options. Claim verified support only f
 The workflow prepares a **draft prerelease** with seven binaries/installers, a macOS updater archive, three updater signatures, `latest.json`, one Mac signing report, and `SHA256SUMS`. It does not publish automatically. Missing or failed Mac signing evidence blocks the release draft upload; unsigned Windows assets are the explicit preview policy.
 
 Before publishing, maintainers review the [release checks](releasing.md), record runtime results and limitations, and confirm that download links match the assets. Updates from v0.6.0 use the signed Tauri updater on macOS, Windows and AppImage. Debian packages remain manually/package-manager updated. Older installations need one manual upgrade. See [updates](getting-started.md#updates-v060-and-later). Native installed-app upgrades still require hands-on verification; CI verifies build and artifact contracts.
+
+### Linux WebKit startup compatibility
+
+The desktop binary sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` before GTK starts when the variable is unset. This avoids the reproduced GBM/EGL startup abort on the tested NVIDIA setup. An explicit value is preserved; set `WEBKIT_DISABLE_DMABUF_RENDERER=0` only to opt back into DMA-BUF on a working driver. This changes a rendering transport, not the WebKit sandbox. Other drivers and desktop compositors still need native testing.

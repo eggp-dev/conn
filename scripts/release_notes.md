@@ -30,6 +30,12 @@ required to use these binaries. Windows preview installers are unsigned, so a
 SmartScreen or unknown-publisher prompt may appear. Native CLI startup is checked
 in CI; full interactive GUI installation/collaboration checks remain pending.
 
+## Standalone local web host
+
+[Linux x64 web bundle]({repository}/releases/download/{tag}/conn-web-v{version}-x86_64-unknown-linux-gnu.tar.gz) includes the server, matching MCP CLI and common UI. Extract it and run `./conn-web serve`; follow its README or the [web guide]({repository}/blob/{tag}/docs/browser-testing.md). It binds to loopback and runs independently of desktop sessions. No remote hosting or multi-user access is enabled.
+
+한국어: Linux x64 웹 패키지는 서버·MCP CLI·공통 UI를 함께 제공합니다. 압축을 풀고 `./conn-web serve`로 실행하세요. 로컬 전용이며 데스크톱에서 이미 열린 셸과는 별도 인스턴스입니다.
+
 ## New in this release
 
 {changes}

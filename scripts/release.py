@@ -13,7 +13,7 @@ import hashlib
 import io
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
@@ -43,10 +43,11 @@ TARGETS = {
 PLATFORMS = {"aarch64-apple-darwin": "darwin-aarch64", "x86_64-unknown-linux-gnu": "linux-x86_64", "x86_64-pc-windows-msvc": "windows-x86_64"}
 SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?")
 WORKSPACE_VERSION = "Cargo.toml: workspace package"
-JSON_MANIFESTS = ("frontends/tauri/package.json", "frontends/tauri/src-tauri/tauri.conf.json", "plugin/.claude-plugin/plugin.json", "plugin/.codex-plugin/plugin.json")
+NPM_WORKSPACES = ("frontends/tauri", "frontends/web", "packages/ui")
+JSON_MANIFESTS = tuple(f"{name}/package.json" for name in NPM_WORKSPACES) + ("frontends/tauri/src-tauri/tauri.conf.json", "plugin/.claude-plugin/plugin.json", "plugin/.codex-plugin/plugin.json")
 # Lockfiles list every dependency; only Conn's own packages carry the release version.
 LOCKED_PACKAGES = {
-    "Cargo.lock": {"conn", "conn-core", "conn-frontend", "conn-browser-harness", "conn-desktop"},
+    "Cargo.lock": {"conn", "conn-core", "conn-frontend", "conn-web", "conn-desktop"},
 }
 # Where `bump` writes what `declarations` reads. Group 1 is the version; each pattern must match exactly once.
 _JSON_VERSION = r'^  "version": "([^"\n]+)"'
@@ -54,8 +55,8 @@ VERSION_PATTERNS = {
     # The desktop crate inherits the workspace version, so its manifest declares none.
     "Cargo.toml": (r'^\[workspace\.package\]\n(?:(?!\[).*\n)*?version = "([^"\n]+)"', r'^conn-core = \{[^}\n]*\bversion = "([^"\n]+)"', r'^conn-frontend = \{[^}\n]*\bversion = "([^"\n]+)"'),
     **{name: (_JSON_VERSION,) for name in JSON_MANIFESTS},
-    # One npm workspace lockfile at the root; the desktop UI is the only workspace that carries the release version.
-    "package-lock.json": (r'^    "frontends/tauri": \{\n(?:      .*\n)*?      "version": "([^"\n]+)"',),
+    # Shared UI and both frontend adapters are built and versioned together.
+    "package-lock.json": tuple(rf'^    "{re.escape(name)}": \{{\n(?:      .*\n)*?      "version": "([^"\n]+)"' for name in NPM_WORKSPACES),
     ".claude-plugin/marketplace.json": (r'^      "name": "conn",\n(?:      .*\n)*?      "version": "([^"\n]+)"',),
     **{name: tuple(rf'^name = "{package}"\nversion = "([^"\n]+)"' for package in sorted(packages)) for name, packages in LOCKED_PACKAGES.items()},
 }
@@ -127,7 +128,9 @@ def declarations(root: Path, texts: dict[str, str] | None = None) -> dict[str, s
     }
     for name in JSON_MANIFESTS:
         found[name] = json.loads(text(name))["version"]
-    found["package-lock.json: frontends/tauri"] = json.loads(text("package-lock.json"))["packages"]["frontends/tauri"]["version"]
+    npm_packages = json.loads(text("package-lock.json"))["packages"]
+    for name in NPM_WORKSPACES:
+        found[f"package-lock.json: {name}"] = npm_packages[name]["version"]
     plugins = [p for p in json.loads(text(".claude-plugin/marketplace.json"))["plugins"] if p["name"] == "conn"]
     if len(plugins) != 1:
         raise ReleaseError("Claude marketplace must contain exactly one Conn plugin")
@@ -282,7 +285,49 @@ def signature_text(path: Path) -> str:
 
 def release_names(version: str) -> list[str]:
     return sorted([name for target in TARGETS for name in asset_names(version, target) + updater_names(version, target)] +
-                  [signing_name(version, target) for target in TARGETS if target.endswith("apple-darwin")] + ["latest.json"])
+                  [signing_name(version, target) for target in TARGETS if target.endswith("apple-darwin")] + ["latest.json", web_asset(version)])
+
+
+def web_asset(version: str) -> str:
+    return f"conn-web-v{version}-x86_64-unknown-linux-gnu.tar.gz"
+
+
+def validate_web_archive(path: Path, version: str, sha: str | None = None):
+    """Verify a self-contained, same-build bundle without extracting or running it."""
+    prefix = f"conn-web-{version}-linux-x64/"
+    with tarfile.open(path, "r:gz") as archive:
+        files = {}
+        for member in archive.getmembers():
+            if member.isdir() and member.name.rstrip("/") == prefix.rstrip("/"):
+                continue
+            if not member.name.startswith(prefix) or ".." in PurePosixPath(member.name).parts:
+                raise ReleaseError("Unsafe web archive path")
+            name = member.name[len(prefix):]
+            if member.isdir():
+                continue
+            if not member.isfile() or name in files or member.size > 256 * 1024 * 1024:
+                raise ReleaseError("Invalid web archive member")
+            files[name] = member
+        required = {"conn", "conn-web", "manifest.json", "SHA256SUMS", "README.md", "LICENSE", "ui/index.html", "ui/conn-icon.svg"}
+        if not required.issubset(files) or any(name not in required and not name.startswith("ui/assets/") for name in files):
+            raise ReleaseError("Unexpected web archive contents")
+        manifest = json.load(archive.extractfile(files["manifest.json"]))
+        if manifest.get("version") != version or manifest.get("profile") != "release" or manifest.get("sourceDirty") is not False or manifest.get("platform") != "linux" or manifest.get("architecture") != "x64" or (sha and manifest.get("sourceCommit") != sha):
+            raise ReleaseError("Web archive build identity does not match the release")
+        if not all(files[name].mode & 0o111 for name in ("conn", "conn-web")):
+            raise ReleaseError("Web archive executables are not executable")
+        lines = archive.extractfile(files["SHA256SUMS"]).read().decode("utf-8").splitlines()
+        checks = {}
+        for line in lines:
+            match = re.fullmatch(r"([0-9a-f]{64})  (.+)", line)
+            if not match or match[2] in checks:
+                raise ReleaseError("Invalid web archive checksums")
+            checks[match[2]] = match[1]
+        if set(checks) != set(files) - {"SHA256SUMS"}:
+            raise ReleaseError("Incomplete web archive checksums")
+        for name, checksum in checks.items():
+            if hashlib.file_digest(archive.extractfile(files[name]), "sha256").hexdigest() != checksum:
+                raise ReleaseError("Web archive checksum mismatch")
 
 
 def updater_manifest(artifacts: Path, version: str):
@@ -496,6 +541,7 @@ def finalize(artifacts: Path, tag: str, sha: str | None = None, root: Path = ROO
     missing = set(expected) - {"latest.json"} - found
     if extras or missing:
         raise ReleaseError(f"Release asset mismatch; missing={sorted(missing)}, unexpected={sorted(extras)}")
+    validate_web_archive(regular_file(artifacts / web_asset(version), artifacts), version, sha)
     manifest = updater_manifest(artifacts, version)
     if (artifacts / "latest.json").is_symlink():
         raise ReleaseError("Refusing a symlink updater manifest")
@@ -535,6 +581,7 @@ def draft(artifacts: Path, tag: str, sha: str, root: Path = ROOT) -> str:
     if not artifacts.is_dir() or {p.name for p in artifacts.iterdir()} != set(expected) | {"SHA256SUMS", "release-notes.md"}:
         raise ReleaseError("Expected only the complete finalized asset set; run finalize first")
     assets = [regular_file(artifacts / name, artifacts) for name in expected]
+    validate_web_archive(artifacts / web_asset(version), version, sha)
     for target in TARGETS:
         if target.endswith("apple-darwin"):
             validate_signing_report(artifacts / signing_name(version, target), version, target, artifacts, sha)

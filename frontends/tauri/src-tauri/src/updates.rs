@@ -178,7 +178,7 @@ pub async fn app_update(
                             .map_err(|e| e.to_string())?
                             .timeout(Duration::from_secs(180))
                             .on_before_exit(move || {
-                                handle.state::<Arc<conn_frontend::Harness>>().shutdown();
+                                handle.state::<Arc<conn_frontend::AppRuntime>>().shutdown();
                                 handle.cleanup_before_exit();
                             })
                             .build()
@@ -234,7 +234,7 @@ pub async fn app_update(
                     .ok_or("Download and verify the update first")?;
                 state.status.lock().phase = "installing";
                 update.install(bytes).map_err(|e| e.to_string())?;
-                app.state::<Arc<conn_frontend::Harness>>().shutdown();
+                app.state::<Arc<conn_frontend::AppRuntime>>().shutdown();
                 app.restart();
             }
             _ => unreachable!(),

@@ -226,7 +226,7 @@ impl Grid {
 
     pub fn restore_cursor(&mut self) {
         self.pos = self.saved_pos;
-        self.origin_mode = self.saved_origin_mode;
+        // xterm keeps DEC origin mode global; restoring a cursor does not change it.
     }
 
     pub fn visible_rows(&self) -> impl Iterator<Item = &crate::row::Row> {
@@ -352,6 +352,64 @@ impl Grid {
         );
 
         prev_attrs
+    }
+
+    /// Serialize the already bounded normal-buffer model, including reflow
+    /// history. These are cells from terminal output, never captured input.
+    pub fn write_contents_with_history(&self, out: &mut Vec<u8>) {
+        if self.scrollback.is_empty() { self.write_contents_formatted(out); return; }
+        crate::term::ClearAttrs::default().write_buf(out);
+        crate::term::ClearScreen::default().write_buf(out);
+        let mut attrs = crate::attrs::Attrs::default();
+        let mut pos = Pos::default();
+        let mut wrapping = false;
+        for (index, row) in self.scrollback.iter().chain(self.rows.iter()).enumerate() {
+            let y = index.min(usize::from(self.size.rows - 1)) as u16;
+            if index > 0 && !wrapping { out.extend_from_slice(b"\r\n"); pos = Pos { row: y, col: 0 }; }
+            if wrapping && index >= usize::from(self.size.rows) { pos.row = y.saturating_sub(1); }
+            let logical_y = if wrapping && self.size.rows == 1 { 1 } else { y };
+            let result = row.write_contents_formatted(out, 0, self.size.cols, logical_y, wrapping, Some(pos), Some(attrs));
+            pos = result.0; attrs = result.1; wrapping = row.wrapped();
+        }
+    }
+
+    pub fn write_preceding_char(&self, out: &mut Vec<u8>, insert: bool) {
+        use std::io::Write as _;
+        if self.pos.col == 0 { return; }
+        let mut col = self.pos.col.min(self.size.cols).saturating_sub(1);
+        if self.drawing_cell(Pos { row: self.pos.row, col }).is_some_and(|c| c.is_wide_continuation()) { col = col.saturating_sub(1); }
+        if let Some(cell) = self.drawing_cell(Pos { row: self.pos.row, col }) {
+            let row = if self.origin_mode { self.pos.row.saturating_sub(self.scroll_top) } else { self.pos.row };
+            let _ = write!(out, "\x1b[{};{}H", row + 1, col + 1);
+            if insert { let _ = write!(out, "\x1b[{}P", if cell.is_wide() { 2 } else { 1 }); }
+            out.extend_from_slice(cell.contents().as_bytes());
+        }
+    }
+
+    /// Restore the two cursor slots, margins and origin after painting a grid.
+    pub fn write_checkpoint_state(&self, contents: &mut Vec<u8>, saved_attrs: crate::attrs::Attrs) {
+        use std::io::Write as _;
+        let _ = write!(contents, "\x1b[{};{}r", self.scroll_top + 1, self.scroll_bottom + 1);
+        for (pos, origin, save) in [(self.saved_pos, self.saved_origin_mode, true), (self.pos, self.origin_mode, false)] {
+            contents.extend_from_slice(if origin { b"\x1b[?6h" } else { b"\x1b[?6l" });
+            let col = pos.col.min(self.size.cols - 1);
+            let row = if origin { pos.row.saturating_sub(self.scroll_top) } else { pos.row };
+            let _ = write!(contents, "\x1b[{};{}H", row + 1, col + 1);
+            if pos.col >= self.size.cols {
+                let mut col = col;
+                if self.drawing_cell(Pos { row: pos.row, col }).is_some_and(|c| c.is_wide_continuation()) { col = col.saturating_sub(1); }
+                if let Some(cell) = self.drawing_cell(Pos { row: pos.row, col }) {
+                    let _ = write!(contents, "\x1b[{};{}H\x1b[0m", row + 1, col + 1);
+                    cell.attrs().write_escape_code_diff(contents, &crate::attrs::Attrs::default());
+                    contents.extend_from_slice(cell.contents().as_bytes());
+                }
+            }
+            if save {
+                contents.extend_from_slice(b"\x1b[0m");
+                saved_attrs.write_escape_code_diff(contents, &crate::attrs::Attrs::default());
+                contents.extend_from_slice(b"\x1b7");
+            }
+        }
     }
 
     pub fn write_contents_diff(
@@ -698,9 +756,11 @@ impl Grid {
             self.scroll_top = 0;
             self.scroll_bottom = self.size().rows - 1;
         }
-        self.pos.row = self.scroll_top;
-        self.pos.col = 0;
+        self.set_pos(Pos::default());
     }
+
+    pub fn origin_mode(&self) -> bool { self.origin_mode }
+    pub fn inherit_origin_mode(&mut self, value: bool) { self.origin_mode = value; }
 
     fn in_scroll_region(&self) -> bool {
         self.pos.row >= self.scroll_top && self.pos.row <= self.scroll_bottom
@@ -787,6 +847,11 @@ impl Grid {
             let mut prev_pos = self.pos;
             self.pos.col = 0;
             let scrolled = self.row_inc_scroll(1);
+            if prev_pos.row < scrolled {
+                // A one-row viewport moves the wrapped predecessor into history.
+                if let Some(row) = self.scrollback.back_mut() { row.wrap(wrap); }
+                return;
+            }
             prev_pos.row -= scrolled;
             let new_pos = self.pos;
             self.drawing_row_mut(prev_pos.row)

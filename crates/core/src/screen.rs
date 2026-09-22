@@ -72,28 +72,46 @@ impl ScreenModel {
 
     /// Feed raw PTY output. Returns true if the visible screen changed.
     pub fn process(&mut self, bytes: &[u8]) -> bool {
-        if bytes.is_empty() {
-            return false;
-        }
+        self.process_observing(bytes, None).0
+    }
+
+    /// Observe the first visible cursor departure even when typing and erasing
+    /// are echoed in one read. Do not retain text or parse every byte thereafter.
+    pub(crate) fn process_observing(&mut self, bytes: &[u8], empty_col: Option<u16>) -> (bool, bool) {
+        if bytes.is_empty() { return (false, false); }
         let cursor = self.parser.screen().cursor_position();
         let hidden = self.parser.screen().hide_cursor();
         let alternate = self.parser.screen().alternate_screen();
-        self.parser.process(bytes);
+        let mut moved = false;
+        if let Some(col) = empty_col {
+            for (i, byte) in bytes.iter().enumerate() {
+                self.parser.process(std::slice::from_ref(byte));
+                if self.parser.screen().cursor_position().1 != col && !self.parser.screen().hide_cursor()
+                    && !self.alternate_screen() && !self.cursor_line_hidden() {
+                    moved = true;
+                    self.parser.process(&bytes[i + 1..]);
+                    break;
+                }
+            }
+        } else { self.parser.process(bytes); }
         let contents = self.rows().join("\n");
         if contents != self.last_contents || cursor != self.parser.screen().cursor_position()
             || hidden != self.parser.screen().hide_cursor() || alternate != self.parser.screen().alternate_screen() {
             self.last_contents = contents;
             self.revision += 1;
-            true
-        } else {
-            false
-        }
+            (true, moved)
+        } else { (false, moved) }
     }
 
     pub fn resize(&mut self, rows: u16, cols: u16) {
         self.parser.set_size_reflow(rows.max(1), cols.max(1));
         self.last_contents = self.rows().join("\n");
         self.revision += 1;
+    }
+
+    /// Owner-only modeled rendering state; never use this for agent observation.
+    pub(crate) fn renderer_checkpoint(&self) -> Result<Vec<u8>, &'static str> {
+        self.parser.renderer_state_formatted()
     }
 
     pub fn revision(&self) -> u64 {
@@ -146,6 +164,32 @@ impl ScreenModel {
             }
             text.trim_end().to_owned()
         }).collect()
+    }
+
+    /// Fingerprint of the visible prompt row and following rows. Only used to
+    /// recognize an echoed return to an already empty input boundary. No input
+    /// content is retained. Conceal and alternate-screen state cannot certify it.
+    pub(crate) fn input_boundary(&self) -> Option<(u16, u64)> {
+        use std::hash::{Hash, Hasher};
+        let screen = self.parser.screen();
+        if screen.alternate_screen() || screen.hide_cursor() { return None; }
+        let (row, col) = screen.cursor_position();
+        let (rows, cols) = screen.size();
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        cols.hash(&mut hash);
+        // Ignore blank trailing rows, so Ctrl-L can redraw the same prompt at
+        // the top. Retain cells/spaces and row boundaries inside the footprint.
+        let end = (row..rows).rev().find(|r| (0..cols).any(|c| screen.cell(*r, c).is_some_and(|v| !v.contents().trim_end().is_empty()))).unwrap_or(row);
+        (end - row).hash(&mut hash);
+        for r in row..=end {
+            for c in 0..cols {
+                let cell = screen.cell(r, c)?;
+                if Self::hidden(cell) && cell.has_contents() { return None; }
+                cell.contents().trim_end().hash(&mut hash);
+                cell.is_wide_continuation().hash(&mut hash);
+            }
+        }
+        Some((col, hash.finish()))
     }
 
     /// The text of the row the cursor is on, right-trimmed. Policy input only:

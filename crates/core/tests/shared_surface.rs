@@ -45,7 +45,7 @@ fn physical_input_is_not_forgotten_by_sharing_transition() {
     assert!(matches!(h.session.set_shared_with_agents(true,vec![1]),Err(SessionError::InputPending)));
     assert!(h.session.is_private());assert_eq!(h.session.surface_generation(),generation);
     assert_eq!(h.audit_events().len(),audit_len);assert_eq!(h.pty_str(),"unfinished");
-    h.session.human_input(b"\x15");
+    h.session.human_input(b"\x03");
     h.session.set_shared_with_agents(true,vec![1]).unwrap();present(&mut h.session,vec!["$".into()]);
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1,"typed by agent").unwrap();
@@ -56,7 +56,7 @@ fn physical_input_is_not_forgotten_by_sharing_transition() {
     assert!(h.pty_str().ends_with("typed by agent"), "revocation leaves physical input with its owner");
     assert!(matches!(h.session.set_shared_with_agents(true,vec![1]),Err(SessionError::InputPending)));
     assert!(h.session.is_private());
-    h.session.human_input(b"\x15");
+    h.session.human_input(b"\x03");
     assert!(!h.session.status().input_pending);
     h.session.set_shared_with_agents(true,vec![1]).unwrap();
     h.session.set_shared(false).unwrap();

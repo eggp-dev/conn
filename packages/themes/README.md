@@ -5,5 +5,5 @@ foreground, cursor, selection and the 16 ANSI colors). The native extension regi
 with `include_str!`, and the Svelte UI imports the same file, so the two can no longer drift.
 
 Interface colors that are not part of a terminal palette (surfaces, muted text, status colors) stay
-in `frontends/tauri/src/lib/themes.ts`: themes installed by users supply a palette only, and Conn
+in `packages/ui/src/lib/themes.ts`: themes installed by users supply a palette only, and Conn
 keeps control of the colors that carry approval and warning meaning.

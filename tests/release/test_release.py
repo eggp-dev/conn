@@ -1,5 +1,7 @@
 """Release contract tests; no network or platform toolchain required."""
 import importlib.util
+import io
+import hashlib
 import base64
 import json
 import os
@@ -20,6 +22,7 @@ spec.loader.exec_module(release)
 
 VERSION_FILES = [
     "Cargo.toml", "Cargo.lock", "package-lock.json", "frontends/tauri/package.json",
+    "frontends/web/package.json", "packages/ui/package.json",
     "frontends/tauri/src-tauri/tauri.conf.json",
     "plugin/.claude-plugin/plugin.json", "plugin/.codex-plugin/plugin.json",
     ".claude-plugin/marketplace.json",
@@ -118,7 +121,44 @@ class ReleaseTests(unittest.TestCase):
                 report["updater"] = {"archive": name, "sha256": release.sha256(self.out / name), "containedAppVerified": True}
                 path.write_text(json.dumps(report))
             (self.out / (name + ".sig")).write_text(signature)
+        self.web_archive()
         release.finalize(self.out, self.tag, self.sha, self.root)
+
+    def web_archive(self, dirty=False, bad_hash=False):
+        data = {"conn": b"cli", "conn-web": b"server", "README.md": b"readme", "LICENSE": b"MIT", "ui/index.html": b"<html></html>", "ui/conn-icon.svg": b"<svg></svg>", "ui/assets/app.js": b"code"}
+        data["manifest.json"] = json.dumps({"version":self.version, "profile":"release", "sourceDirty":dirty, "platform":"linux", "architecture":"x64", "sourceCommit":self.sha}).encode()
+        data["SHA256SUMS"] = "".join(f"{hashlib.sha256(value).hexdigest()}  {name}\n" for name,value in data.items()).encode()
+        if bad_hash: data["conn-web"] = b"changed server"
+        with tarfile.open(self.out / release.web_asset(self.version), "w:gz") as archive:
+            for name, value in data.items():
+                info=tarfile.TarInfo(f"conn-web-{self.version}-linux-x64/{name}")
+                info.size=len(value);info.mode=0o755 if name in ("conn","conn-web") else 0o644
+                archive.addfile(info,io.BytesIO(value))
+
+    def test_web_archive_requires_clean_matching_sources_and_complete_checksums(self):
+        self.complete_assets()
+        self.web_archive(dirty=True)
+        with self.assertRaisesRegex(release.ReleaseError, "build identity"):
+            release.finalize(self.out, self.tag, self.sha, self.root)
+        self.web_archive(bad_hash=True)
+        with self.assertRaisesRegex(release.ReleaseError, "checksum mismatch"):
+            release.finalize(self.out, self.tag, self.sha, self.root)
+        self.web_archive()
+        with self.assertRaisesRegex(release.ReleaseError, "build identity"):
+            release.validate_web_archive(self.out / release.web_asset(self.version), self.version, "b"*40)
+
+    def test_web_archive_rejects_escape_paths_and_links(self):
+        self.out.mkdir(parents=True, exist_ok=True)
+        for name, kind in [("../outside", tarfile.REGTYPE), ("ui/assets/link", tarfile.SYMTYPE)]:
+            with self.subTest(name=name):
+                path = self.out / release.web_asset(self.version)
+                with tarfile.open(path, "w:gz") as archive:
+                    member = tarfile.TarInfo(f"conn-web-{self.version}-linux-x64/{name}")
+                    member.type = kind
+                    member.linkname = "/outside" if kind == tarfile.SYMTYPE else ""
+                    archive.addfile(member)
+                with self.assertRaises(release.ReleaseError):
+                    release.validate_web_archive(path, self.version, self.sha)
 
     def test_updater_manifest_is_complete_and_tied_to_public_assets(self):
         self.complete_assets()
@@ -169,6 +209,18 @@ class ReleaseTests(unittest.TestCase):
                 with self.assertRaises(release.ReleaseError):
                     release.check(self.root, self.tag)
                 path.write_text(original, encoding="utf-8")
+
+    def test_shared_ui_and_each_adapter_lock_version_are_checked_independently(self):
+        path = self.root / "package-lock.json"
+        original = path.read_text(encoding="utf-8")
+        for name in ("frontends/tauri", "frontends/web", "packages/ui"):
+            with self.subTest(name=name):
+                lock = json.loads(original)
+                lock["packages"][name]["version"] = "99.0.0"
+                path.write_text(json.dumps(lock), encoding="utf-8")
+                with self.assertRaisesRegex(release.ReleaseError, f"package-lock.json: {name}"):
+                    release.check(self.root, self.tag)
+        path.write_text(original, encoding="utf-8")
 
     def tree(self):
         return {path.relative_to(self.root).as_posix(): path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
@@ -332,7 +384,7 @@ class ReleaseTests(unittest.TestCase):
     def test_finalize_requires_exact_matrix_and_checksums_every_asset(self):
         self.complete_assets()
         manifest = (self.out / "SHA256SUMS").read_text()
-        self.assertEqual(len(manifest.splitlines()), 13)
+        self.assertEqual(len(manifest.splitlines()), 14)
         for line in manifest.splitlines():
             digest, filename = line.split("  ")
             self.assertEqual(digest, release.sha256(self.out / filename))
@@ -435,7 +487,7 @@ class ReleaseTests(unittest.TestCase):
         expected = {str((self.out / name).resolve()) for name in release.release_names(self.version)}
         expected.add(str((self.out / "SHA256SUMS").resolve()))
         self.assertEqual(set(upload[upload.index("--clobber") + 1:]), expected)
-        self.assertEqual(len(expected), 14)
+        self.assertEqual(len(expected), 15)
 
     @unittest.skipUnless(os.name == "posix", "POSIX directory symlinks unavailable")
     def test_draft_uploads_resolved_paths_through_a_tempdir_symlink(self):

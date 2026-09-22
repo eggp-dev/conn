@@ -36,7 +36,8 @@ fn cancelled_grace_retains_tracking_and_cannot_hide_pending_input() {
     let KeyResult::Scheduled { exec_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
     h.session.cancel_exec(&exec_id).unwrap();
     assert!(matches!(h.session.set_mode(AgentMode::Copilot), Err(SessionError::InputPending)));
-    h.session.human_input(b"\x15");
+    // Explicit cancel; a Ctrl-U keystroke alone cannot prove line erasure.
+    h.session.human_input(b"\x03");
     h.session.set_mode(AgentMode::Copilot).unwrap();
 }
 
@@ -256,4 +257,39 @@ fn human_input_denies_a_pending_approval_instead_of_editing_its_command() {
     // Approving late can no longer submit a line that was never reviewed.
     assert!(h.session.resolve_approval(&approval_id, Decision::Grant, "human").is_err());
     assert_eq!(h.pty_str(), "sudo ls\x15x", "nothing is submitted by a late approval");
+}
+
+#[test]
+fn review_choices_are_part_of_the_request_and_revalidated_at_decision() {
+    let mut h = Harness::new(); h.agent(1, "agent");
+    h.session.agent_request_control(1).unwrap();
+    h.session.agent_type(1, "rm synthetic.txt").unwrap();
+    let KeyResult::Pending { approval_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
+    let before = serde_json::to_value(&h.session.status().pending[0]).unwrap();
+    assert_eq!(before["review"]["reason"], "command_policy");
+    assert_eq!(before["review"]["allowSession"], true);
+    let mut profile = Profile::local("other".into(), "pwsh".into()); profile.shell = ShellKind::PowerShell;
+    h.session.set_execution_profile(profile);
+    let after = serde_json::to_value(&h.session.status().pending[0]).unwrap();
+    assert_eq!(before, after, "a later status cannot change the choices on an existing request");
+    assert!(h.session.resolve_approval(&approval_id, Decision::AllowSession, "test").is_err());
+    assert!(h.session.resolve_approval(&approval_id, Decision::Grant, "test").is_err());
+    assert_eq!(h.session.check_approval(&approval_id).unwrap().state, ApprovalState::Pending);
+    h.session.resolve_approval(&approval_id, Decision::Deny, "test").unwrap();
+}
+
+#[test]
+fn uncertain_shell_preserves_delete_risk_and_disallows_broad_grant() {
+    let mut h = Harness::new(); h.agent(1, "agent");
+    let mut profile = Profile::local("uncertain".into(), "bash".into()); profile.backend = BackendKind::Docker;
+    h.session.set_execution_profile(profile);
+    h.session.agent_request_control(1).unwrap();
+    h.session.agent_type(1, "rm synthetic.txt").unwrap();
+    let KeyResult::Pending { approval_id, label, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
+    assert_eq!(label, "delete files");
+    let before = serde_json::to_value(&h.session.status().pending[0]).unwrap();
+    assert_eq!(before["review"]["reason"], "unverified_shell");
+    assert_eq!(before["review"]["allowSession"], false);
+    h.session.set_execution_profile(Profile::local("local".into(), "bash".into()));
+    assert!(h.session.resolve_approval(&approval_id, Decision::AllowSession, "test").is_err(), "later context cannot widen a request's choices");
 }

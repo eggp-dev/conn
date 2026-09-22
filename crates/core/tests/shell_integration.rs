@@ -175,6 +175,7 @@ fn existing_prompt_command_and_exit_status_are_preserved() {
     h.run("false", 1);
     assert_eq!(h.ends()[0].fields["exitCode"], 1);
     h.until(|| String::from_utf8_lossy(&h.output.lock().unwrap()).contains("USER_PROMPT_STATUS=1"));
+    h.until(|| h.engine.session().lock().completion_prompt_ready());
     h.run("true", 2);
     assert_eq!(h.ends()[1].fields["exitCode"], 0);
 }
@@ -207,6 +208,7 @@ fn ignored_history_is_not_reconstructed_from_typed_input() {
     h.until(|| {
         String::from_utf8_lossy(&h.output.lock().unwrap()).contains("INTENTIONALLY_OMITTED")
     });
+    h.until(|| h.engine.session().lock().completion_prompt_ready());
     h.run("true", 2);
     assert!(!format!("{:?}", h.starts()).contains("INTENTIONALLY_OMITTED"));
 }
@@ -235,6 +237,60 @@ fn agent_submission_links_to_shell_execution_without_human_attribution() {
         submitted.fields["submissionId"],
         starts[0].fields["submissionId"]
     );
+}
+
+// macOS PTYs have small buffers. Readline can block echoing a long input while
+// the parent is still writing it; the output reader must not wait for that
+// writer's session lock before draining more bytes from the PTY.
+fn long_input_does_not_block_output(agent: bool) {
+    use conn_core::session::ConnKind;
+    let h = Shell::new("/bin/bash", false);
+    let payload = "abcdef".repeat(500);
+    let command = format!("printf 'LONG_OUTPUT<%s>\\n' '{payload}'");
+    let session = h.engine.session();
+    if agent {
+        let mut s = session.lock();
+        s.register_conn(7, ConnKind::Agent, "long-input", Box::new(|_| {}));
+        s.agent_request_control(7).unwrap();
+    }
+    let (done, completion) = std::sync::mpsc::channel();
+    let writer = std::thread::spawn(move || {
+        let mut s = session.lock();
+        if agent { s.agent_type(7, &command).unwrap(); }
+        else { s.human_input(command.as_bytes()); }
+        drop(s);
+        let _ = done.send(());
+    });
+    let completed = completion.recv_timeout(Duration::from_secs(5)).is_ok();
+    if !completed {
+        // Kill independently of the session lock so a regression fails rather
+        // than leaving the test runner stuck in the same deadlock.
+        h.engine.terminate().unwrap();
+    }
+    assert!(completed, "long PTY input blocked the output reader");
+    writer.join().unwrap();
+    if agent { h.engine.session().lock().agent_send_key(7, "ENTER").unwrap(); }
+    else { h.engine.write_input(b"\r"); }
+    let expected = format!("LONG_OUTPUT<{payload}>\r\n");
+    h.until(|| String::from_utf8_lossy(&h.output.lock().unwrap()).contains(&expected));
+    if agent { h.engine.session().lock().agent_release_control(7).unwrap(); }
+    h.until(|| h.engine.session().lock().completion_prompt_ready());
+    h.send("printf 'NEXT_OUTPUT_OK\\n'");
+    // Bash/readline may emit bracketed-paste mode sequences between the echoed
+    // newline and command output. Check the rendered row, not adjacent raw bytes;
+    // the echoed printf command cannot satisfy this exact-line assertion.
+    h.until(|| h.engine.session().lock().screen().rows().iter()
+        .any(|row| row.trim_end() == "NEXT_OUTPUT_OK"));
+}
+
+#[test]
+fn long_agent_input_drains_pty_echo_without_deadlock() {
+    long_input_does_not_block_output(true);
+}
+
+#[test]
+fn long_human_paste_drains_pty_echo_without_deadlock() {
+    long_input_does_not_block_output(false);
 }
 
 #[test]
@@ -362,5 +418,71 @@ fn delayed_private_hook_payloads_are_discarded_after_sharing() {
     // A newly confirmed prompt followed by new shared input resumes recording.
     h.run("true",1);
     assert_eq!(h.starts()[0].fields["cmd"],"true");
+    h.engine.terminate().unwrap();
+}
+
+
+#[test]
+fn idle_cancel_empty_enter_and_ignored_history_restore_prompt_policy() {
+    use conn_core::policy::Decision;
+    let h = Shell::new("/bin/bash", false);
+    let session = h.engine.session();
+    for input in [b"\x03".as_slice(), b"\r", b"\r\r"] {
+        assert!(session.lock().completion_prompt_ready());
+        h.engine.write_input(input);
+        h.until(|| session.lock().completion_prompt_ready());
+        assert!(!session.lock().review_required());
+        assert!(matches!(session.lock().analyse_line("python3 --version").decision, Decision::Allow));
+    }
+    {
+        let mut s = session.lock();
+        s.register_conn(7, conn_core::session::ConnKind::Agent, "test", Box::new(|_| {}));
+        s.agent_request_control(7).unwrap();
+        s.agent_interrupt(7).unwrap();
+        s.agent_release_control(7).unwrap();
+    }
+    h.until(|| session.lock().completion_prompt_ready());
+    h.send("HISTCONTROL=ignorespace");
+    h.until(|| session.lock().completion_prompt_ready());
+    let records = h.starts().len();
+    h.send(" sleep 0.25");
+    h.until(|| session.lock().review_required());
+    h.until(|| session.lock().completion_prompt_ready());
+    assert_eq!(h.starts().len(), records, "history-excluded text is not recorded");
+    assert!(matches!(session.lock().analyse_line("pwd; python3 --version").decision, Decision::Allow));
+    h.engine.terminate().unwrap();
+}
+
+#[test]
+fn actual_readline_empty_edits_and_midline_kill_preserve_command_boundary() {
+    let h = Shell::new("/bin/bash", false);
+    let session = h.engine.session();
+    h.until(|| session.lock().screen().cursor_line().ends_with("conn-test$"));
+    for edit in [b"\x1b[D".as_slice(), b"\x0c", b"\x7f"] {
+        h.engine.write_input(edit);
+        assert!(!session.lock().status().input_pending);
+    }
+    for (text, erase) in [("abc", b"\x7f\x7f\x7f".as_slice()), ("oneword", b"\x17"), ("word", b"\x15"), ("word", b"\x01\x1b[3~\x1b[3~\x1b[3~\x1b[3~")] {
+        h.engine.write_input(text.as_bytes());
+        h.until(|| session.lock().screen().cursor_line().ends_with(text));
+        assert!(session.lock().status().input_pending);
+        h.engine.write_input(erase);
+        h.until(|| !session.lock().status().input_pending);
+    }
+    h.engine.write_input(b"printf HUMAN_SUFFIX");
+    h.until(|| session.lock().screen().cursor_line().contains("HUMAN_SUFFIX"));
+    h.engine.write_input(b"\x01\x15");
+    h.until(|| session.lock().screen().cursor().col == 11);
+    {
+        let mut s = session.lock();
+        s.register_conn(1, conn_core::session::ConnKind::Agent, "agent", Box::new(common::VecSink(Default::default())));
+        s.agent_request_control(1).unwrap();
+        assert!(matches!(s.agent_type(1, "printf AGENT"), Err(conn_core::session::SessionError::InputPending)));
+        assert!(matches!(s.agent_send_key(1, "ENTER"), Err(conn_core::session::SessionError::InputPending)));
+    }
+    h.engine.write_input(b"\x0b");
+    h.until(|| !session.lock().status().input_pending);
+    h.run("printf BOUNDARY_OK", 1);
+    assert!(!format!("{:?}", h.starts()).contains("HUMAN_SUFFIX"));
     h.engine.terminate().unwrap();
 }

@@ -2,7 +2,7 @@
 
 [English](platform-support.md) · 한국어 · [설치](getting-started.ko.md) · [릴리스](releasing.ko.md)
 
-Conn은 MIT 라이선스 소스와 네이티브 바이너리를 [GitHub Releases](https://github.com/eggp-dev/conn/releases/tag/v0.8.6)로 제공합니다. 모든 데스크톱 패키지는 같은 Rust 엔진과 Svelte UI를 사용하며 브라우저 하네스는 개발용 어댑터입니다.
+Conn은 MIT 라이선스 소스와 네이티브 바이너리를 [GitHub Releases](https://github.com/eggp-dev/conn/releases/tag/v0.8.7)로 제공합니다. 모든 데스크톱 패키지는 같은 Rust 엔진과 Svelte UI를 사용하며 브라우저 하네스는 개발용 어댑터입니다.
 
 ## 다음 프리뷰 릴리스 대상
 
@@ -59,3 +59,7 @@ SSH·Docker·WSL·Git Bash는 프로필 옵션입니다. 실제 시험한 외부
 워크플로는 바이너리·설치 파일 7개, Mac 업데이트 아카이브, 업데이트 서명 3개, `latest.json`, Mac 서명 보고서, `SHA256SUMS`를 담은 **Draft prerelease**를 준비하며 자동 공개하지 않습니다. Mac 서명 근거가 없거나 검사에 실패하면 초안 업로드를 막습니다. Windows 무서명은 명시적인 프리뷰 방침입니다.
 
 관리자는 공개 전에 [릴리스 검사](releasing.ko.md)를 검토하고 실제 실행 결과와 한계를 기록하며 다운로드 링크가 파일과 일치하는지 확인합니다. v0.6.0부터 macOS·Windows·AppImage는 서명된 앱 내 업데이트를 지원합니다. deb는 수동 또는 패키지 관리자 업데이트를 사용합니다. 기존 버전은 한 번 직접 업그레이드해야 합니다. [업데이트 안내](getting-started.ko.md#업데이트-v060-이상)를 참고하세요.
+
+### Linux WebKit 시작 호환 설정
+
+환경 변수가 없으면 데스크톱 실행 파일이 GTK 초기화 전에 `WEBKIT_DISABLE_DMABUF_RENDERER=1`을 설정합니다. 확인된 NVIDIA 환경의 GBM/EGL 시작 중단을 피하기 위한 설정이며, 사용자가 지정한 값은 유지합니다. 정상 동작하는 드라이버에서 DMA-BUF를 다시 사용하려면 `WEBKIT_DISABLE_DMABUF_RENDERER=0`을 명시할 수 있습니다. 렌더링 전달 방식의 변경이며 WebKit 샌드박스를 해제하지 않습니다. 다른 드라이버·컴포지터의 네이티브 검증까지 보장하지 않습니다.

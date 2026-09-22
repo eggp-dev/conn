@@ -37,16 +37,14 @@ npm run tauri dev
 
 ### 공유 UI를 브라우저에서 실행
 
-`frontends/tauri`에서:
+저장소 루트에서:
 
 ```sh
 npm ci
-npm run test:browser
+npm run dev:web
 ```
 
-`http://127.0.0.1:1421/`을 엽니다. 로컬 WebSocket 어댑터를 통해 **같은 App과 Rust 프런트엔드 하네스**를 사용합니다. 별도 웹 제품이나 가짜 셸이 아니라 개발 보조 도구입니다. 명령은 로컬 사용자 권한으로 실행됩니다. 실행 스크립트가 별도 설정 폴더와 에이전트 연결 주소를 출력합니다.
-
-브라우저 새로고침·연결 종료는 실행 중인 세션을 끝냅니다. 버려도 되는 파일로 시험하고 필요한 때만 새로고침하세요. 수명과 연결 주소에 대한 내용은 [브라우저 테스트](docs/browser-testing.md)를 참고하세요.
+`http://127.0.0.1:1429`에서 서버 연결 파일의 코드를 입력합니다. 웹과 네이티브는 같은 `@conn/ui`와 Rust `AppRuntime`을 사용합니다. 새로고침해도 서버가 실행 중이면 기존 셸을 유지합니다. 개발 실행·운영 패키지·실제 MCP 검사는 [웹 호스트와 브라우저 검증](docs/browser-testing.ko.md)을 참고하세요.
 
 ## 변경할 위치 찾기
 
@@ -55,8 +53,9 @@ npm run test:browser
 | `crates/core` | PTY, 세션 제어, 정책, 감사, IPC, 셸·백엔드 프로필 |
 | `crates/cli` | MCP 어댑터, 에이전트 명령, 로컬 프로필·로그 도구 |
 | `crates/frontend` | 공유 네이티브 프런트엔드 하네스와 명령 처리 |
-| `crates/browser-harness` | 공유 하네스에 연결하는 로컬 브라우저 테스트 전송 계층 |
-| `frontends/tauri/src` | 공유 Svelte UI, 터미널 렌더러, 타임라인, 설정, i18n |
+| `crates/web` | 실제 AppRuntime을 운영하는 로컬 웹 서버 |
+| `packages/ui` | 공통 Svelte UI, 앱별 룬 상태, 터미널 렌더러, 협업 액션, i18n |
+| `frontends/tauri/src`, `frontends/web/src` | 네이티브·웹 진입점과 호스트 어댑터 |
 | `frontends/tauri/src-tauri` | Tauri 어댑터, 네이티브 설정, 패키징 |
 | `plugin` | 에이전트 작업 절차와 MCP 서버 정의 |
 | `packages` | 여러 도구가 함께 읽는 데이터: `brand`(이름·저장소·사이트 주소), `themes`(내장 터미널 테마) |
@@ -92,7 +91,7 @@ cargo test --locked
 
 ```sh
 npm ci
-npm test
+npm run test:ui --prefix ../..
 npm run build
 ```
 

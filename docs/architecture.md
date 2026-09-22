@@ -1,10 +1,13 @@
 # Architecture
 
-**Shared session screen · v0.8.0 preview.** [Product contract](PRD.md) · [한국어](architecture.ko.md)
+**Shared session screen · unreleased refactor.** [Product contract](PRD.md) · [한국어](architecture.ko.md)
+
+The common UI and local web host are implemented as workspace packages.
+See the [boundary design](web-harness-design.md) and [operation/validation guide](browser-testing.md).
 
 ```mermaid
 flowchart LR
-  H[Human] --> U[Native owner UI]
+  H[Human] --> U[Common ConnApp UI]
   U -->|input and decisions| S[Session authority and policy]
   S --> P[PTY and child]
   P -->|sequenced output| U
@@ -21,7 +24,7 @@ flowchart LR
   mode, policy, proposals, grace and sharing transitions under one lock.
 - The native owner supplies a sequenced output callback before PTY reading begins.
   Output buffering preserves startup rendering; callbacks never relock Session.
-- Tauri and the token/Origin-protected browser harness use `conn-frontend::Harness`.
+- Tauri and the cookie/Origin-protected web host use `conn-frontend::AppRuntime`.
   Each command carries the adapter-established owning window, never a public
   caller's claimed window identity.
 - The Svelte/xterm renderer displays output; it does not authorize observation.
@@ -78,3 +81,11 @@ Themes are bounded data; arbitrary code and global event buses are not extension
 contracts. The selected theme and installed themes persist in `extensions.json`.
 
 See [extension contract](extensions.md), [protocol](protocol.md) and [trust model](security.md).
+
+## Shared UI and owner attachment
+
+`packages/ui` owns app-scoped Svelte runes, actions, subscriptions, timers and the terminal renderer. Each mounted ConnApp receives host ports; native and web entry points have no separate decision UI. `crates/frontend::AppRuntime` owns command dispatch, per-session input/resize order and renderer attachment epochs. Generated TypeScript DTOs track the Rust owner wire contract.
+
+The web server owns process lifetime independently of a WebSocket. Reload attaches a new renderer to the existing shells using an owner-only checkpoint, followed by sequenced deltas. One active human view supplies input and dimensions per shell set; explicit takeover fences the old view. Old input is never automatically replayed. Output gaps stop input until resynchronization. Agent snapshots remain the authorized current grid; renderer checkpoints are not agent APIs.
+
+The current package is loopback-only. Remote deployment/authentication remains future work; the package does not mirror a separately running desktop instance. Native attention and platform updates remain host capabilities.

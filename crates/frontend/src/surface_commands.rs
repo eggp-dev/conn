@@ -65,7 +65,7 @@ pub(crate) fn dispatch(
         } else {
             None
         };
-        state.automation.transition_session(&id, || {
+        let status = state.automation.transition_session(&id, || {
             let mut s = session.lock();
             if expected.is_some_and(|revision| revision != s.participation_generation()) {
                 return Err("sharing_changed".into());
@@ -85,6 +85,10 @@ pub(crate) fn dispatch(
             s.set_shared_with_agents(shared, selected)
                 .map_err(|e| conn_core::ipc::RpcError::from(e).code)?;
             Ok(json!(s.status()))
-        })
+        })?;
+        // Resolve fulfilled preparation requests after releasing the session
+        // lock, so a newly shared shell does not leave a second stale card.
+        state.hub.activity_snapshot();
+        Ok(status)
     })())
 }

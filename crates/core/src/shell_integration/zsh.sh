@@ -11,6 +11,7 @@ __conn_precmd() {
     local result=$?
     if (( __conn_active )); then __conn_emit end "$__conn_active" "$result"; fi
     __conn_active=0
+    __conn_emit prompt '' ''
     return 0
 }
 preexec_functions=(__conn_preexec ${preexec_functions:#__conn_preexec})

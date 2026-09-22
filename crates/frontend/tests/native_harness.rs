@@ -1,5 +1,5 @@
 #![cfg(unix)]
-use conn_frontend::Harness;
+use conn_frontend::AppRuntime;
 use serde_json::json;
 use std::{sync::Arc, time::{Duration, Instant}};
 
@@ -29,7 +29,7 @@ fn invalid_policy_prevents_shell_start_and_can_be_corrected() {
     let path = dir.path().join("policy.yaml");
     let malformed = "confirm: [\n";
     std::fs::write(&path, malformed).unwrap();
-    let h = Harness::new(dir.path().into(), dir.path().join("conn.sock"), Arc::new(|_, _| {}));
+    let h = AppRuntime::new(dir.path().into(), dir.path().join("conn.sock"), Arc::new(|_, _| {}));
     let error = h.invoke("start", json!({"rows":24,"cols":80})).unwrap_err();
     assert!(error.contains("Could not load policy") && error.contains("policy.yaml"), "{error}");
     let events = conn_core::audit::read_events(&dir.path().join("audit.jsonl")).unwrap();
@@ -49,7 +49,7 @@ fn invalid_policy_reload_retains_last_good_rules_and_blocks_new_tabs() {
     configure_profile(dir.path());
     let path = dir.path().join("policy.yaml");
     std::fs::write(&path, "default: deny\n").unwrap();
-    let h = Harness::new(dir.path().into(), dir.path().join("conn.sock"), Arc::new(|_, _| {}));
+    let h = AppRuntime::new(dir.path().into(), dir.path().join("conn.sock"), Arc::new(|_, _| {}));
     let started = h.invoke("start", json!({"rows":24,"cols":80})).unwrap();
     let session = &started["session"];
     // Settings validate before overwriting a good file.
@@ -80,7 +80,7 @@ fn shared_commands_execute_native_shell_and_preserve_tab_defaults() {
     std::fs::write(dir.path().join("profiles.json"), serde_json::to_vec(&conn_core::profiles::Profiles {
         version: 1, revision: 0, default_profile: "test".into(), profiles: vec![profile],
     }).unwrap()).unwrap();
-    let h = Harness::new(dir.path().into(), dir.path().join("conn.sock"), Arc::new(|_, _| {}));
+    let h = AppRuntime::new(dir.path().into(), dir.path().join("conn.sock"), Arc::new(|_, _| {}));
     h.invoke("set_defaults", json!({"defaults":{"gate":true}})).unwrap();
     let started = h.invoke("start", json!({"rows":24,"cols":80})).unwrap();
     let id = started["session"].as_str().unwrap();
@@ -106,7 +106,7 @@ fn native_windows_keep_tabs_output_and_close_lifecycle_separate() {
     configure_profile(dir.path());
     let events = Arc::new(std::sync::Mutex::new(Vec::new()));
     let recorded = events.clone();
-    let h = Harness::new(dir.path().into(), dir.path().join("conn.sock"), Arc::new(move |name, value| {
+    let h = AppRuntime::new(dir.path().into(), dir.path().join("conn.sock"), Arc::new(move |name, value| {
         recorded.lock().unwrap().push((name.to_owned(), value));
     }));
     let main = h.invoke("start", json!({"rows":24,"cols":80})).unwrap();
@@ -149,9 +149,9 @@ fn private_output_and_terminal_responses_are_confined_to_the_owning_native_windo
     configure_profile(dir.path());
     let events = Arc::new(std::sync::Mutex::new(Vec::new()));
     let recorded = events.clone();
-    let target: Arc<std::sync::Mutex<std::sync::Weak<Harness>>> = Default::default();
+    let target: Arc<std::sync::Mutex<std::sync::Weak<AppRuntime>>> = Default::default();
     let receiver = target.clone();
-    let h = Arc::new(Harness::new(dir.path().into(), dir.path().join("conn.sock"), Arc::new(move |name, value| {
+    let h = Arc::new(AppRuntime::new(dir.path().into(), dir.path().join("conn.sock"), Arc::new(move |name, value| {
         recorded.lock().unwrap().push((name.to_owned(), value.clone()));
         if name == "ss:tab_opened" && value["externalStarting"] == true {
             if let Some(h) = receiver.lock().unwrap().upgrade() {

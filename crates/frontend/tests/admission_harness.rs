@@ -1,17 +1,17 @@
 #![cfg(unix)]
 //! The desktop app asks before a new agent connection joins, and remembers the owner's setting.
 use conn_core::ipc::{Client, ClientError};
-use conn_frontend::Harness;
+use conn_frontend::AppRuntime;
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-fn harness(dir: &std::path::Path, events: Arc<Mutex<Vec<Value>>>) -> Harness {
+fn harness(dir: &std::path::Path, events: Arc<Mutex<Vec<Value>>>) -> AppRuntime {
     let mut profile = conn_core::backend::Profile::local("test".into(), "/bin/bash".into());
     profile.args = vec!["--noprofile".into(), "--norc".into()];
     profile.cwd = Some(dir.to_string_lossy().into());
     std::fs::write(dir.join("profiles.json"), serde_json::to_vec(&conn_core::profiles::Profiles { version: 1, revision: 0, default_profile: "test".into(), profiles: vec![profile] }).unwrap()).unwrap();
-    let h = Harness::new(dir.into(), dir.join("conn.sock"), Arc::new(move |name, v| { if name == "ss:admission" { events.lock().unwrap().push(v); } }));
+    let h = AppRuntime::new(dir.into(), dir.join("conn.sock"), Arc::new(move |name, v| { if name == "ss:admission" { events.lock().unwrap().push(v); } }));
     h.invoke("start", json!({"rows":24,"cols":80})).unwrap();
     h
 }

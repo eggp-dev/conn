@@ -32,6 +32,12 @@ pub struct Attrs {
 }
 
 impl Attrs {
+    pub fn dim(&self) -> bool { self.mode & 0x20 != 0 }
+    pub fn set_dim(&mut self, value: bool) { if value { self.mode |= 0x20; } else { self.mode &= !0x20; } }
+    pub fn blink(&self) -> bool { self.mode & 0x40 != 0 }
+    pub fn set_blink(&mut self, value: bool) { if value { self.mode |= 0x40; } else { self.mode &= !0x40; } }
+    pub fn strike(&self) -> bool { self.mode & 0x80 != 0 }
+    pub fn set_strike(&mut self, value: bool) { if value { self.mode |= 0x80; } else { self.mode &= !0x80; } }
     pub fn concealed(&self) -> bool { self.mode & 0x10 != 0 }
     pub fn set_concealed(&mut self, value: bool) { if value { self.mode |= 0x10; } else { self.mode &= !0x10; } }
     pub fn bold(&self) -> bool {
@@ -126,6 +132,13 @@ impl Attrs {
         };
 
         attrs.write_buf(contents);
+        // 22 resets both bold and dim; reapply bold when only dim is removed.
+        if self.dim() != other.dim() {
+            contents.extend_from_slice(if self.dim() { b"\x1b[2m" } else { b"\x1b[22m" });
+            if !self.dim() && self.bold() { contents.extend_from_slice(b"\x1b[1m"); }
+        } else if self.dim() && self.bold() != other.bold() { contents.extend_from_slice(b"\x1b[2m"); }
+        if self.blink() != other.blink() { contents.extend_from_slice(if self.blink() { b"\x1b[5m" } else { b"\x1b[25m" }); }
+        if self.strike() != other.strike() { contents.extend_from_slice(if self.strike() { b"\x1b[9m" } else { b"\x1b[29m" }); }
         if self.concealed() != other.concealed() { contents.extend_from_slice(if self.concealed() { b"\x1b[8m" } else { b"\x1b[28m" }); }
     }
 }

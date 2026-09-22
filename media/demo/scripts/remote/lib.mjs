@@ -10,13 +10,13 @@ export async function until(what, fn, ms = 20000, every = 120) {
   throw new Error("timeout: " + what);
 }
 
-export async function launch({ repo, state, uiPort = 1491, backendPort = 1493, cdpPort = 9347, width = 1920, height = 1080, scale = 1 }) {
+export async function launch({ repo, state, uiPort = 1491, cdpPort = 9347, width = 1920, height = 1080, scale = 1 }) {
   const kids = [];
   const run = (cmd, args, opt = {}) => { const c = spawn(cmd, args, { stdio: "ignore", ...opt }); kids.push(c); return c; };
   await mkdir(state, { recursive: true, mode: 0o700 });
-  run(`${repo}/target/debug/conn-browser-harness`, [state], { env: { ...process.env, CONN_TEST_PORT: String(backendPort), CONN_TEST_ORIGIN: `http://127.0.0.1:${uiPort}` } });
-  run(process.execPath, ["node_modules/vite/bin/vite.js", "--mode", "browser-test", "--host", "127.0.0.1", "--port", String(uiPort), "--strictPort"], { cwd: `${repo}/frontends/tauri`, env: { ...process.env, CONN_TEST_STATE: state } });
+  run(`${repo}/target/debug/conn-web`, ['serve', '--state-dir', state, '--port', String(uiPort), '--ui-dir', `${repo}/frontends/web/dist`, '--setup-home', `${state}/setup-home`]);
   await until("frontend", async () => (await fetch(`http://127.0.0.1:${uiPort}/`)).ok);
+  const connection = JSON.parse(await readFile(`${state}/connection.json`, 'utf8'));
   run("google-chrome", ["--headless=new", "--no-sandbox", "--hide-scrollbars", `--force-device-scale-factor=${scale}`, "--font-render-hinting=none", `--remote-debugging-port=${cdpPort}`, `--user-data-dir=${state}/chrome`, `--window-size=${width},${height}`, "about:blank"]);
   const target = await until("chrome", async () => (await (await fetch(`http://127.0.0.1:${cdpPort}/json`)).json()).find(t => t.type === "page"));
   const ws = new WebSocket(target.webSocketDebuggerUrl);
@@ -34,7 +34,7 @@ export async function launch({ repo, state, uiPort = 1491, backendPort = 1493, c
   await cdp("Runtime.enable"); await cdp("Page.enable");
   await cdp("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: scale, mobile: false });
   const stop = async () => { try { ws.close(); } catch {} for (const k of kids) k.kill("SIGTERM"); await sleep(600); };
-  return { cdp, on, js, errors, stop, url: `http://127.0.0.1:${uiPort}/`, sock: `${state}/conn.sock` };
+  return { cdp, on, js, errors, stop, url: `http://127.0.0.1:${uiPort}/#token=${encodeURIComponent(connection.bootstrapToken)}`, sock: `${state}/conn.sock` };
 }
 
 // The human role: real key and mouse events delivered to the page, never a test-only API.

@@ -1,16 +1,16 @@
 #![cfg(unix)]
-use conn_frontend::Harness;
+use conn_frontend::AppRuntime;
 use serde_json::{json,Value};
 use std::{sync::{Arc,Mutex},time::{Duration,Instant}};
 
-fn setup() -> (tempfile::TempDir,Harness,Arc<Mutex<Vec<Value>>>,String) {
+fn setup() -> (tempfile::TempDir,AppRuntime,Arc<Mutex<Vec<Value>>>,String) {
     let dir=tempfile::tempdir().unwrap();
     let mut profile=conn_core::backend::Profile::local("test".into(),"/bin/bash".into());
     profile.args=vec!["--noprofile".into(),"--norc".into()];
     profile.cwd=Some(dir.path().to_string_lossy().into());
     std::fs::write(dir.path().join("profiles.json"),serde_json::to_vec(&conn_core::profiles::Profiles{version:1,revision:0,default_profile:"test".into(),profiles:vec![profile]}).unwrap()).unwrap();
     let output=Arc::new(Mutex::new(Vec::new()));let capture=output.clone();
-    let h=Harness::new(dir.path().into(),dir.path().join("conn.sock"),Arc::new(move |name,v| {if name=="ss:output" {capture.lock().unwrap().push(v);}}));
+    let h=AppRuntime::new(dir.path().into(),dir.path().join("conn.sock"),Arc::new(move |name,v| {if name=="ss:output" {capture.lock().unwrap().push(v);}}));
     let start=h.invoke("start",json!({"rows":24,"cols":80})).unwrap();
     let id=start["session"].as_str().unwrap().to_string();
     h.invoke("attend",json!({"session":id})).unwrap();
@@ -19,7 +19,7 @@ fn setup() -> (tempfile::TempDir,Harness,Arc<Mutex<Vec<Value>>>,String) {
     while output.lock().unwrap().is_empty() {assert!(Instant::now()<deadline);std::thread::sleep(Duration::from_millis(10));}
     (dir,h,output,id)
 }
-fn frame(h:&Harness,id:&str,revision:u64)->Value {
+fn frame(h:&AppRuntime,id:&str,revision:u64)->Value {
     let status=h.invoke("status",json!({"session":id})).unwrap();
     json!({"surfaceId":"owner-renderer","generation":status["surfaceGeneration"],"revision":revision,"outputSeq":status["outputSeq"],"rows":24,"cols":80,"cursor":null,"screen":["visible synthetic frame"],"alternateScreen":false,"visible":true})
 }

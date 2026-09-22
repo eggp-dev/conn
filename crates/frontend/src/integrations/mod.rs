@@ -1,4 +1,4 @@
-//! Local MCP + skill registration, shared by the native app and browser harness.
+//! Local MCP + skill registration, shared by the native app and web frontend.
 //! Clients own formats and paths; the engine owns preservation and lifecycle.
 mod adapters;
 mod config;

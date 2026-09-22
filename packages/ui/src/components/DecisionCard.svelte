@@ -1,0 +1,30 @@
+<script lang="ts">
+  import { useConnApp } from '../runtime/context';
+  const app = useConnApp();
+  const { t } = app;
+
+  import type { Snippet } from 'svelte';
+  import { decisionReveal } from '../lib/motion';
+  import { agentColor } from '../lib/themes';
+  import { failureKey } from '../lib/collaboration/api';
+  let { placement = "command", agent, label, busy = false, error = null, requestKey, children, actions }: { placement?: "command" | "connection"; agent: string; label: string; busy?: boolean; error?: unknown; requestKey?:string; children?: Snippet; actions: Snippet } = $props();
+</script>
+<div class="decision-card" class:connection={placement === "connection"} data-request-key={requestKey} tabindex="-1" role="alertdialog" aria-label={label} aria-busy={busy} style:--c={agentColor(agent)} transition:decisionReveal>
+  <div class="heading"><strong>{agent}</strong><span class="muted">{label}</span></div>
+  <div class="body">{@render children?.()}</div>
+  <div class="footer">
+    {#if error}<p class="error" role="alert">{t(failureKey(error))}</p>{/if}
+    <div class="acts">{@render actions()}</div>
+  </div>
+</div>
+<style>
+  .decision-card { position:relative; margin:6px 16px; box-sizing:border-box; display:grid; grid-template-rows:auto minmax(0,1fr) auto; max-height:calc(45vh - 12px); gap:8px 16px; min-width:0; padding:14px 16px; border-radius:12px; background:var(--surface); border:1px solid color-mix(in srgb,var(--c) 50%,var(--line)); box-shadow:var(--shadow); font-size:13px; }
+  .decision-card.connection { max-height:calc(35vh - 12px); border-color:var(--line); }
+  .connection .heading { font-size:14px; }
+
+  .body { display:grid; gap:8px; min-height:0; min-width:0; overflow:auto; }
+  .footer { display:grid; gap:8px; min-width:0; }
+  .heading { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; min-width:0; } strong { color:var(--c); overflow-wrap:anywhere; }
+  .acts { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:6px; } .acts :global(.btn) { padding:7px 10px; white-space:nowrap; }
+  .error { color:var(--danger); margin:0; } .decision-card :global(.reason) { margin:0; min-width:0; line-height:1.55; white-space:pre-wrap; overflow-wrap:anywhere; max-height:30vh; overflow-y:auto; }
+</style>

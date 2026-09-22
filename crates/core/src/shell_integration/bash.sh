@@ -39,18 +39,20 @@ __conn_precmd() {
     __conn_active=0
     __conn_history
     __conn_hist=$__conn_number
+    __conn_emit prompt '' ''
     return "$result"
 }
 __conn_arm() { __conn_at_prompt=1; }
 __conn_debug() {
     [[ $__conn_at_prompt == 1 && $BASH_COMMAND != __conn_precmd* ]] || return 0
     # Never infer a command from BASH_COMMAND, screen contents, or typed bytes.
-    # If history did not retain a fresh complete entry, skip it.
+    # If history did not retain a fresh complete entry, leave its text empty.
     __conn_history
-    if (( __conn_number > __conn_hist )) && [[ -n $__conn_command ]]; then
-        __conn_at_prompt=0
-        __conn_emit start "$__conn_command" '' && __conn_active=$__conn_seq
-    fi
+    # Lifecycle does not depend on history retention. A hidden/ignored history
+    # entry has no command text, but still brackets the foreground program.
+    __conn_at_prompt=0
+    if ! (( __conn_number > __conn_hist )); then __conn_command=''; fi
+    __conn_emit start "$__conn_command" '' && __conn_active=$__conn_seq
     return 0
 }
 __conn_history
