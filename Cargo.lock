@@ -705,19 +705,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "conn-browser-harness"
-version = "0.8.6"
-dependencies = [
- "axum",
- "conn-core",
- "conn-frontend",
- "futures-util",
- "serde_json",
- "tokio",
- "uuid",
-]
-
-[[package]]
 name = "conn-core"
 version = "0.8.6"
 dependencies = [
@@ -770,11 +757,34 @@ dependencies = [
  "conn-core",
  "jsonc-parser",
  "parking_lot",
+ "schemars 0.8.22",
  "serde",
  "serde_json",
  "sha2 0.11.0",
  "tempfile",
  "toml_edit 0.25.15+spec-1.1.0",
+ "uuid",
+]
+
+[[package]]
+name = "conn-web"
+version = "0.8.6"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "clap",
+ "conn-core",
+ "conn-frontend",
+ "dirs 5.0.1",
+ "futures-util",
+ "libc",
+ "parking_lot",
+ "percent-encoding",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
  "uuid",
 ]
 

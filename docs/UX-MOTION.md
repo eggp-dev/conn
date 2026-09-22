@@ -28,7 +28,7 @@ Supporting UI makes room for the terminal instead of covering its working area.
 
 ## Implementation / 구현
 
-Shared tokens and surface transition: `frontends/tauri/src/lib/motion.ts`.
+Shared tokens and surface transition: `packages/ui/src/lib/motion.ts`.
 Dock geometry: `App.svelte`. Terminal visual offset: `components/Term.svelte`.
 This is a product motion convention, not a claim that hardware acceleration is enabled on every device.
 

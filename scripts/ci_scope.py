@@ -23,8 +23,9 @@ DOCS_ROOT_FILES = ("LICENSE", "NOTICE")
 # Not part of any build. The always-on job checks the installer (`sh -n`); Dependabot's
 # configuration is read by GitHub, not by a workflow, so it needs no native runner either.
 LIGHT_FILES = ("scripts/install.sh", ".github/dependabot.yml")
-# The Svelte UI. The native shell under src-tauri is excluded below.
-FRONTEND_PREFIX = "frontends/tauri/"
+# Shared Svelte UI, thin native/web adapters and browser integration tests.
+# The native shell under src-tauri is excluded below.
+FRONTEND_PREFIXES = ("packages/ui/", "frontends/tauri/", "frontends/web/", "tests/collaboration/")
 # The npm workspace root: one lockfile for the UI, the site and the films. No Rust reads it.
 FRONTEND_ROOT_FILES = ("package.json", "package-lock.json", ".npmrc")
 NATIVE_SHELL_PREFIX = "frontends/tauri/src-tauri/"
@@ -38,7 +39,7 @@ def classify(path: str) -> str:
         return "platform"
     if path.startswith(DOCS_PREFIXES) or path in DOCS_ROOT_FILES or path in LIGHT_FILES or ("/" not in path and path.endswith(".md")):
         return "docs"
-    if path.startswith(FRONTEND_PREFIX) or path in FRONTEND_ROOT_FILES:
+    if path.startswith(FRONTEND_PREFIXES) or path in FRONTEND_ROOT_FILES:
         return "frontend"
     return "native"
 

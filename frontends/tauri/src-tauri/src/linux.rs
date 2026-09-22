@@ -1,5 +1,5 @@
 //! D-Bus adapter. Sender credentials come from the bus, never request JSON.
-use conn_frontend::{automation::Caller, Harness};
+use conn_frontend::{automation::Caller, AppRuntime};
 use serde_json::Value;
 use std::{
     path::PathBuf,
@@ -12,7 +12,7 @@ use zbus::{fdo, message::Header, Connection};
 static SEQUENCE: AtomicU64 = AtomicU64::new(1);
 struct Adapter {
     app: tauri::AppHandle,
-    harness: Weak<Harness>,
+    harness: Weak<AppRuntime>,
     inflight: Arc<AtomicUsize>,
 }
 struct Permit(Arc<AtomicUsize>);
@@ -125,7 +125,7 @@ impl Adapter {
         .map_err(fdo::Error::Failed)
     }
 }
-pub fn install(app: &tauri::AppHandle, harness: &Arc<Harness>) {
+pub fn install(app: &tauri::AppHandle, harness: &Arc<AppRuntime>) {
     let adapter = Adapter {
         app: app.clone(),
         harness: Arc::downgrade(harness),

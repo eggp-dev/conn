@@ -404,6 +404,10 @@ pub struct OutputFrame {
     pub generation: u64,
     pub size: crate::screen::Size,
 }
+/// Owner-only checkpoint captured under the same Session lock as output frames.
+/// Contains modeled terminal output, never human input or an agent projection.
+pub type RendererCheckpoint = OutputFrame;
+
 pub type OutputFrameSink = Box<dyn Fn(&OutputFrame) + Send + Sync>;
 
 pub struct SessionConfig {
@@ -444,6 +448,8 @@ pub struct Session {
     // Content-free state closes the input-to-async-shell-hook interval.
     shell_prompt_confirmed: bool,
     shell_submission_inflight: bool,
+    /// Only an idle cancel/empty submission may recover without a command end.
+    shell_idle_recovery: bool,
     shell_foreground_sequence: Option<u64>,
     shell_recording_ready: bool,
     shell_recording_armed: bool,
@@ -539,6 +545,7 @@ impl Session {
             shell_command: None,
             shell_prompt_confirmed: false,
             shell_submission_inflight: false,
+            shell_idle_recovery: false,
             shell_foreground_sequence: None,
             shell_recording_ready: false,
             shell_recording_armed: false,
@@ -584,6 +591,11 @@ impl Session {
     pub fn output_seq(&self) -> u64 { self.output_seq }
     /// Native owner installs a log at the moment sharing is enabled, never at external startup.
     pub fn activate_shared_audit(&mut self, audit: Audit) { audit.set_enabled(self.participation.shared); self.audit = audit; }
+
+    pub fn renderer_checkpoint(&self) -> Result<RendererCheckpoint, String> {
+        Ok(RendererCheckpoint { data: self.screen.renderer_checkpoint().map_err(str::to_owned)?, size: self.screen.size(),
+            output_seq: self.output_seq, generation: self.surface_generation })
+    }
 
     pub fn set_output_frame_sink(&mut self, sink: Option<OutputFrameSink>) { self.output_frame_sink = sink; }
     pub fn participant_allowed(&self, conn: ConnId) -> bool {
@@ -672,7 +684,14 @@ impl Session {
                 self.shell_integration.reason = None;
                 self.shell_recording_ready = self.participation.shared && self.shell_prompt_confirmed;
             }
+            "prompt" if self.shell_integration.state == "active" && self.shell_idle_recovery && self.shell_foreground_sequence.is_none() && self.ssh_foreground_sequence.is_none() => {
+                self.shell_submission_inflight = false;
+                self.shell_idle_recovery = false;
+                self.shell_prompt_confirmed = true;
+                self.shell_recording_ready = self.participation.shared && self.shell_integration.state == "active";
+            }
             "start" => {
+                self.shell_idle_recovery = false;
                 self.shell_foreground_sequence = Some(sequence);
                 // Retain only transport identity, including during a private login.
                 // A word containing "ssh" (or a compound script) is not an SSH launch.
@@ -686,6 +705,7 @@ impl Session {
                 self.shell_foreground_sequence = None;
                 self.ssh_foreground_sequence = None;
                 self.shell_submission_inflight = false;
+                self.shell_idle_recovery = false;
                 self.shell_prompt_confirmed = true;
                 self.shell_recording_ready = self.participation.shared && self.shell_integration.state == "active";
                 self.shell_recording_armed = false;
@@ -842,6 +862,14 @@ impl Session {
 
     fn write_pty(&mut self, bytes: &[u8]) {
         if bytes.iter().any(|byte| matches!(byte, b'\r' | b'\n' | 3 | 4)) {
+            // A late prompt event must not certify a command that has just been
+            // submitted. Only cancellation/empty Enter at a confirmed idle
+            // prompt can finish without a shell-authored command lifecycle.
+            let idle_input = bytes == b"\x03" || (bytes.iter().all(|byte| matches!(byte, b'\r' | b'\n'))
+                && !self.human_input_pending && !self.input.has_pending());
+            self.shell_idle_recovery = idle_input && self.shell_foreground_sequence.is_none()
+                && self.ssh_foreground_sequence.is_none()
+                && (self.shell_idle_recovery || (self.shell_prompt_confirmed && !self.shell_submission_inflight));
             self.shell_prompt_confirmed = false;
             self.shell_submission_inflight = true;
         }
@@ -2125,4 +2153,33 @@ mod ssh_policy_tests {
         s.set_ssh_transport(true);
         assert!(s.review_required());
     }
+
+    #[test]
+    fn delayed_prompt_cannot_certify_a_new_submission_or_foreground() {
+        let mut s = session();
+        s.human_input(b"\r");
+        s.human_input(b"sleep 10\r");
+        s.shell_event(2, "prompt", "", "", "");
+        assert!(s.review_required(), "old empty-enter prompt does not certify a new command");
+        s.shell_event(3, "start", "sleep 10", "", "");
+        s.human_input(b"\x03");
+        s.shell_event(4, "prompt", "", "", "");
+        assert!(s.review_required(), "foreground cancellation still needs its matching end");
+        s.shell_event(5, "end", "99", "", "130");
+        assert!(s.review_required());
+        s.shell_event(6, "end", "3", "", "130");
+        assert!(!s.review_required());
+    }
+
+    #[test]
+    fn idle_prompt_recovery_does_not_end_remote_ssh() {
+        let mut s = session();
+        s.shell_event(2, "start", "ssh host", "", "");
+        s.human_input(b"\x03");
+        s.shell_event(3, "prompt", "", "", "");
+        assert!(s.remote_policy());
+        s.shell_event(4, "end", "2", "", "0");
+        assert!(!s.remote_policy());
+    }
+
 }

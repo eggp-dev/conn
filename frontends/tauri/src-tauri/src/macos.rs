@@ -1,5 +1,5 @@
 //! Cocoa commands enter the same platform-neutral automation service as future adapters.
-use conn_frontend::{automation::Caller, Harness};
+use conn_frontend::{automation::Caller, AppRuntime};
 use serde_json::{json, Value};
 use std::{
     ffi::{c_char, CStr, CString},
@@ -9,7 +9,7 @@ use std::{
     },
 };
 struct Adapter {
-    harness: Weak<Harness>,
+    harness: Weak<AppRuntime>,
     app: tauri::AppHandle,
 }
 static ADAPTER: OnceLock<Adapter> = OnceLock::new();
@@ -18,7 +18,7 @@ extern "C" {
     fn conn_script_link();
     fn conn_script_sender_alive(identity: *const c_char) -> bool;
 }
-pub fn install(app: &tauri::AppHandle, harness: &Arc<Harness>) {
+pub fn install(app: &tauri::AppHandle, harness: &Arc<AppRuntime>) {
     let _ = ADAPTER.set(Adapter {
         harness: Arc::downgrade(harness),
         app: app.clone(),

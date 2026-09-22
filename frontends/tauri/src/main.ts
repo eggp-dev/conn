@@ -1,5 +1,5 @@
-import { mount } from "svelte";
-import "./app.css";
-import App from "./App.svelte";
+import { mount } from 'svelte';
+import NativeRoot from './NativeRoot.svelte';
+import '@conn/ui/styles.css';
 
-export default mount(App, { target: document.getElementById("app")! });
+mount(NativeRoot, { target: document.getElementById('app')! });

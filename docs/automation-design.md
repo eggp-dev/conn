@@ -334,7 +334,7 @@ categories or real deployment details. Use synthetic examples only.
   source, ownership arbitration, no private history and agent visibility gates.
 - [Native adapter](../frontends/tauri/src-tauri/src/macos.rs) and
   [dictionary](../frontends/tauri/src-tauri/Conn.sdef): argument compatibility and generic errors.
-- [UI](../frontends/tauri/src/App.svelte) and [timeline](../frontends/tauri/src/lib/timeline.ts):
+- [UI](../packages/ui/src/ConnApp.svelte) and [timeline](../packages/ui/src/lib/timeline.ts):
   stable labels, no automation cards or persistence, localized private-session state.
 - Automation guides, security model, architecture and examples describe the
   unreleased replacement. Native macOS acceptance remains a release gate.

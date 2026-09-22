@@ -108,6 +108,6 @@ fn cursor_only_conceal_rewrites_and_alternate_screen_advance_revision() {
     let mut s=ScreenModel::new(3,30);s.process(b"visible");let r=s.revision();
     s.process(b"\r\x1b[8mvisible\x1b[0m");assert!(s.revision()>r);assert_eq!(s.rows()[0],"");
     let r=s.revision();s.process(b"\x1b[?25l");assert!(s.revision()>r);assert!(s.visible_cursor().is_none());
-    s.process(b"\x1b[?1049hALT");assert!(s.alternate_screen());assert_eq!(s.rows()[0],"ALT");
+    s.process(b"\x1b[?1049hALT");assert!(s.alternate_screen());assert_eq!(s.rows()[0],"       ALT", "xterm alternate buffer inherits the current cursor");
     s.process(b"\x1b[?1049l");assert!(!s.alternate_screen());assert!(!s.rows().join("\n").contains("ALT"));
 }

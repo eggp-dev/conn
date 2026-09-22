@@ -20,6 +20,7 @@ spec.loader.exec_module(release)
 
 VERSION_FILES = [
     "Cargo.toml", "Cargo.lock", "package-lock.json", "frontends/tauri/package.json",
+    "frontends/web/package.json", "packages/ui/package.json",
     "frontends/tauri/src-tauri/tauri.conf.json",
     "plugin/.claude-plugin/plugin.json", "plugin/.codex-plugin/plugin.json",
     ".claude-plugin/marketplace.json",
@@ -169,6 +170,18 @@ class ReleaseTests(unittest.TestCase):
                 with self.assertRaises(release.ReleaseError):
                     release.check(self.root, self.tag)
                 path.write_text(original, encoding="utf-8")
+
+    def test_shared_ui_and_each_adapter_lock_version_are_checked_independently(self):
+        path = self.root / "package-lock.json"
+        original = path.read_text(encoding="utf-8")
+        for name in ("frontends/tauri", "frontends/web", "packages/ui"):
+            with self.subTest(name=name):
+                lock = json.loads(original)
+                lock["packages"][name]["version"] = "99.0.0"
+                path.write_text(json.dumps(lock), encoding="utf-8")
+                with self.assertRaisesRegex(release.ReleaseError, f"package-lock.json: {name}"):
+                    release.check(self.root, self.tag)
+        path.write_text(original, encoding="utf-8")
 
     def tree(self):
         return {path.relative_to(self.root).as_posix(): path.read_bytes() for path in self.root.rglob("*") if path.is_file()}

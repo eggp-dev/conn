@@ -1,11 +1,13 @@
-//! Tauri side: one engine per tab, all behind one hub/socket. Output and lifecycle
-//! events reach the webview tagged with the session id.
+//! Shared app runtime: one engine per tab behind one agent hub/socket.
+//! Native and web owner adapters share dispatch, attachment and output contracts.
 
 mod agent_setup;
 mod integrations;
 mod diagnostics;
 pub mod automation;
 mod windows;
+pub mod owner;
+pub use owner::{OwnerHello, OwnerMeta, OwnerRequest, PROTOCOL_VERSION};
 mod surface_commands;
 mod extension_commands;
 mod extensions;
@@ -38,7 +40,8 @@ struct AppState {
     automation: automation::Automation,
     extensions: extensions::Extensions,
     windows: parking_lot::Mutex<windows::Windows>,
-    output: parking_lot::Mutex<HashMap<String, Option<Vec<Value>>>>,
+    output: parking_lot::Mutex<HashMap<String, OutputRoute>>,
+    owner: owner::Owners,
     integration_home: Option<PathBuf>,
     config_dir: PathBuf,
     socket: PathBuf,
@@ -59,22 +62,26 @@ impl AppHandle {
             let owner = self.state.upgrade().and_then(|s| s.windows.lock().owner(session));
             let Some(owner) = owner else { return Ok(()); };
             value["window"] = json!(owner);
+            if value.get("epoch").is_none() { if let Some(state)=self.state.upgrade() { value["epoch"]=json!(state.owner.epoch(&owner)); } }
         }
         (self.emit)(name, value); Ok(())
     }
 }
 
-pub struct Harness { state: Arc<AppState>, app: AppHandle }
-impl Harness {
+#[derive(Default)]
+struct OutputRoute { attached: bool, epoch: u64, stream_seq: u64 }
+
+pub struct AppRuntime { state: Arc<AppState>, app: AppHandle }
+impl AppRuntime {
     pub fn new(config_dir: PathBuf, socket: PathBuf, emit: Emit) -> Self {
         Self::with_setup_home(config_dir, socket, emit, None)
     }
-    /// The browser harness uses the same installer against disposable client files.
+    /// Tests may redirect the same agent installer into a disposable client home.
     pub fn with_setup_home(config_dir: PathBuf, socket: PathBuf, emit: Emit, integration_home: Option<PathBuf>) -> Self {
         let defaults = std::fs::read_to_string(config_dir.join("app.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(json!({}));
         let automation = automation::Automation::load(&config_dir);
         let extensions = extensions::Extensions::load(&config_dir);
-        let state = Arc::new(AppState { pending_sessions: Default::default(), startup: Default::default(), automation, extensions, windows: Default::default(), output: Default::default(), integration_home, config_dir, socket, engines: Default::default(), hub: Hub::new(), server: Default::default(), seq: parking_lot::Mutex::new(0), defaults: parking_lot::Mutex::new(defaults) });
+        let state = Arc::new(AppState { pending_sessions: Default::default(), startup: Default::default(), automation, extensions, windows: Default::default(), output: Default::default(), owner: owner::Owners::new(), integration_home, config_dir, socket, engines: Default::default(), hub: Hub::new(), server: Default::default(), seq: parking_lot::Mutex::new(0), defaults: parking_lot::Mutex::new(defaults) });
         let app = AppHandle { state: Arc::downgrade(&state), emit };
         state.hub.set_admission_policy(admission_policy(&state.defaults.lock()));
         let notify = app.clone();
@@ -84,6 +91,35 @@ impl Harness {
         state.hub.set_activity_listener(Arc::new(move || { let _ = notify.emit("ss:activity_changed", Value::Null); }));
         Self { state, app }
     }
+    pub fn runtime_id(&self) -> &str { self.state.owner.runtime_id() }
+    pub fn owner_attach(&self, window: &str, protocol: u32, takeover: bool) -> Result<OwnerHello, String> {
+        if protocol != PROTOCOL_VERSION { return Err("protocol_mismatch".into()); }
+        if !self.state.windows.lock().available(window) { return Err("Window closed".into()); }
+        self.state.owner.attach(window, takeover, |epoch| {
+            let ids = self.state.windows.lock().sessions(window);
+            let mut output = self.state.output.lock();
+            for id in ids { if let Some(route) = output.get_mut(&id) { *route = OutputRoute {epoch, ..Default::default()}; } }
+        })
+    }
+    pub fn owner_detach(&self, window: &str, epoch: u64) {
+        self.state.owner.detach(window, epoch, || {
+            let ids = self.state.windows.lock().sessions(window);
+            let mut output = self.state.output.lock();
+            for id in ids { if let Some(route) = output.get_mut(&id) { route.attached = false; } }
+        });
+    }
+    pub fn invoke_owner(&self, window: &str, request: OwnerRequest) -> Result<Value, String> {
+        self.state.owner.execute(window, request, |name, args| {
+            if matches!(name,"input"|"terminal_response") {
+                let id=args["session"].as_str().ok_or("session_required")?;
+                if !self.state.output.lock().get(id).is_some_and(|route|route.attached) { return Err("renderer_not_ready".into()); }
+            }
+            self.invoke_in_window(window, name, args)
+        })
+    }
+    pub fn owner_outcome(&self, window: &str, epoch: u64, operation_id: u64) -> Result<Value, String> {
+        self.state.owner.outcome(window, epoch, operation_id)
+    }
     pub fn shutdown(&self) {
         cancel_all_pending(&self.state);
         self.state.automation.stop_all();
@@ -91,7 +127,7 @@ impl Harness {
         for id in self.state.hub.ids() { self.state.hub.remove(&id); }
         for e in self.state.engines.lock().drain().map(|(_,e)|e) { let _ = e.terminate(); }
     }
-    /// Trusted single-window adapter (the token-protected browser harness).
+    /// Trusted in-process single-window caller (tests and automation service).
     /// Agent IPC never reaches this owner command boundary.
     pub fn invoke(&self, name: &str, args: Value) -> Result<Value, String> {
         self.invoke_in_window("main", name, args)
@@ -164,7 +200,7 @@ impl Harness {
         automation::dispatch(&self.app, &self.state, window, caller, operation, args)
     }
 }
-impl Drop for Harness { fn drop(&mut self) { self.shutdown(); } }
+impl Drop for AppRuntime { fn drop(&mut self) { self.shutdown(); } }
 fn defaults_path(state: &AppState) -> PathBuf { state.config_dir.join("app.json") }
 /// Apply the stored new-tab defaults to a fresh session.
 fn apply_defaults(defaults: &Value, engine: &Engine) {
@@ -201,20 +237,12 @@ fn engine(state: &AppState, session: &str) -> Result<Arc<Engine>, String> {
 /// Installed before the PTY reader starts. Never locks Session from its callback.
 fn terminal_output(app: AppHandle, session: String) -> conn_core::session::OutputFrameSink {
     Box::new(move |frame| {
-        use base64::Engine as _;
         if let Some(state) = app.state.upgrade() {
-            let data = base64::engine::general_purpose::STANDARD.encode(&frame.data);
-            let value = json!({"session":session,"data":data,"outputSeq":frame.output_seq,"generation":frame.generation,"size":frame.size});
             let mut output = state.output.lock();
-            match output.get_mut(&session) {
-                Some(Some(buffer)) => {
-                    buffer.push(value);
-                    while buffer.len() > 1 && buffer.iter().map(|v| v["data"].as_str().map_or(0, str::len)).sum::<usize>() > 1_400_000 {
-                        buffer.remove(0);
-                    }
-                }
-                Some(None) => { let _ = app.emit("ss:output", value); }
-                None => {},
+            if let Some(route) = output.get_mut(&session).filter(|route| route.attached) {
+                route.stream_seq += 1;
+                let value = owner::OwnerOutput::frame(&session,frame,route.epoch,route.stream_seq,false);
+                let _ = app.emit("ss:output", value);
             }
         }
     })
@@ -241,7 +269,7 @@ fn spawn_tab_with(app: &AppHandle, state: &AppState, window: &str, mut rows: u16
     };
     if !state.windows.lock().available(window) { return Err("Window closed".into()); }
     state.windows.lock().add(window, &id);
-    state.output.lock().insert(id.clone(), Some(Vec::new()));
+    state.output.lock().insert(id.clone(), OutputRoute { epoch: state.owner.epoch(window), ..Default::default() });
     if external_private {
         state.pending_sessions.lock().insert(id.clone(), PendingSession {
             profile_id: profile.id.clone(), profile_name: profile.name.clone(), rows, cols,
@@ -608,16 +636,30 @@ fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Resul
         "automation_revoke" => { cancel_all_pending(state); state.automation.stop_all(); Ok(Value::Null) },
         "attach_output" => {
             let id: String = arg(&args, "session")?;
-            {
+            // Session then route is the same lock order as live PTY delivery.
+            // The checkpoint and the following live frames cannot cross here.
+            if let Ok(engine) = engine(state, &id) {
+                let session = engine.session();
+                let session = session.lock();
+                let checkpoint = session.renderer_checkpoint()?;
                 let mut output = state.output.lock();
-                if let Some(entry) = output.get_mut(&id) {
-                    for frame in entry.take().unwrap_or_default() { app.emit("ss:output", frame)?; }
-                }
-            }
-            if let Some(pending) = state.pending_sessions.lock().get_mut(&id) {
+                let route = output.get_mut(&id).ok_or("Session output unavailable")?;
+                route.attached = true;
+                route.stream_seq += 1;
+                app.emit("ss:output", owner::OwnerOutput::frame(&id,&checkpoint,route.epoch,route.stream_seq,true))?;
+            } else if let Some(pending) = state.pending_sessions.lock().get_mut(&id) {
                 if pending.cancelled { return Err("External session unavailable".into()); }
+                if let Some(route) = state.output.lock().get_mut(&id) {
+                    route.attached = true;
+                    route.stream_seq += 1;
+                    // No PTY exists yet. A blank prepared surface lets the owner
+                    // cancel startup with genuine input before the child starts.
+                    app.emit("ss:output",json!({"session":id,"reset":true,"data":"",
+                        "size":{"rows":pending.rows,"cols":pending.cols},"generation":0,"outputSeq":0,
+                        "epoch":route.epoch,"streamSeq":route.stream_seq}))?;
+                }
                 pending.attached = true;
-            }
+            } else { return Err("Session output unavailable".into()); }
             Ok(Value::Null)
         },
         "open_release" => updates::open(&arg::<String>(&args, "url")?).map(|_| Value::Null),

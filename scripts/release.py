@@ -43,10 +43,11 @@ TARGETS = {
 PLATFORMS = {"aarch64-apple-darwin": "darwin-aarch64", "x86_64-unknown-linux-gnu": "linux-x86_64", "x86_64-pc-windows-msvc": "windows-x86_64"}
 SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?")
 WORKSPACE_VERSION = "Cargo.toml: workspace package"
-JSON_MANIFESTS = ("frontends/tauri/package.json", "frontends/tauri/src-tauri/tauri.conf.json", "plugin/.claude-plugin/plugin.json", "plugin/.codex-plugin/plugin.json")
+NPM_WORKSPACES = ("frontends/tauri", "frontends/web", "packages/ui")
+JSON_MANIFESTS = tuple(f"{name}/package.json" for name in NPM_WORKSPACES) + ("frontends/tauri/src-tauri/tauri.conf.json", "plugin/.claude-plugin/plugin.json", "plugin/.codex-plugin/plugin.json")
 # Lockfiles list every dependency; only Conn's own packages carry the release version.
 LOCKED_PACKAGES = {
-    "Cargo.lock": {"conn", "conn-core", "conn-frontend", "conn-browser-harness", "conn-desktop"},
+    "Cargo.lock": {"conn", "conn-core", "conn-frontend", "conn-web", "conn-desktop"},
 }
 # Where `bump` writes what `declarations` reads. Group 1 is the version; each pattern must match exactly once.
 _JSON_VERSION = r'^  "version": "([^"\n]+)"'
@@ -54,8 +55,8 @@ VERSION_PATTERNS = {
     # The desktop crate inherits the workspace version, so its manifest declares none.
     "Cargo.toml": (r'^\[workspace\.package\]\n(?:(?!\[).*\n)*?version = "([^"\n]+)"', r'^conn-core = \{[^}\n]*\bversion = "([^"\n]+)"', r'^conn-frontend = \{[^}\n]*\bversion = "([^"\n]+)"'),
     **{name: (_JSON_VERSION,) for name in JSON_MANIFESTS},
-    # One npm workspace lockfile at the root; the desktop UI is the only workspace that carries the release version.
-    "package-lock.json": (r'^    "frontends/tauri": \{\n(?:      .*\n)*?      "version": "([^"\n]+)"',),
+    # Shared UI and both frontend adapters are built and versioned together.
+    "package-lock.json": tuple(rf'^    "{re.escape(name)}": \{{\n(?:      .*\n)*?      "version": "([^"\n]+)"' for name in NPM_WORKSPACES),
     ".claude-plugin/marketplace.json": (r'^      "name": "conn",\n(?:      .*\n)*?      "version": "([^"\n]+)"',),
     **{name: tuple(rf'^name = "{package}"\nversion = "([^"\n]+)"' for package in sorted(packages)) for name, packages in LOCKED_PACKAGES.items()},
 }
@@ -127,7 +128,9 @@ def declarations(root: Path, texts: dict[str, str] | None = None) -> dict[str, s
     }
     for name in JSON_MANIFESTS:
         found[name] = json.loads(text(name))["version"]
-    found["package-lock.json: frontends/tauri"] = json.loads(text("package-lock.json"))["packages"]["frontends/tauri"]["version"]
+    npm_packages = json.loads(text("package-lock.json"))["packages"]
+    for name in NPM_WORKSPACES:
+        found[f"package-lock.json: {name}"] = npm_packages[name]["version"]
     plugins = [p for p in json.loads(text(".claude-plugin/marketplace.json"))["plugins"] if p["name"] == "conn"]
     if len(plugins) != 1:
         raise ReleaseError("Claude marketplace must contain exactly one Conn plugin")

@@ -12,93 +12,11 @@ The [six source clips](public/footage/collaboration/) and their [provenance](pub
 
 ## Reproduce the isolated session
 
-Requirements: Conn’s build dependencies, installed frontend dependencies, Python 3, Git, FFmpeg/FFprobe, and an installed, authenticated Codex CLI. These capture helpers use Unix PTYs and run on Linux/macOS. Use a fresh state directory, not an existing personal shell session. Run from the repository root:
+The recorded film used the pre-refactor browser adapter. That adapter has been removed. Current recordings must use the [production web host](../../docs/browser-testing.md), its compiled shared UI and the matching persistent `conn mcp` process. The fixture and human-role script below remain useful; the old Vite proxy commands are historical and are no longer an executable setup guide.
 
-```sh
-cargo build -p conn -p conn-browser-harness --locked
-export CONN_FILM_REPO="$PWD"
-export CONN_FILM_STATE="$(mktemp -d /tmp/conn-film-XXXXXX)"
-python3 - <<'PY'
-import json, os, pathlib, shutil, subprocess
-state = pathlib.Path(os.environ['CONN_FILM_STATE'])
-repo = pathlib.Path(os.environ['CONN_FILM_REPO'])
-workspace = state / 'workspace'
-shutil.copytree(repo / 'media/demo/fixture', workspace)
-(state / 'operator').mkdir()
-profile = {
-    'version': 1, 'revision': 0, 'defaultProfile': 'film',
-    'profiles': [{
-        'id': 'film', 'name': 'checkout-demo', 'enabled': True,
-        'backend': 'local', 'shell': 'posix', 'program': '/bin/bash',
-        'args': ['--noprofile', '--norc', '-i'], 'cwd': str(workspace),
-        'env': {'PS1': 'demo $ ', 'HISTFILE': '/dev/null',
-                'PYTHONDONTWRITEBYTECODE': '1', 'GIT_PAGER': 'cat', 'PAGER': 'cat'}
-    }]
-}
-defaults = {'mode': 'autopilot', 'gate': True,
-    'pacing': {'minWriteIntervalMs': 40, 'enterGraceMs': 2000,
-               'leaseTtlSecs': 120, 'approvalTtlSecs': 300}}
-(state / 'profiles.json').write_text(json.dumps(profile, indent=2))
-(state / 'app.json').write_text(json.dumps(defaults, indent=2))
-subprocess.run(['git', 'init', '--quiet', str(workspace)], check=True)
-subprocess.run(['git', '-C', str(workspace), 'add', '.'], check=True)
-subprocess.run(['git', '-C', str(workspace), '-c', 'user.name=Conn Demo',
-    '-c', 'user.email=demo@example.invalid', 'commit', '-qm', 'Add checkout fixture'], check=True)
-print(f'CONN_FILM_STATE={state}')
-PY
-CONN_TEST_PORT=1433 CONN_TEST_ORIGIN=http://127.0.0.1:1435 \
-  target/debug/conn-browser-harness "$CONN_FILM_STATE"
-```
+Build `cargo build -p conn -p conn-web --locked` and `npm run build:web` at the repository root. Use a fresh state directory, copy `fixture/` into its workspace and select that workspace through a local shell profile. Start `conn-web serve --state-dir <state> --ui-dir frontends/web/dist`, authenticate the owner using its private connection file, and configure Codex with `target/debug/conn --socket <state>/conn.sock mcp --tools static`.
 
-In a second terminal, set `CONN_FILM_REPO` and `CONN_FILM_STATE` to the same values. Start the unchanged frontend:
-
-```sh
-cd "$CONN_FILM_REPO/frontends/tauri"
-CONN_TEST_STATE="$CONN_FILM_STATE" \
-  node node_modules/vite/bin/vite.js --mode browser-test --host 127.0.0.1 --port 1431
-```
-
-In a third terminal, set those same variables. Write instructions that route the task through Conn without prescribing the fix:
-
-```sh
-cat > "$CONN_FILM_STATE/agent-instructions.md" <<'PROMPT'
-For this demonstration, perform task file inspection, edits and commands only through Conn MCP. Work in the shared terminal's current workspace, not this CLI's operator directory. Do not use built-in shell execution or direct file editing for the task.
-Read the current terminal snapshot first. Request control with the exact planned command and a clear reason. Wait for approval; then type the command and submit Enter through Conn. Read the resulting snapshot: delivery of Enter does not prove command success.
-Stop on denial or human takeover. When the user asks you to continue, read the terminal and changed files again before deciding what to do. After the initial two tests pass, pause and keep the lease so the user can take over by typing. Do not inspect cases/ before the user adds another test. On the follow-up, finish the task and release control. Keep responses concise and in English.
-PROMPT
-python3 - <<'PY'
-import json, os, pathlib
-state = pathlib.Path(os.environ['CONN_FILM_STATE'])
-# Arguments are passed as a list; no shell interpolation of instructions or paths.
-launcher = '''import json, os, pathlib, shutil
-state = pathlib.Path(os.environ['CONN_FILM_STATE'])
-repo = pathlib.Path(os.environ['CONN_FILM_REPO'])
-cli = shutil.which('codex')
-if not cli: raise SystemExit('Install and authenticate Codex CLI first')
-args = [cli, '--no-alt-screen', '-C', str(state / 'operator'),
-        '-s', 'read-only', '-a', 'on-request', '-m', 'gpt-6-astra']
-config = {
-    'model_reasoning_effort': 'medium',
-    'mcp_servers.conn.command': str(repo / 'target/debug/conn'),
-    'mcp_servers.conn.args': ['--socket', str(state / 'conn.sock'), 'mcp', '--tools', 'static'],
-    'mcp_servers.conn.tool_timeout_sec': 600,
-    'developer_instructions': (state / 'agent-instructions.md').read_text(),
-    'check_for_update_on_startup': False,
-}
-for key, value in config.items(): args.extend(['-c', key + '=' + json.dumps(value)])
-os.execv(cli, args)
-'''
-(state / 'launch-codex.py').write_text(launcher)
-PY
-cd "$CONN_FILM_REPO"
-python3 media/demo/scripts/cli-capture-server.py --proxy-conn \
-  --cwd "$CONN_FILM_STATE/operator" --record "$CONN_FILM_STATE/codex-pty.jsonl" \
-  -- python3 "$CONN_FILM_STATE/launch-codex.py"
-```
-
-Open `http://127.0.0.1:1435/`. The bridge proxies required Vite assets from port 1431 so both panes share an origin; Conn’s WebSocket connects to port 1433, whose permitted Origin must be port **1435**. All three listeners are loopback-only. The bridge starts one CLI process, forwards browser input and terminal size, and retains bounded output for reconnects. Its log is created with mode `0600` and refuses to overwrite an existing file. Stop/relaunch with a fresh log when starting another take.
-
-The `-c` settings apply to this Codex process; they do not rewrite global MCP configuration. Codex may record its normal workspace trust decision. Select an available model if `gpt-6-astra` is unavailable; generated commands and wording will vary. Instructions route this demonstration through Conn, but do not form a security sandbox or prevent another tool from being used. The isolated fixture protects real work by scope, not by filesystem confinement.
+The split capture helper can embed the web host's own origin; do not use `--proxy-conn` to introduce a second owner transport. Enter the connection code in the embedded Conn UI. Record the source commit, executable versions and actual origin for a new take. Existing film provenance describes the original footage and must not be rewritten as evidence for the refactor.
 
 ## Perform the actual collaboration
 

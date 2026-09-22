@@ -205,7 +205,7 @@ fn parse(data: &[u8], pid: Option<u32>, sequence: u64) -> Option<(&str, &str, &s
     {
         return None;
     }
-    if !matches!(fields[3], "ready" | "start" | "end" | "gap" | "unavailable") {
+    if !matches!(fields[3], "ready" | "prompt" | "start" | "end" | "gap" | "unavailable") {
         return None;
     }
     Some((fields[3], fields[4], fields[5], fields[6]))

@@ -96,6 +96,11 @@ impl ScreenModel {
         self.revision += 1;
     }
 
+    /// Owner-only modeled rendering state; never use this for agent observation.
+    pub(crate) fn renderer_checkpoint(&self) -> Result<Vec<u8>, &'static str> {
+        self.parser.renderer_state_formatted()
+    }
+
     pub fn revision(&self) -> u64 {
         self.revision
     }

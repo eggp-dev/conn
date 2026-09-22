@@ -36,5 +36,4 @@ runs:
         save-if: ${{ github.ref == 'refs/heads/main' }}
     - name: Frontend dependencies
       shell: bash
-      working-directory: frontends/tauri
       run: npm ci

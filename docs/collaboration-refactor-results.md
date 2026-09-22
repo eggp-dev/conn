@@ -1,5 +1,7 @@
 # Collaboration boundaries — implementation and validation
 
+This is a historical validation record. After the hard cut, use the [web host validation guide](browser-testing.md) for current commands.
+
 [한국어](collaboration-refactor-results.ko.md) · [Plan](collaboration-refactor-plan.md)
 
 2026-09-21 · Implementation based on `263f255`, in the working tree.

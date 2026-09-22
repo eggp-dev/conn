@@ -175,6 +175,7 @@ fn existing_prompt_command_and_exit_status_are_preserved() {
     h.run("false", 1);
     assert_eq!(h.ends()[0].fields["exitCode"], 1);
     h.until(|| String::from_utf8_lossy(&h.output.lock().unwrap()).contains("USER_PROMPT_STATUS=1"));
+    h.until(|| h.engine.session().lock().completion_prompt_ready());
     h.run("true", 2);
     assert_eq!(h.ends()[1].fields["exitCode"], 0);
 }
@@ -207,6 +208,7 @@ fn ignored_history_is_not_reconstructed_from_typed_input() {
     h.until(|| {
         String::from_utf8_lossy(&h.output.lock().unwrap()).contains("INTENTIONALLY_OMITTED")
     });
+    h.until(|| h.engine.session().lock().completion_prompt_ready());
     h.run("true", 2);
     assert!(!format!("{:?}", h.starts()).contains("INTENTIONALLY_OMITTED"));
 }
@@ -362,5 +364,37 @@ fn delayed_private_hook_payloads_are_discarded_after_sharing() {
     // A newly confirmed prompt followed by new shared input resumes recording.
     h.run("true",1);
     assert_eq!(h.starts()[0].fields["cmd"],"true");
+    h.engine.terminate().unwrap();
+}
+
+
+#[test]
+fn idle_cancel_empty_enter_and_ignored_history_restore_prompt_policy() {
+    use conn_core::policy::Decision;
+    let h = Shell::new("/bin/bash", false);
+    let session = h.engine.session();
+    for input in [b"\x03".as_slice(), b"\r", b"\r\r"] {
+        assert!(session.lock().completion_prompt_ready());
+        h.engine.write_input(input);
+        h.until(|| session.lock().completion_prompt_ready());
+        assert!(!session.lock().review_required());
+        assert!(matches!(session.lock().analyse_line("python3 --version").decision, Decision::Allow));
+    }
+    {
+        let mut s = session.lock();
+        s.register_conn(7, conn_core::session::ConnKind::Agent, "test", Box::new(|_| {}));
+        s.agent_request_control(7).unwrap();
+        s.agent_interrupt(7).unwrap();
+        s.agent_release_control(7).unwrap();
+    }
+    h.until(|| session.lock().completion_prompt_ready());
+    h.send("HISTCONTROL=ignorespace");
+    h.until(|| session.lock().completion_prompt_ready());
+    let records = h.starts().len();
+    h.send(" sleep 0.25");
+    h.until(|| session.lock().review_required());
+    h.until(|| session.lock().completion_prompt_ready());
+    assert_eq!(h.starts().len(), records, "history-excluded text is not recorded");
+    assert!(matches!(session.lock().analyse_line("pwd; python3 --version").decision, Decision::Allow));
     h.engine.terminate().unwrap();
 }

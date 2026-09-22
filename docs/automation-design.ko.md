@@ -299,7 +299,7 @@ SSH·tmux 터미널 상태만으로 내부 암호 입력을 구분할 수 없습
 - [엔진](../crates/core/src/engine.rs)·[백엔드](../crates/core/src/backend.rs): 직접 실행 명세와 저장된 프로필·시작 로그 분리.
 - [세션](../crates/core/src/session.rs)·[IPC](../crates/core/src/ipc.rs): 입력 출처, 소유권·입력 중재, 기록·AI 접근 제한.
 - [macOS 어댑터](../frontends/tauri/src-tauri/src/macos.rs)·[사전](../frontends/tauri/src-tauri/Conn.sdef): 문법 호환과 원문 없는 오류.
-- [UI](../frontends/tauri/src/App.svelte)·[타임라인](../frontends/tauri/src/lib/timeline.ts): 고정 제목, 자동화 카드·저장 제거, 비공유 상태 번역.
+- [UI](../packages/ui/src/ConnApp.svelte)·[타임라인](../packages/ui/src/lib/timeline.ts): 고정 제목, 자동화 카드·저장 제거, 비공유 상태 번역.
 - 사용법·보안 모델·아키텍처·예제도 미배포 구현에 맞춰 수정했습니다.
   macOS 실기 검증은 배포 전에 별도로 통과해야 합니다.
 

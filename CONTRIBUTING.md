@@ -37,16 +37,14 @@ The wrapper builds the native CLI sidecar before starting Tauri. A native deskto
 
 ### Run the shared UI in a browser
 
-From `frontends/tauri`:
+From the repository root:
 
 ```sh
 npm ci
-npm run test:browser
+npm run dev:web
 ```
 
-Open `http://127.0.0.1:1421/`. This uses the **same App and Rust frontend harness** through a local WebSocket adapter. It is a development aid, not a separate web product or a simulated shell. Shell commands run as your local user. The launcher prints a separate settings directory and agent endpoint.
-
-Reloading or disconnecting the browser ends its live sessions. Test with disposable files and deliberate reloads. See [browser testing](docs/browser-testing.md) for lifecycle and endpoint details.
+Open `http://127.0.0.1:1429` and enter the code from the server connection file. Web and native mount the same `@conn/ui` and use Rust `AppRuntime`. Reloading preserves shells while the server remains running. See [the web host and browser validation guide](docs/browser-testing.md) for development, operating a package and real MCP tests.
 
 ## Know where the change belongs
 
@@ -55,8 +53,9 @@ Reloading or disconnecting the browser ends its live sessions. Test with disposa
 | `crates/core` | PTY, session control, policy, audit, IPC, shell/backend profiles |
 | `crates/cli` | MCP adapter, agent commands, local profile and log utilities |
 | `crates/frontend` | Owner-window harness, sharing, native extensions |
-| `crates/browser-harness` | Local browser-test transport to the shared harness |
-| `frontends/tauri/src` | Shared Svelte UI, terminal renderer, timeline, settings, i18n |
+| `crates/web` | Local web server for the production AppRuntime |
+| `packages/ui` | Common Svelte UI, app-scoped runes, terminal renderer, collaboration actions and i18n |
+| `frontends/tauri/src`, `frontends/web/src` | Native/web entry points and host adapters |
 | `frontends/tauri/src-tauri` | Tauri adapter, native configuration, packaging |
 | `plugin` | Agent procedure and MCP server definition |
 | `packages` | Data shared across toolchains: `brand` (name, repository, site address) and `themes` (built-in terminal themes) |
@@ -92,7 +91,7 @@ From `frontends/tauri`:
 
 ```sh
 npm ci
-npm test
+npm run test:ui --prefix ../..
 npm run build
 ```
 

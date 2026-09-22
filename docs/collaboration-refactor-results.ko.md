@@ -1,5 +1,7 @@
 # 협업 경계 리팩터링 — 구현과 검증 결과
 
+이 문서는 당시 검증 기록입니다. 하드컷 이후 현재 실행 명령은 [웹 호스트 검증 안내](browser-testing.ko.md)를 따릅니다.
+
 [English](collaboration-refactor-results.md) · [작업 계획](collaboration-refactor-plan.ko.md)
 
 2026-09-21 · `263f255`를 기준으로 작업 트리에 구현.

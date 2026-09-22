@@ -6,6 +6,9 @@ const MODE_APPLICATION_CURSOR: u8 = 0b0000_0010;
 const MODE_HIDE_CURSOR: u8 = 0b0000_0100;
 const MODE_ALTERNATE_SCREEN: u8 = 0b0000_1000;
 const MODE_BRACKETED_PASTE: u8 = 0b0001_0000;
+const MODE_FOCUS_REPORTING: u8 = 0b0010_0000;
+const MODE_AUTOWRAP: u8 = 0b0100_0000;
+const MODE_INSERT: u8 = 0b1000_0000;
 
 /// The xterm mouse handling mode currently in use.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -99,7 +102,7 @@ impl Screen {
             title: String::default(),
             icon_name: String::default(),
 
-            modes: 0,
+            modes: MODE_AUTOWRAP,
             mouse_protocol_mode: MouseProtocolMode::default(),
             mouse_protocol_encoding: MouseProtocolEncoding::default(),
 
@@ -246,6 +249,31 @@ impl Screen {
         self.write_input_mode_formatted(&mut contents);
         self.write_title_formatted(&mut contents);
         contents
+    }
+
+    /// Reattach an owner renderer from modeled state, not a replay of output.
+    /// The recipient must have the same size and a freshly reset parser.
+    /// Retains both active alternate content and the normal screen it returns to.
+    #[must_use]
+    pub fn renderer_state_formatted(&self) -> Vec<u8> {
+        let mut out = b"\x1bc\x1b[?6l\x1b[r".to_vec();
+        self.grid.write_contents_with_history(&mut out);
+        self.grid.write_checkpoint_state(&mut out, self.saved_attrs);
+        if self.alternate_screen() {
+            out.extend_from_slice(b"\x1b[?47h\x1b[?6l\x1b[r");
+            self.alternate_grid.write_contents_formatted(&mut out);
+            self.alternate_grid.write_checkpoint_state(&mut out, self.saved_attrs);
+        }
+        out.extend_from_slice(b"\x1b[0m");
+        self.attrs.write_escape_code_diff(&mut out, &crate::attrs::Attrs::default());
+        crate::term::HideCursor::new(self.hide_cursor()).write_buf(&mut out);
+        self.write_input_mode_formatted(&mut out);
+        self.write_title_formatted(&mut out);
+        out
+    }
+
+    pub(crate) fn write_preceding_char(&self, out: &mut Vec<u8>) {
+        self.grid().write_preceding_char(out, self.mode(MODE_INSERT));
     }
 
     /// Return escape codes sufficient to turn the terminal state of the
@@ -405,6 +433,10 @@ impl Screen {
     }
 
     fn write_input_mode_formatted(&self, contents: &mut Vec<u8>) {
+        for (mode, code) in [(MODE_FOCUS_REPORTING, 1004), (MODE_AUTOWRAP, 7)] {
+            contents.extend_from_slice(format!("\x1b[?{code}{}", if self.mode(mode) { 'h' } else { 'l' }).as_bytes());
+        }
+        contents.extend_from_slice(if self.mode(MODE_INSERT) { b"\x1b[4h" } else { b"\x1b[4l" });
         crate::term::ApplicationKeypad::new(
             self.mode(MODE_APPLICATION_KEYPAD),
         )
@@ -761,12 +793,21 @@ impl Screen {
     }
 
     fn enter_alternate_grid(&mut self) {
-        self.grid_mut().set_scrollback(0);
-        self.set_mode(MODE_ALTERNATE_SCREEN);
+        if self.alternate_screen() { return; }
+        self.grid.set_scrollback(0);
+        self.alternate_grid.clear();
         self.alternate_grid.allocate_rows();
+        self.alternate_grid.set_pos(self.grid.pos());
+        self.alternate_grid.inherit_origin_mode(self.grid.origin_mode());
+        self.set_mode(MODE_ALTERNATE_SCREEN);
     }
 
     fn exit_alternate_grid(&mut self) {
+        if !self.alternate_screen() { return; }
+        self.grid.inherit_origin_mode(false);
+        self.grid.set_pos(self.alternate_grid.pos());
+        self.grid.inherit_origin_mode(self.alternate_grid.origin_mode());
+        self.alternate_grid.clear();
         self.clear_mode(MODE_ALTERNATE_SCREEN);
     }
 
@@ -834,7 +875,9 @@ impl Screen {
         // that relationship even though the padding cell has no contents;
         // otherwise a later resize cannot rejoin the logical line.
         let wrap = pos.col > size.cols.saturating_sub(width);
-        self.grid_mut().col_wrap(width, wrap);
+        if self.mode(MODE_AUTOWRAP) { self.grid_mut().col_wrap(width, wrap); }
+        else if wrap { self.grid_mut().col_set(size.cols.saturating_sub(width.max(1))); }
+        if self.mode(MODE_INSERT) && width > 0 { self.grid_mut().insert_cells(width); }
         let pos = self.grid().pos();
 
         if width == 0 {
@@ -1228,10 +1271,7 @@ impl Screen {
     // CSI h
     #[allow(clippy::unused_self)]
     fn sm(&mut self, params: &vte::Params) {
-        // nothing, i think?
-        if log::log_enabled!(log::Level::Debug) {
-            log::debug!("unhandled SM mode: {}", param_str(params));
-        }
+        for param in params { if param == &[4] { self.set_mode(MODE_INSERT); } }
     }
 
     // CSI ? h
@@ -1240,9 +1280,12 @@ impl Screen {
             match param {
                 &[1] => self.set_mode(MODE_APPLICATION_CURSOR),
                 &[6] => self.grid_mut().set_origin_mode(true),
+                &[7] => self.set_mode(MODE_AUTOWRAP),
+                &[1004] => self.set_mode(MODE_FOCUS_REPORTING),
+                &[1048] => self.decsc(),
                 &[9] => self.set_mouse_mode(MouseProtocolMode::Press),
                 &[25] => self.clear_mode(MODE_HIDE_CURSOR),
-                &[47] => self.enter_alternate_grid(),
+                &[47] | &[1047] => self.enter_alternate_grid(),
                 &[1000] => {
                     self.set_mouse_mode(MouseProtocolMode::PressRelease);
                 }
@@ -1284,10 +1327,7 @@ impl Screen {
     // CSI l
     #[allow(clippy::unused_self)]
     fn rm(&mut self, params: &vte::Params) {
-        // nothing, i think?
-        if log::log_enabled!(log::Level::Debug) {
-            log::debug!("unhandled RM mode: {}", param_str(params));
-        }
+        for param in params { if param == &[4] { self.clear_mode(MODE_INSERT); } }
     }
 
     // CSI ? l
@@ -1296,9 +1336,12 @@ impl Screen {
             match param {
                 &[1] => self.clear_mode(MODE_APPLICATION_CURSOR),
                 &[6] => self.grid_mut().set_origin_mode(false),
+                &[7] => self.clear_mode(MODE_AUTOWRAP),
+                &[1004] => self.clear_mode(MODE_FOCUS_REPORTING),
+                &[1048] => self.decrc(),
                 &[9] => self.clear_mouse_mode(MouseProtocolMode::Press),
                 &[25] => self.set_mode(MODE_HIDE_CURSOR),
-                &[47] => {
+                &[47] | &[1047] => {
                     self.exit_alternate_grid();
                 }
                 &[1000] => {
@@ -1385,12 +1428,17 @@ impl Screen {
             match next_param!() {
                 &[0] => self.attrs = crate::attrs::Attrs::default(),
                 &[1] => self.attrs.set_bold(true),
+                &[2] => self.attrs.set_dim(true),
+                &[5] | &[6] => self.attrs.set_blink(true),
+                &[9] => self.attrs.set_strike(true),
                 &[3] => self.attrs.set_italic(true),
                 &[4] => self.attrs.set_underline(true),
                 &[7] => self.attrs.set_inverse(true),
                 // Conn: any subparameter form of 8 conceals; hiding too much is the safe error.
                 &[8, ..] => self.attrs.set_concealed(true),
-                &[22] => self.attrs.set_bold(false),
+                &[22] => { self.attrs.set_bold(false); self.attrs.set_dim(false); }
+                &[25] => self.attrs.set_blink(false),
+                &[29] => self.attrs.set_strike(false),
                 &[23] => self.attrs.set_italic(false),
                 &[24] => self.attrs.set_underline(false),
                 &[27] => self.attrs.set_inverse(false),

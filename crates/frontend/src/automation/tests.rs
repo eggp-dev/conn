@@ -1,13 +1,13 @@
 use super::*;
-use crate::Harness;
+use crate::AppRuntime;
 use conn_core::backend::Profile;
 use base64::Engine as _;
 fn caller() -> Caller { Caller { identity:"test-sender:1".into(), name:"Synthetic launcher".into(), still_alive:Arc::new(|| true) } }
-fn harness() -> (tempfile::TempDir, Arc<Harness>) { harness_with_ack(true) }
-fn harness_with_ack(ack: bool) -> (tempfile::TempDir, Arc<Harness>) {
+fn harness() -> (tempfile::TempDir, Arc<AppRuntime>) { harness_with_ack(true) }
+fn harness_with_ack(ack: bool) -> (tempfile::TempDir, Arc<AppRuntime>) {
     let (tmp,h,_) = harness_with_events(ack); (tmp,h)
 }
-fn harness_with_events(ack: bool) -> (tempfile::TempDir, Arc<Harness>, Arc<Mutex<Vec<(String,Value)>>>) {
+fn harness_with_events(ack: bool) -> (tempfile::TempDir, Arc<AppRuntime>, Arc<Mutex<Vec<(String,Value)>>>) {
     let tmp = tempfile::tempdir().unwrap();
     let config = tmp.path().join("config"); std::fs::create_dir_all(&config).unwrap();
     let mut p = Profile::local("test-shell".into(), "/bin/sh".into());
@@ -15,10 +15,10 @@ fn harness_with_events(ack: bool) -> (tempfile::TempDir, Arc<Harness>, Arc<Mutex
     p.env.insert("ENV".into(), "/dev/null".into()); p.env.insert("PS1".into(), "external-test$ ".into());
     let profiles = conn_core::profiles::Profiles { version:1, revision:0, default_profile:p.id.clone(), profiles:vec![p] };
     std::fs::write(config.join("profiles.json"), serde_json::to_vec(&profiles).unwrap()).unwrap();
-    let target: Arc<Mutex<Weak<Harness>>> = Default::default();
+    let target: Arc<Mutex<Weak<AppRuntime>>> = Default::default();
     let receiver = target.clone();
     let events = Arc::new(Mutex::new(Vec::new())); let recorded = events.clone();
-    let h = Arc::new(Harness::new(config, tmp.path().join("conn.sock"), Arc::new(move |name,value| {
+    let h = Arc::new(AppRuntime::new(config, tmp.path().join("conn.sock"), Arc::new(move |name,value| {
         recorded.lock().push((name.to_owned(),value.clone()));
         if ack && name == "ss:tab_opened" && value["externalStarting"] == true {
             if let Some(h) = receiver.lock().upgrade() {
@@ -33,15 +33,15 @@ fn harness_with_events(ack: bool) -> (tempfile::TempDir, Arc<Harness>, Arc<Mutex
     *target.lock() = Arc::downgrade(&h);
     (tmp,h,events)
 }
-fn ready(h: &Harness) { h.invoke_in_window("main", "ui_ready", json!({})).unwrap(); }
-fn enable(h: &Harness) { h.invoke_in_window("main", "automation_save", json!({"config":{"enabled":true,"profiles":["test-shell"]}})).unwrap(); }
-fn open(h: &Harness) -> String { h.automate(caller(),"session.create",json!({})).unwrap().as_str().unwrap().into() }
-fn physical(h: &Harness, handle: &str) -> String { h.state.automation.bindings.lock()[handle].session_id.clone() }
+fn ready(h: &AppRuntime) { h.invoke_in_window("main", "ui_ready", json!({})).unwrap(); }
+fn enable(h: &AppRuntime) { h.invoke_in_window("main", "automation_save", json!({"config":{"enabled":true,"profiles":["test-shell"]}})).unwrap(); }
+fn open(h: &AppRuntime) -> String { h.automate(caller(),"session.create",json!({})).unwrap().as_str().unwrap().into() }
+fn physical(h: &AppRuntime, handle: &str) -> String { h.state.automation.bindings.lock()[handle].session_id.clone() }
 fn wait_for(mut condition: impl FnMut()->bool) {
     let until = Instant::now()+Duration::from_secs(5);
     while !condition() { assert!(Instant::now()<until,"timed out"); std::thread::sleep(Duration::from_millis(15)); }
 }
-fn done(h:&Harness,id:&str)->Value {
+fn done(h:&AppRuntime,id:&str)->Value {
     let mut value=Value::Null;
     wait_for(|| { value=h.automate(caller(),"request.status",json!({"requestId":id})).unwrap(); matches!(value["state"].as_str(),Some("delivered"|"cancelled"|"failed")) }); value
 }
@@ -54,7 +54,7 @@ fn owner_output(events:&Arc<Mutex<Vec<(String,Value)>>>,id:&str,window:&str)->St
         .collect();
     String::from_utf8_lossy(&bytes).into_owned()
 }
-fn assert_unrecorded(h:&Harness,secret:&str) {
+fn assert_unrecorded(h:&AppRuntime,secret:&str) {
     let audit=h.state.config_dir.join("audit.jsonl");
     let text=std::fs::read_to_string(audit).unwrap_or_default(); assert!(!text.contains(secret));
     assert!(!text.contains("automation_opened") && !text.contains("control_requested") && !text.contains("lease_granted"));
