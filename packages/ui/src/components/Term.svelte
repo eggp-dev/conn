@@ -21,6 +21,13 @@
   let fit: FitAddon;
   let requestFit = () => {};
   let renderReady = $state(false);
+  let syncSlow = $state(false);
+  let recover = () => {};
+  $effect(() => {
+    if (renderReady || !active || !st.backendOnline) { syncSlow = false; return; }
+    const timer = app.timeout(() => { syncSlow = true; }, 3000);
+    return () => app.clearTimeout(timer);
+  });
   const t = $derived(tab(session)!);
   const active = $derived(st.active === session);
   export function focus() { term?.focus(); }
@@ -65,7 +72,7 @@
     // stream so shell redraws and size changes reach both parsers in one order.
     const sizes = terminalResizeQueue(
       ({ rows, cols }) => cmd("resize", { session, rows, cols }),
-      (error) => console.error("Terminal resize failed", error),
+      (error) => { console.error("Terminal resize failed", error); app.toast(app.t("terminal.resize_failed"), "warn"); },
     );
     requestFit = () => {
       if (!renderReady || !st.backendOnline) return;
@@ -147,6 +154,10 @@
       if (p.reset) renderReady = false;
       output.push({ size: p.size, data: b64ToBytes(p.data), reset: p.reset, applied: p.reset ? () => { if (mounted) { renderReady = true; sizes.invalidate(); requestFit(); } } : undefined });
     });
+    recover = () => {
+      renderReady = false; output.clear(); sizes.invalidate();
+      void cmd('attach_output', {session}).catch(error => app.toast(String(error), 'warn'));
+    };
     let attachmentRequested = false;
     const attach = () => {
       if (!mounted || attachmentRequested) return;
@@ -162,7 +173,7 @@
       else attach();
     });
     Promise.all([un, sync, connection]).then(attach).catch(() => {});
-    return () => { mounted = false; sizes.dispose(); output.dispose(); requestFit = () => {}; inputListener.dispose(); privateClipboard.dispose(); motion?.cancel(); ro.disconnect(); for (const listener of [un, sync, connection]) void listener.then(f => f()); term.dispose(); };
+    return () => { mounted = false; sizes.dispose(); output.dispose(); requestFit = () => {}; recover = () => {}; inputListener.dispose(); privateClipboard.dispose(); motion?.cancel(); ro.disconnect(); for (const listener of [un, sync, connection]) void listener.then(f => f()); term.dispose(); };
   });
 
   $effect(() => {
@@ -173,7 +184,12 @@
 
 <div class="host" data-session={session} data-terminal-ready={renderReady} aria-busy={!renderReady} bind:this={host} hidden={!active}></div>
 
+{#if active && syncSlow && st.backendOnline}
+  <div class="terminal-sync" role="status"><span>{app.t('terminal.syncing')}</span><button class="btn" onclick={recover}>{app.t('terminal.restore')}</button></div>
+{/if}
+
 <style>
+  .terminal-sync { position: absolute; z-index: 20; right: 24px; top: var(--term-top, 44px); display: flex; gap: 12px; align-items: center; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--muted); font-size: 12px; }
   /* Settings is a modal, so opening it must not resize the underlying shell.
      Real pane changes commit the grid once; never animate a PTY's dimensions. */
   .host { position: absolute; inset: var(--term-top, 44px) 16px var(--term-bottom, 26px) 16px; padding: 0; }

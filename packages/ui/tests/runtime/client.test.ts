@@ -81,7 +81,7 @@ test('connection state replays for late subscribers and disposal releases every 
 });
 
 test('unconsumed or uncertain input failure fences queued keys until fresh attachment without replay', async () => {
-  for (const code of ['owner_busy', 'outcome_unknown', 'terminal_sequence_gap']) {
+  for (const code of ['owner_busy', 'outcome_unknown', 'input_outcome_unknown', 'terminal_sequence_gap']) {
     const f = fixture();
     const first = f.client.invoke('input', { session: 'a', text: 'unknown' });
     const queued = f.client.invoke('input', { session: 'a', text: 'must not follow' });

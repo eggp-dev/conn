@@ -53,14 +53,34 @@ fn utf8_and_split_sequences() {
 
 #[test]
 fn resolve_prefers_tracked_when_clean() {
-    assert_eq!(resolve_command("ls", false, "$ l", Some(2)), "ls");
+    assert_eq!(resolve_command("ls", false), Some("ls".into()));
 }
 
 #[test]
-fn resolve_uses_vt_when_dirty() {
-    assert_eq!(resolve_command("ls sr", true, "$ ls src/", Some(2)), "ls src/");
-    // VT yields nothing → fall back to tracked
-    assert_eq!(resolve_command("ls sr", true, "", Some(2)), "ls sr");
-    // no prompt col, tracked appears at end of line
-    assert_eq!(resolve_command("ls", true, "dev$ ls", None), "ls");
+fn uncertain_edits_never_resolve_from_screen_fragments_or_old_text() {
+    assert_eq!(resolve_command("ls sr", true), None);
+    let mut t=InputTracker::new();
+    t.feed(b"echo old\t", 2); t.feed(b"\x15echo new",2);
+    assert!(t.is_dirty(), "a guessed erase cannot restore command provenance");
+}
+
+#[test]
+fn middle_edits_preserve_the_complete_command_and_suffix() {
+    let mut t=InputTracker::new();
+    t.feed(b"printf AB > result", 9);
+    for _ in 0..9 { t.feed(b"\x1b[D", 0); }
+    t.feed(b"X\x7fC",0);
+    assert_eq!(t.line(), "printf ABC > result");
+    assert!(!t.is_dirty());
+    t.feed(b"\x15",0);
+    assert_eq!(t.line()," > result", "Ctrl-U preserves the suffix");
+}
+
+#[test]
+fn non_ascii_cursor_edits_require_recovery_but_motion_preserves_text() {
+    let mut t=InputTracker::new(); t.feed("echo é".as_bytes(),0);
+    t.feed(b"\x1b[D",0); assert!(!t.is_dirty());
+    t.feed(b"X",0); assert!(t.is_dirty());
+    let mut t=InputTracker::new(); t.feed("echo é".as_bytes(),0);
+    t.feed(b"\x7f",0); assert!(t.is_dirty(), "Unicode deletion cannot certify a scalar-count assumption");
 }

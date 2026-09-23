@@ -80,3 +80,16 @@ Browser results are Linux Chromium evidence. They do not establish macOS WebKit,
 To test the same SSH fixture through compound shell entry, add `CONN_SSH_COMPOUND_ENTRY=1` to the input-test command. Unicode cases require a UTF-8 remote locale (for example `LC_ALL=C.UTF-8`); configure only the disposable fixture, not a user server.
 
 To exercise an extracted release without rebuilding its components, run `CONN_TEST_WEB_BUNDLE=/path/to/conn-web-0.8.7-linux-x64 npm run test:collaboration`. The test still uses disposable state and drives the real packaged UI, server and persistent MCP CLI.
+
+## Actual Vim editing regression
+
+After building the Rust binaries and web UI above, run:
+
+```sh
+npm run test:editor -w @conn/collaboration-tests
+CONN_EDITOR_BROWSER=webkit npm run test:editor -w @conn/collaboration-tests
+```
+
+Install WebKit and its host dependencies with the pinned Playwright CLI when needed. This uses the real `vi` executable (`vi -Nu NONE -n -i NONE`), an isolated temporary file, the production UI and Rust PTY. It checks private/shared editing, human takeover, cursor editing, exact saved content, renderer reattachment during editing, and a 100-line buffer after resizing. The test does not refocus the terminal between launching Vim and typing, so it can detect lost focus. `CONN_SSH_FIXTURE_CONFIG` and `CONN_SSH_COMPOUND_ENTRY` select the same disposable SSH fixture described above; it must have Vim-compatible `vi` installed. Never point this test at a production host.
+
+`CONN_EDITOR_OUTPUT` selects the evidence directory. Unexpected browser errors fail the test. The previously observed `ResizeObserver loop completed with undelivered notifications.` warning is counted and preserved separately in `runtime.json`; successful editing does not establish that warning is harmless. Browser results, including Linux WebKit, do not prove native macOS keyboard/IME or IPC behavior. See the [0.8.7 Vim investigation](vim-input-investigation.md) for the unresolved native report.

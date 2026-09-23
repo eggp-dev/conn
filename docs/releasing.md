@@ -65,7 +65,7 @@ The release stages are:
 1. Build the matching CLI and desktop package on each native runner.
 2. On Mac, sign and notarize the app, embedded CLI, standalone CLI and DMG as described in [macOS signing](macos-signing.md). Generate the Apple Silicon report, including acceptance and final asset hashes.
 3. `release.py package` normalizes filenames. `finalize` requires all installers, updater archives/signatures and the valid Apple Silicon report before writing `SHA256SUMS` and the bilingual notes: `scripts/release_notes.md` filled with this version's asset names and changelog section.
-4. After the exact commit's CI and all build/signing jobs pass, `draft` uploads **14 assets**: seven binaries/installers, one macOS updater archive, three updater signatures, `latest.json`, one signing report and `SHA256SUMS`. It creates or updates an unpublished prerelease and refuses to modify a public release.
+4. After the exact commit's CI and all build/signing jobs pass, `draft` uploads **15 assets**: seven binaries/installers, one Linux standalone web archive, one macOS updater archive, three updater signatures, `latest.json`, one signing report and `SHA256SUMS`. It creates or updates an unpublished prerelease and refuses to modify a public release.
 
 Re-running can repair an incomplete draft. No workflow publishes automatically. Actions retains temporary build artifacts for seven days; uploaded release assets persist. The CLI archives contain the license and installation notes. The updater manifest is release-scoped and discovered via GitHub release metadata, including the explicit preview channel.
 

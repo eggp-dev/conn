@@ -58,7 +58,7 @@ fn copilot_confirm_is_granted_by_commit_but_deny_still_blocks() {
     h.session.agent_type(1, "rm -rf /").unwrap();
     let KeyResult::Proposed { proposal_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
     assert!(matches!(h.session.accept_proposal(&proposal_id).unwrap(), KeyResult::Denied { .. }));
-    assert_eq!(h.pty_str(), "rm -rf /\x15");
+    assert_eq!(h.pty_str(), "", "a denied proposal is never typed");
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn proposal_is_rejected_by_human_typing_or_esc() {
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "pwd").unwrap();
     let id = h.session.proposal().unwrap().proposal_id.clone();
-    h.session.human_input(b"e");
+    h.session.human_input(b"e").unwrap();
     assert_eq!(h.session.proposal_state(&id), Some(ProposalState::Rejected));
     assert!(h.session.controller().is_human());
     assert_eq!(h.pty_str(), "e");
@@ -141,7 +141,7 @@ fn hand_back_returns_control_to_last_agent() {
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "echo hi").unwrap();
     h.session.agent_send_key(1, "ENTER").unwrap();
-    h.session.human_input(b"x");
+    h.session.human_input(b"x").unwrap();
     assert!(h.session.controller().is_human());
     let st = h.session.status();
     assert_eq!(st.last_agent.as_ref().unwrap().last_cmd.as_deref(), Some("echo hi"));

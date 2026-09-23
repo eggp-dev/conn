@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.8.8 — Preview · 2026-09-23
+
+- Keep the complete agent command through supported cursor edits, including wrapped input and colored/wide prompts. History, completion and uncertain edits no longer let a screen-row fragment determine approval for a different physical command.
+- Separate cancelling permission from clearing terminal input. A confirmed idle shell is interrupted and observed before reuse; other foreground programs retain the visible line for explicit recovery. New agent commands cannot silently attach to that remainder. Human typing cancels review and takes over the visible line.
+- Return PTY write/flush failures as an uncertain outcome without replaying input. Publish a new terminal size only after the local PTY confirms it, and surface resize failures.
+- Ignore obsolete screen-restoration callbacks. A delayed restoration shows an input-paused status and an explicit screen recovery action. Add real Vim edit/save, reconnect and long-buffer regressions.
+
+한국어: 긴 명령과 색상·한글 프롬프트에서 커서를 편집한 뒤에도 승인 대상 전체 명령을 보존합니다. 불확실한 히스토리·자동완성 결과를 화면 한 행으로 추정해 실행하지 않습니다. 권한 취소와 입력 정리를 분리해 거절 뒤 남은 문자열에 새 명령이 이어 붙지 않게 했으며, 사람 입력은 승인을 취소하고 보이는 입력을 직접 이어받습니다. PTY 입력·크기 변경 실패를 전달하고, 오래된 화면 복원 콜백을 무시하며, 복원 지연 시 상태와 복구 동작을 표시합니다.
+
+Validation and limits: [release verification](docs/release-0.8.8-validation.md). Linux tests exercise the production common UI, real Rust PTYs, persistent MCP, disposable OpenSSH and real Vim. **The user's macOS Vim freeze and SSH gateway rendering issue have not been reproduced or confirmed fixed on that Mac.** Native build/signing/notarization and package checks are separate from interactive Mac acceptance. Remote prompt configuration, UTF-8 locale, physical IME and installed-app upgrades remain separate validation boundaries.
+
+한국어: [검증 기록](docs/release-0.8.8-validation.ko.md)에 범위를 구분했습니다. **사용자 Mac의 Vim 무응답과 실제 SSH 게이트웨이 화면 문제를 해당 Mac에서 재현·해결했다고 주장하지 않습니다.** 배포 서명·공증·패키지 검사는 대화형 실기 검증과 다릅니다.
+
 ## 0.8.7 — Preview · 2026-09-23
 
 - Ship the shared UI/runtime refactor: native and standalone web mount the same Svelte app and use the same Rust owner, input ordering, permission decisions and lifecycle. A Linux x64 web archive includes the host, matching MCP CLI and UI; it runs locally without a build toolchain.

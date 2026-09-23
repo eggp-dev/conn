@@ -32,7 +32,7 @@ export function createConnApp(ports: ConnPorts) {
     ...client, ...store, ...language, ...bridge, ...api,
     ...createProfiles(client), ...createExtensions(bridge, store, THEMES, storage),
     ...createLiveAgents(bridge, () => store.st.active, lifetime), ...createUpdates(ports.updates, storage, lifetime),
-    ...createAttention(ports.attention, lifetime), ...createControl(client, api, requests), ...createReview(client, requests),
+    ...createAttention(ports.attention, lifetime), ...createControl(client, api, requests), ...createReview(client, requests, () => store.toast(language.t('hold.input_retained'), 'info')),
     requestAction: requests.requestAction,
     forgetSession: requests.forgetSession,
     storage, THEMES, ports,

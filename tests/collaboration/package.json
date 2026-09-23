@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "test": "node scripts/web-mcp.mjs",
-    "test:input": "node scripts/input-rendering.mjs"
+    "test:input": "node scripts/input-rendering.mjs",
+    "test:editor": "node scripts/editor-input.mjs"
   },
   "dependencies": {
     "@conn/ui": "*"

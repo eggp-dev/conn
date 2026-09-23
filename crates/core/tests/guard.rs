@@ -60,7 +60,7 @@ fn dangerous_segment_must_be_alone() {
     let KeyResult::Denied { label, .. } = r else { panic!("{r:?}") };
     assert_eq!(label, "run dangerous commands alone");
     assert!(events.lock().unwrap().iter().any(|event| matches!(event, conn_core::session::ServerEvent::AgentExec {policy, ..} if policy == "deny:run dangerous commands alone")));
-    assert!(h.pty_str().ends_with("\x15"), "line cleared");
+    assert!(h.session.status().input_pending, "unverified foreground input is retained for explicit recovery");
     assert!(h.session.status().pending.is_empty(), "no approval was offered");
     // the analysis still shows what it would have deleted
     let a = h.session.analyse_line("cd .. && rm -rf -- hello-mel");
@@ -70,10 +70,9 @@ fn dangerous_segment_must_be_alone() {
 
 #[test]
 fn evasions_normalise_to_the_real_command() {
-    let mut h = strict();
-    h.agent(1, "claude");
-    h.session.agent_request_control(1).unwrap();
     for line in ["\\rm -rf x", "/bin/rm -rf x", "command rm -rf x", "r''m -rf x", "sudo rm -rf x", "env A=1 rm -rf x"] {
+        // Each policy case is independent of cancellation/recovery semantics.
+        let mut h = strict(); h.agent(1, "claude"); h.session.agent_request_control(1).unwrap();
         common::present(&mut h.session, vec!["$ ".into()]);
         h.session.agent_type(1, line).unwrap();
         let r = h.session.agent_send_key_with(1, "ENTER", Some("t".into())).unwrap();
@@ -93,6 +92,8 @@ fn opaque_constructs_ask_by_default() {
     h.agent(1, "claude");
     h.session.agent_request_control(1).unwrap();
     for line in ["sh -c 'ls'", "eval \"$CMD\"", "find . -name '*.log' -delete", "python3 -c 'print(1)'", "echo $(whoami)"] {
+        // Each policy case is independent of cancellation/recovery semantics.
+        let mut h = strict(); h.agent(1, "claude"); h.session.agent_request_control(1).unwrap();
         common::present(&mut h.session, vec!["$ ".into()]);
         h.session.agent_type(1, line).unwrap();
         let r = h.session.agent_send_key_with(1, "ENTER", Some("t".into())).unwrap();

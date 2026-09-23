@@ -235,6 +235,7 @@ try {
     const deny = page.locator('[data-request-key*=":review:"] .btn.danger');
     await deny.waitFor(); await delay(latency ? 10 : 90); await deny.click({force: true});
     await until(async () => (await agent.tool('check_approval', {approvalId: review.approvalId})).state === 'denied', 'Dock review was not denied');
+    if ((await agent.tool('check_approval', {approvalId:review.approvalId})).inputRetained) { await agent.tool('interrupt'); await delay(500); }
     const restored = await grid(`dock-motion-${latency}`);
     const motion = {frames: await stopMotionSampling(), sizes: sizesSince(start)};
     writeFileSync(join(evidence, `dock-motion-${latency}.json`), JSON.stringify(motion, null, 2));
@@ -308,7 +309,39 @@ try {
   assert.equal(unrelated.status, 'pending');
   await page.locator('[data-request-key*=":review:"] .btn.danger').click();
   await until(async () => (await agent.tool('check_approval', {approvalId: unrelated.approvalId})).state === 'denied', 'Unrelated risk denial missing');
+    if ((await agent.tool('check_approval', {approvalId:unrelated.approvalId})).inputRetained) { await agent.tool('interrupt'); await delay(500); }
   await delay(500);
+
+  // Review the whole logical command after edits, including colored/wide PS1.
+  // This is the real shared UI/PTY path; screen parity alone cannot catch a
+  // policy that inspected a suffix while Enter submitted the complete line.
+  for (const [label, ps1] of [['color', String.raw`\[\e[31m\]fixture$\[\e[0m\] `], ['wide', String.raw`\[\e[31m\]한글$\[\e[0m\] `]]) {
+    await execute(`PS1='${ps1}'`, 'Set a temporary fixture prompt for review regression.');
+    await delay(300);
+    const text = `printf '%s' > conn-review-fixture.txt '${'x'.repeat(220)}_END'`;
+    await agent.tool('type', {text});
+    await grid(`edited-review-${label}-before`);
+    for (let i=0;i<5;i++) await agent.tool('send_key',{key:'LEFT'});
+    // Exercise insertion and deletion in the middle without changing the result.
+    await agent.tool('type',{text:'Z'});
+    await agent.tool('send_key',{key:'BACKSPACE'});
+    const review = await agent.tool('send_key',{key:'ENTER',intent:'Review only a synthetic file write; the fixture will deny it.'});
+    assert.equal(review.status,'pending'); assert.equal(review.cmd,text,'Review preserves the complete edited command');
+    await page.locator('[data-request-key*=":review:"] .btn.danger').waitFor();
+    await delay(350);
+    await capture(`edited-review-${label}`);
+    await page.locator('[data-request-key*=":review:"] .btn.danger').click();
+    await until(async () => (await agent.tool('check_approval',{approvalId:review.approvalId})).state==='denied','Edited review denial missing');
+    await delay(400);
+    const decision=await agent.tool('check_approval',{approvalId:review.approvalId});
+    if(decision.inputRetained) { await agent.tool('interrupt'); await delay(500); }
+    const cleared=await grid(`edited-review-${label}-cleared`);
+    assert.equal(cleared.core[cleared.cursor.row],label==='wide'?'한글$':'fixture$','Denied input leaves no suffix after confirmed cleanup');
+    await execute("printf 'AFTER_REVIEW_%s\\n' 42",'Print a marker after review cleanup.');
+    await until(async () => (await agent.tool('snapshot')).screen.some(row=>row==='AFTER_REVIEW_42'),'Next command was mixed with cancelled input');
+  }
+  await execute(`PS1='${sshFixture?'remote$':'fixture$'} '`, 'Restore the disposable fixture prompt.');
+  await delay(300);
 
   const long = 'cursor-edit/'.repeat(85);
   await agent.tool('type', {text: `printf '<%s>\\n' '${long}END'`});

@@ -499,8 +499,7 @@ fn attend(state: &AppState, session: String) -> Result<bool, String> {
 
 fn input(state: &AppState, session: String, data: String) -> Result<(), String> {
     if cancel_pending(state, &session) { return Ok(()); }
-    engine(state, &session)?.session().lock().human_input(data.as_bytes());
-    Ok(())
+    engine(state, &session)?.session().lock().human_input(data.as_bytes()).map_err(|e| e.to_string())
 }
 
 fn terminal_response(state: &AppState, session: String, data: String) -> Result<(), String> {
@@ -512,8 +511,7 @@ fn resize(state: &AppState, session: String, rows: u16, cols: u16) -> Result<(),
     if let Some(pending) = state.pending_sessions.lock().get_mut(&session) {
         pending.rows = rows.max(1); pending.cols = cols.max(1); return Ok(());
     }
-    engine(state, &session)?.session().lock().resize(rows, cols);
-    Ok(())
+    engine(state, &session)?.session().lock().resize(rows, cols).map_err(|e| e.to_string())
 }
 
 fn status(state: &AppState, session: String) -> Result<Value, String> {

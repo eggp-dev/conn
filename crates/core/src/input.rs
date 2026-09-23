@@ -1,181 +1,159 @@
-//! Input line tracker. Reconstructs the command line from the bytes that were
-//! written to the PTY, regardless of who wrote them.
-//!
-//! Tab completion and history navigation make the shell redraw the line, which the
-//! tracker cannot follow. Those mark the tracker `dirty`; the session then falls back
-//! to the VT model's cursor line at ENTER time.
+//! Agent-owned input only. Never reconstruct an uncertain command from one
+//! terminal row: a wrapped row is not a shell command. Human input is tracked
+//! separately without retaining its contents.
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct InputTracker {
     buf: Vec<char>,
     pending: Vec<u8>,
     dirty: bool,
+    cursor: usize,
+    cursor_known: bool,
     prompt_col: Option<u16>,
 }
 
+impl Default for InputTracker {
+    fn default() -> Self {
+        Self {
+            buf: Vec::new(),
+            pending: Vec::new(),
+            dirty: false,
+            cursor: 0,
+            cursor_known: true,
+            prompt_col: None,
+        }
+    }
+}
 impl InputTracker {
     pub fn new() -> Self {
         Self::default()
     }
-
     pub fn line(&self) -> String {
         self.buf.iter().collect()
     }
-
     pub fn has_pending(&self) -> bool {
         !self.buf.is_empty() || !self.pending.is_empty() || self.dirty
     }
-
     pub fn is_dirty(&self) -> bool {
-        self.dirty
+        self.dirty || !self.pending.is_empty()
     }
-
     pub fn prompt_col(&self) -> Option<u16> {
         self.prompt_col
     }
-
-    pub fn reset(&mut self) {
-        self.buf.clear();
-        self.pending.clear();
-        self.dirty = false;
-        self.prompt_col = None;
+    pub fn mark_uncertain(&mut self) {
+        self.dirty = true;
     }
-
-    fn note_first_byte(&mut self, cursor_col: u16) {
-        if self.prompt_col.is_none() {
-            self.prompt_col = Some(cursor_col);
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+    fn edit(&mut self) {
+        if !self.cursor_known {
+            self.dirty = true;
         }
     }
 
-    /// Feed bytes written to the PTY. `cursor_col` is the VT cursor column *before*
-    /// these bytes were echoed; it is captured as the prompt width on the first byte
-    /// of a new line.
     pub fn feed(&mut self, bytes: &[u8], cursor_col: u16) {
         let mut i = 0;
         while i < bytes.len() {
-            let b = bytes[i];
-            match b {
+            self.prompt_col.get_or_insert(cursor_col);
+            match bytes[i] {
                 0x1b => {
-                    // Escape sequence: consume it, mark dirty (cursor movement / history).
-                    self.note_first_byte(cursor_col);
+                    // The named LEFT/RIGHT keys preserve the complete text.
+                    // Non-ASCII readline movement varies with locale/graphemes;
+                    // preserve the text, but require recovery before editing it.
+                    if bytes[i..].starts_with(b"\x1b[D") || bytes[i..].starts_with(b"\x1b[C") {
+                        self.cursor_known &= self.buf.iter().all(char::is_ascii);
+                        if bytes[i + 2] == b'D' {
+                            self.cursor = self.cursor.saturating_sub(1);
+                        } else {
+                            self.cursor = (self.cursor + 1).min(self.buf.len());
+                        }
+                        i += 3;
+                        continue;
+                    }
                     self.dirty = true;
                     i += 1;
-                    if i < bytes.len() && (bytes[i] == b'[' || bytes[i] == b'O') {
+                    if i < bytes.len() && matches!(bytes[i], b'[' | b'O') {
                         i += 1;
                         while i < bytes.len() && !(0x40..=0x7e).contains(&bytes[i]) {
                             i += 1;
                         }
                     }
-                    i += 1;
-                    continue;
                 }
-                // ENTER submits the line and Ctrl-C discards it; either way it is gone.
-                b'\r' | b'\n' | 0x03 => self.reset(),
-                0x15 => {
-                    // Ctrl-U: kill line
-                    self.flush_pending();
-                    self.buf.clear();
-                    self.dirty = false;
+                b'\r' | b'\n' | 3 => self.reset(),
+                1 => {
+                    self.cursor = 0;
+                    self.cursor_known = true;
                 }
-                0x17 => {
-                    // Ctrl-W: kill word
-                    self.flush_pending();
-                    while self.buf.last().map(|c| c.is_whitespace()).unwrap_or(false) {
-                        self.buf.pop();
+                5 => {
+                    self.cursor = self.buf.len();
+                    self.cursor_known = true;
+                }
+                21 => {
+                    self.edit();
+                    self.buf.drain(..self.cursor);
+                    self.cursor = 0;
+                }
+                23 => {
+                    self.edit();
+                    while self.cursor > 0 && self.buf[self.cursor - 1].is_whitespace() {
+                        self.cursor -= 1;
+                        self.buf.remove(self.cursor);
                     }
-                    while self.buf.last().map(|c| !c.is_whitespace()).unwrap_or(false) {
-                        self.buf.pop();
-                    }
-                }
-                0x7f | 0x08 => {
-                    self.flush_pending();
-                    self.buf.pop();
-                }
-                b'\t' => {
-                    self.note_first_byte(cursor_col);
-                    self.dirty = true;
-                }
-                0x00..=0x1f => {
-                    // Other control chars (Ctrl-A/E cursor moves etc.): tracking is unreliable.
-                    self.note_first_byte(cursor_col);
-                    if b != 0x04 {
-                        self.dirty = true;
+                    while self.cursor > 0 && !self.buf[self.cursor - 1].is_whitespace() {
+                        self.cursor -= 1;
+                        self.buf.remove(self.cursor);
                     }
                 }
-                _ => {
-                    self.note_first_byte(cursor_col);
+                127 | 8 => {
+                    // Readline locales and grapheme-aware bindings can erase a
+                    // different number of Unicode scalars. Do not certify that
+                    // resulting physical command using our scalar buffer.
+                    if self.buf.iter().any(|c| !c.is_ascii()) { self.dirty = true; }
+                    self.edit();
+                    if self.cursor > 0 {
+                        self.cursor -= 1;
+                        self.buf.remove(self.cursor);
+                    }
+                }
+                4 => {
+                    if self.buf.iter().any(|c| !c.is_ascii()) { self.dirty = true; }
+                    self.edit();
+                    if self.cursor < self.buf.len() {
+                        self.buf.remove(self.cursor);
+                    }
+                }
+                0..=31 => self.dirty = true,
+                b => {
+                    self.edit();
                     self.pending.push(b);
-                    self.flush_complete_utf8();
+                    self.flush_utf8();
                 }
             }
             i += 1;
         }
     }
 
-    fn flush_complete_utf8(&mut self) {
-        loop {
-            match std::str::from_utf8(&self.pending) {
-                Ok(s) => {
-                    self.buf.extend(s.chars());
-                    self.pending.clear();
-                    return;
-                }
-                Err(e) => {
-                    let valid = e.valid_up_to();
-                    if valid > 0 {
-                        let s = std::str::from_utf8(&self.pending[..valid]).unwrap();
-                        self.buf.extend(s.chars());
-                        self.pending.drain(..valid);
-                        continue;
-                    }
-                    if e.error_len().is_some() {
-                        // invalid byte: drop it
-                        self.pending.remove(0);
-                        continue;
-                    }
-                    return; // incomplete sequence, wait for more
-                }
+    fn flush_utf8(&mut self) {
+        match std::str::from_utf8(&self.pending) {
+            Ok(s) => {
+                let chars: Vec<_> = s.chars().collect();
+                let len = chars.len();
+                self.buf.splice(self.cursor..self.cursor, chars);
+                self.cursor += len;
+                self.pending.clear();
             }
-        }
-    }
-
-    fn flush_pending(&mut self) {
-        if !self.pending.is_empty() {
-            let s = String::from_utf8_lossy(&self.pending).to_string();
-            self.buf.extend(s.chars());
-            self.pending.clear();
+            Err(e) if e.error_len().is_some() => {
+                self.dirty = true;
+                self.pending.clear();
+            }
+            Err(_) => {}
         }
     }
 }
 
-/// Decide the command text at ENTER time.
-///
-/// * Not dirty → the tracked line.
-/// * Dirty → the VT cursor line with the prompt prefix removed. If the two differ,
-///   the VT model wins. Falls back to the tracked line when the VT line yields nothing.
-pub fn resolve_command(tracked: &str, dirty: bool, cursor_line: &str, prompt_col: Option<u16>) -> String {
-    let from_vt = strip_prompt(cursor_line, prompt_col, tracked);
-    if !dirty {
-        return tracked.trim().to_string();
-    }
-    match from_vt {
-        Some(v) if !v.trim().is_empty() => v.trim().to_string(),
-        _ => tracked.trim().to_string(),
-    }
-}
-
-fn strip_prompt(cursor_line: &str, prompt_col: Option<u16>, tracked: &str) -> Option<String> {
-    let chars: Vec<char> = cursor_line.chars().collect();
-    if let Some(col) = prompt_col {
-        let col = col as usize;
-        if col <= chars.len() {
-            return Some(chars[col..].iter().collect());
-        }
-    }
-    // No prompt width known: if the tracked text appears at the end of the line, take it.
-    let t = tracked.trim();
-    if !t.is_empty() && cursor_line.trim_end().ends_with(t) {
-        return Some(t.to_string());
-    }
-    None
+/// Only a complete, reliable agent-owned command can enter the policy gate.
+/// Completion, history and unknown editing never fall back to screen fragments.
+pub fn resolve_command(tracked: &str, dirty: bool) -> Option<String> {
+    (!dirty).then(|| tracked.trim().to_string())
 }

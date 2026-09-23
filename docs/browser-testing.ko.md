@@ -91,3 +91,16 @@ CONN_SSH_FIXTURE_CONFIG=/path/to/disposable/client.conf \
 같은 SSH 픽스처에 복합 명령으로 진입하려면 입력 검사 명령에 `CONN_SSH_COMPOUND_ENTRY=1`을 추가한다. 한글 검사는 원격 UTF-8 로케일(예: `LC_ALL=C.UTF-8`)이 필요하다. 사용자 서버가 아닌 폐기 가능한 픽스처에만 설정한다.
 
 빌드된 배포 파일 자체를 검사하려면 `CONN_TEST_WEB_BUNDLE=/path/to/conn-web-0.8.7-linux-x64 npm run test:collaboration`을 실행한다. 구성 요소를 다시 빌드하지 않으며, 별도 상태 디렉터리에서 묶음의 실제 UI·서버·지속 MCP CLI를 사용한다.
+
+## 실제 Vim 편집 회귀 검사
+
+위 Rust 실행 파일과 웹 UI를 빌드한 뒤 실행합니다.
+
+```sh
+npm run test:editor -w @conn/collaboration-tests
+CONN_EDITOR_BROWSER=webkit npm run test:editor -w @conn/collaboration-tests
+```
+
+필요하면 고정된 Playwright CLI로 WebKit과 호스트 의존성을 설치합니다. 실제 `vi` 실행 파일(`vi -Nu NONE -n -i NONE`), 격리된 임시 파일, 프로덕션 UI와 Rust PTY를 사용합니다. 비공유·공유 상태의 편집, 사람 개입, 커서 편집, 정확한 저장 내용, 편집 중 화면 재연결, 100줄 파일의 창 크기 변경 후 편집을 검사합니다. Vim을 실행한 뒤 타이핑 전에 터미널 포커스를 강제로 복구하지 않아 포커스 상실도 검출합니다. `CONN_SSH_FIXTURE_CONFIG`와 `CONN_SSH_COMPOUND_ENTRY`는 위의 폐기 가능한 SSH 픽스처를 선택하며, 그 안에 Vim 호환 `vi`가 설치되어 있어야 합니다. 운영 호스트를 대상으로 실행하지 마세요.
+
+`CONN_EDITOR_OUTPUT`으로 증거 폴더를 지정합니다. 예상하지 못한 브라우저 오류는 실패 처리합니다. 이전에도 관찰된 `ResizeObserver loop completed with undelivered notifications.` 경고는 별도로 집계해 `runtime.json`에 남깁니다. 편집 성공을 그 경고가 무해하다는 근거로 해석하지 않습니다. Linux WebKit을 포함한 브라우저 결과는 macOS 네이티브 키보드·IME·IPC 동작을 입증하지 않습니다. 미해결 네이티브 제보는 [0.8.7 Vim 조사 기록](vim-input-investigation.ko.md)을 참고하세요.

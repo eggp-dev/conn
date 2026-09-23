@@ -38,7 +38,7 @@ fn checkpoint_preserves_output_state_and_following_bytes_at_every_split() {
     for (fixture, bytes) in fixtures.iter().enumerate() {
         for split in 0..=bytes.len() {
             let mut h = common::Harness::new();
-            h.session.resize(6, 20);
+            h.session.resize(6, 20).unwrap();
             h.session.pty_output(&bytes[..split]);
             let mut original = vt100::Parser::new(6,20,5000);
             original.process(&bytes[..split]);
@@ -60,7 +60,7 @@ fn checkpoint_is_owner_only_does_not_expose_hidden_input_or_change_sequence() {
     let mut h = common::Harness::new();
     h.session.pty_output(b"shown\x1b[8mconcealed\x1b[28m");
     let before=h.session.output_seq();
-    h.session.human_input(b"not-echoed-password");
+    h.session.human_input(b"not-echoed-password").unwrap();
     let c=h.session.renderer_checkpoint().unwrap();
     assert_eq!(c.output_seq,before);
     assert!(!String::from_utf8_lossy(&c.data).contains("not-echoed-password"));
@@ -71,7 +71,7 @@ fn checkpoint_is_owner_only_does_not_expose_hidden_input_or_change_sequence() {
 #[test]
 fn one_row_history_and_oversized_incomplete_control_state() {
     let mut h = common::Harness::new();
-    h.session.resize(1, 8);
+    h.session.resize(1, 8).unwrap();
     let bytes = b"abcdefghijk\r\nABCDEFGHIJK\r\nlast";
     h.session.pty_output(bytes);
     let mut original=vt100::Parser::new(1,8,5000); original.process(bytes);

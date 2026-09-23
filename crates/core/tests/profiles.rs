@@ -224,7 +224,7 @@ fn native_profile_launches_with_environment_and_cleans_up_on_termination() {
     } else {
         "printf 'CONN_RESULT_%s\\n' \"$CONN_TEST_VALUE\"\n"
     };
-    engine.write_input(command.as_bytes());
+    engine.write_input(command.as_bytes()).unwrap();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(8);
     let mut seen = false;
     while std::time::Instant::now() < deadline {

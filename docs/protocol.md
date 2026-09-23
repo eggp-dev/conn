@@ -98,7 +98,7 @@ See [trust limits](security.md#one-terminal-one-presented-surface).
 | `type` | `{text}` | `{typed}`; no execution newline |
 | `send_key` | `{key,intent?}` | Sent/executed/cancelled/rejected/denied result; Enter requires intent when policy specifies it |
 | `interrupt` | — | Ctrl-C through the same PTY; requires this agent's current authority |
-| `check_approval` | `{approvalId}` | State of the caller's command approval |
+| `check_approval` | `{approvalId}` | State of the caller's command approval; `inputRetained` reports cancelled input awaiting explicit recovery |
 | `control_request_state` | `{requestId}` | Pending/granted/denied/expired control request |
 | `proposal_state` | `{proposalId}` | Drafting/ready/executed/rejected/denied proposal |
 | `exec_state` | `{execId}` | Scheduled/executed/cancelled execution |
@@ -122,6 +122,18 @@ There is no public `analyse` filesystem-inspection route or full owner status pa
 Use the review UI for structural policy details and the current snapshot for terminal
 context. `conn log` is an explicit local file read using the CLI process's OS privileges,
 not a screen/history capability granted by this protocol.
+
+An edited command must remain fully tracked to enter the policy gate. Completion,
+history and unsupported edits return `input_unverified` instead of evaluating a
+cursor-row fragment. Cancellation at a confirmed idle shell waits for a fresh
+input boundary; otherwise the typed line stays visible and new agent appends are
+blocked until explicit recovery. Human input cancels pending review and takes over
+the visible line; it is never silently rewritten with guessed editing keys.
+
+`input_outcome_unknown` reports a failed PTY write or flush whose partial delivery
+cannot be excluded. No automatic replay is allowed. `resize_failed` reports that
+the local PTY did not confirm the requested size; the core does not publish that
+size as applied. This does not establish the dimensions of a remote SSH endpoint.
 
 ## Original control request
 
@@ -154,7 +166,7 @@ content. Revocation cannot recall bytes already delivered to the client/model.
 
 `hello_required`, `owner_required`, `surface_unavailable`, `not_available`,
 `busy`, `not_controller`, `lease_expired`, `process_exited`, `invalid_input`,
-`not_found`, `rate_limited`, `input_pending`, `approval_pending`, `exec_pending`, `proposal_pending`, `intent_required`,
+`not_found`, `rate_limited`, `input_pending`, `input_unverified`, `input_outcome_unknown`, `resize_failed`, `approval_pending`, `exec_pending`, `proposal_pending`, `intent_required`,
 `masked`, `control_denied`, `wrong_mode`, `unsupported`, `connection_closing`, `admission_pending`, `admission_denied`, `parse`.
 
 Private/unauthorized session access uses a generic unavailable response. The owner can start the app with `CONN_TRACE_REFUSALS=1` to print the cause of each such refusal to stderr (reasons and identifiers only). A client should

@@ -14,10 +14,12 @@ fn mode_switch_refuses_physical_input_until_cancelled() {
     h.agent(1, "claude");
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "echo mode-switch-test").unwrap();
+    h.session.pty_output(b"echo mode-switch-test");
     assert!(matches!(h.session.set_mode(AgentMode::Copilot), Err(SessionError::InputPending)));
     assert_eq!(h.session.mode(), AgentMode::Autopilot);
     assert_eq!(h.pty_str(), "echo mode-switch-test", "rejected switch neither types nor executes");
     h.session.agent_interrupt(1).unwrap();
+    common::present(&mut h.session, vec![]);
     h.session.set_mode(AgentMode::Copilot).unwrap();
     h.session.agent_type(1, "echo new-proposal").unwrap();
     let KeyResult::Proposed { proposal_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
@@ -37,7 +39,7 @@ fn cancelled_grace_retains_tracking_and_cannot_hide_pending_input() {
     h.session.cancel_exec(&exec_id).unwrap();
     assert!(matches!(h.session.set_mode(AgentMode::Copilot), Err(SessionError::InputPending)));
     // Explicit cancel; a Ctrl-U keystroke alone cannot prove line erasure.
-    h.session.human_input(b"\x03");
+    h.session.human_input(b"\x03").unwrap();
     h.session.set_mode(AgentMode::Copilot).unwrap();
 }
 
@@ -100,7 +102,7 @@ fn revoked_sharing_cannot_append_to_existing_shell_input() {
     assert!(h.session.agent_type(1,"echo proposed").is_err());
     assert!(h.session.agent_interrupt(1).is_err());
     h.session.set_attended(true);common::present(&mut h.session,vec!["echo stale".into()]);
-    h.session.human_input(b"\x15");
+    h.session.human_input(b"\x15").unwrap();
     assert_eq!(h.pty_str(),"echo stale\x15");
 }
 
@@ -237,26 +239,26 @@ fn real_pty_copilot_interrupt_stops_running_shell_command() {
     // A terminal's signal handling may flush bytes queued with Ctrl-C. Wait for
     // the shell's fresh prompt before sending the human's follow-up command.
     wait_for(|| session.lock().screen().cursor_line().contains("conn-interrupt$"));
-    session.lock().human_input(b"printf 'interrupt-result-%s\\n' $((40+2))\r");
+    session.lock().human_input(b"printf 'interrupt-result-%s\\n' $((40+2))\r").unwrap();
     wait_for(|| session.lock().screen().rows().iter().any(|r| r.trim() == "interrupt-result-42"));
     engine.terminate().unwrap();
 }
 
 #[test]
-fn human_input_denies_a_pending_approval_instead_of_editing_its_command() {
+fn human_input_denies_pending_review_and_preserves_unknown_foreground_editing() {
     let mut h = Harness::new();
     h.agent(1, "a");
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "sudo ls").unwrap();
     let KeyResult::Pending { approval_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!("expected an approval") };
-    h.session.human_input(b"x");
-    // The reviewed text is gone before the human's byte lands: clear line, then "x".
-    assert_eq!(h.pty_str(), "sudo ls\x15x");
+    h.session.human_input(b"x").unwrap();
+    // Unknown foreground input belongs to the human; do not inject a guessed clear key.
+    assert_eq!(h.pty_str(), "sudo lsx");
     assert!(h.session.status().pending.is_empty(), "the approval must not outlive human input");
     assert_eq!(h.session.check_approval(&approval_id).unwrap().state, ApprovalState::Denied);
     // Approving late can no longer submit a line that was never reviewed.
     assert!(h.session.resolve_approval(&approval_id, Decision::Grant, "human").is_err());
-    assert_eq!(h.pty_str(), "sudo ls\x15x", "nothing is submitted by a late approval");
+    assert_eq!(h.pty_str(), "sudo lsx", "nothing is submitted by a late approval");
 }
 
 #[test]

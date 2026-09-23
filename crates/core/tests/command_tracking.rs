@@ -11,7 +11,7 @@ fn wrapped_unicode_redirect_is_reviewed_and_audited_in_full() {
     for cols in [20, 80, 132] {
         let mut h = Harness::new();
         let events = h.frontend("ui");
-        h.session.resize(4, cols);
+        h.session.resize(4, cols).unwrap();
         h.agent(1, "agent");
         h.session.agent_request_control(1).unwrap();
         h.session.pty_output("사용자@conn$ ".as_bytes());
@@ -44,7 +44,7 @@ fn wrapped_unicode_redirect_is_reviewed_and_audited_in_full() {
 fn wrapping_cannot_hide_a_dangerous_prefix_from_policy() {
     let command = format!("rm -- '{}' && printf '%s' 'done'", "example-".repeat(40));
     let mut h = Harness::new();
-    h.session.resize(3, 40);
+    h.session.resize(3, 40).unwrap();
     h.agent(1, "agent");
     h.session.agent_request_control(1).unwrap();
     h.session.pty_output(b"dev$ ");
