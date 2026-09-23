@@ -696,7 +696,7 @@ dependencies = [
 
 [[package]]
 name = "conn"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "clap",
  "conn-core",
@@ -706,8 +706,9 @@ dependencies = [
 
 [[package]]
 name = "conn-core"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
+ "anyhow",
  "chrono",
  "dirs 5.0.1",
  "globset",
@@ -729,7 +730,7 @@ dependencies = [
 
 [[package]]
 name = "conn-desktop"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "base64 0.22.1",
  "cc",
@@ -751,7 +752,7 @@ dependencies = [
 
 [[package]]
 name = "conn-frontend"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "base64 0.22.1",
  "conn-core",
@@ -768,7 +769,7 @@ dependencies = [
 
 [[package]]
 name = "conn-web"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "axum",
  "base64 0.22.1",

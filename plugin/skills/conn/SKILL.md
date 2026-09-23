@@ -31,6 +31,10 @@ This shell is **watched by a human who can step in at any moment**. You are a gu
 
 ## Revocation and hand-back
 
+- `input_unverified` means the complete edited command cannot be established, or cancelled input still remains. Never submit a screen-row fragment as the command. Read the shared screen; if it is safe to interrupt your own abandoned shell line, explicitly interrupt it and wait for a fresh prompt before typing a complete new command. Do not retry a command the human rejected.
+- A denied/expired approval can return `inputRetained: true`: cancelling permission does not guarantee the foreground program cleared its input. Do not append another command. Conn automatically clears only a confirmed idle shell; an unverified foreground needs explicit recovery.
+- `input_outcome_unknown` means some input may already have arrived. Inspect the screen and recover deliberately; never replay the failed write or Enter automatically.
+
 - Any keystroke from the human revokes control instantly and the write tools vanish from the list. **Do not fight it.** Snapshot to see what the human is doing, and wait.
 - When the human hands control back (a `control handed back` notification) continue where you were. Snapshot once more first; the screen may have changed.
 - If you wait long, the lease expires. Just request again.

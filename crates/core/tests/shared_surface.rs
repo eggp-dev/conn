@@ -8,7 +8,7 @@ use std::sync::Arc;
 #[test]
 fn background_screen_contains_output_only_and_no_scrollback() {
     let mut h=Harness::new(); h.agent(1,"a"); h.session.set_attended(false);
-    h.session.human_input(b"UN_ECHOED_PASSWORD\r");
+    h.session.human_input(b"UN_ECHOED_PASSWORD\r").unwrap();
     h.session.pty_output(b"User: demo\r\nPassword: ******");
     let snap=h.session.snapshot(Actor::Agent{conn:1}).unwrap();
     assert!(snap.projection.screen.join("\n").contains("Password: ******"));
@@ -21,7 +21,7 @@ fn background_screen_contains_output_only_and_no_scrollback() {
 fn sharing_keeps_pty_and_requires_selected_connection_immediately() {
     let mut h=Harness::new(); h.agent(1,"selected"); h.agent(2,"other");
     h.session.set_shared(false).unwrap();
-    h.session.human_input(b"authenticated\r");
+    h.session.human_input(b"authenticated\r").unwrap();
     h.session.set_shared_with_agents(true,vec![1]).unwrap();
     assert_eq!(h.pty_str(),"authenticated\r","sharing never restarts or clears the shell");
     assert!(h.session.snapshot(Actor::Agent{conn:1}).is_ok());
@@ -33,19 +33,19 @@ fn sharing_keeps_pty_and_requires_selected_connection_immediately() {
     h.session.set_shared(false).unwrap();
     assert!(h.session.current_lease().is_none());
     assert!(h.session.agent_type(1,"leak").is_err());
-    h.session.human_input(b"human continues\r");
+    h.session.human_input(b"human continues\r").unwrap();
     assert!(h.pty_str().ends_with("human continues\r"));
 }
 
 #[test]
 fn physical_input_is_not_forgotten_by_sharing_transition() {
     let mut h=Harness::new(); h.agent(1,"a");
-    h.session.set_shared(false).unwrap(); h.session.human_input(b"unfinished");
+    h.session.set_shared(false).unwrap(); h.session.human_input(b"unfinished").unwrap();
     let generation=h.session.surface_generation();let audit_len=h.audit_events().len();
     assert!(matches!(h.session.set_shared_with_agents(true,vec![1]),Err(SessionError::InputPending)));
     assert!(h.session.is_private());assert_eq!(h.session.surface_generation(),generation);
     assert_eq!(h.audit_events().len(),audit_len);assert_eq!(h.pty_str(),"unfinished");
-    h.session.human_input(b"\x03");
+    h.session.human_input(b"\x03").unwrap();
     h.session.set_shared_with_agents(true,vec![1]).unwrap();present(&mut h.session,vec!["$".into()]);
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1,"typed by agent").unwrap();
@@ -56,7 +56,7 @@ fn physical_input_is_not_forgotten_by_sharing_transition() {
     assert!(h.pty_str().ends_with("typed by agent"), "revocation leaves physical input with its owner");
     assert!(matches!(h.session.set_shared_with_agents(true,vec![1]),Err(SessionError::InputPending)));
     assert!(h.session.is_private());
-    h.session.human_input(b"\x03");
+    h.session.human_input(b"\x03").unwrap();
     assert!(!h.session.status().input_pending);
     h.session.set_shared_with_agents(true,vec![1]).unwrap();
     h.session.set_shared(false).unwrap();
@@ -167,7 +167,7 @@ fn private_activity_is_not_recorded_and_history_is_not_backfilled() {
     let mut h=Harness::new(); h.session.set_shared(false).unwrap();
     let before=h.audit_events().len();
     h.session.set_control_gate(true); h.session.set_attended(false);h.session.set_attended(true);
-    h.session.human_input(b"PRIVATE_TEST_INPUT\r");
+    h.session.human_input(b"PRIVATE_TEST_INPUT\r").unwrap();
     assert_eq!(h.audit_events().len(),before);
     h.session.set_shared_with_agents(true,vec![]).unwrap();
     assert_eq!(h.audit_events().last().unwrap().action,"sharing_started");
@@ -196,7 +196,7 @@ fn background_grace_executes_but_human_input_still_cancels() {
         h.session.agent_request_control(1).unwrap();h.session.agent_type(1,"echo safe").unwrap();
         let KeyResult::Scheduled{exec_id,..}=h.session.agent_send_key(1,"ENTER").unwrap() else {panic!()};
         h.session.set_attended(false);
-        if takeover {h.session.human_input(b"\x03");}
+        if takeover {h.session.human_input(b"\x03").unwrap();}
         h.session.tick(Instant::now()+Duration::from_millis(150));
         assert_eq!(h.session.exec_state(&exec_id).unwrap().0,if takeover {ExecState::Cancelled} else {ExecState::Executed});
         assert_eq!(h.pty_str(),if takeover {"echo safe\x03"} else {"echo safe\r"});

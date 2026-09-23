@@ -25,6 +25,7 @@ parking_lot.workspace = true
 globset.workspace = true
 
 [dev-dependencies]
+anyhow = "1"
 tempfile.workspace = true
 
 [target.'cfg(windows)'.dependencies]

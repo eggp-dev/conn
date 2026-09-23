@@ -55,3 +55,14 @@ test('unmount cannot enable input from a late checkpoint completion', () => {
   queue.push({size:{rows:24,cols:80},data:new Uint8Array([65]),reset:true,applied:()=>{ready=true;}});
   queue.dispose(); finish(); assert.equal(ready,false);
 });
+
+for (const action of ['clear','replacement'] as const) test(`${action} invalidates an in-flight checkpoint readiness callback`, () => {
+  const callbacks: (()=>void)[]=[]; const ready: string[]=[];
+  const queue=terminalOutputQueue(()=>{},(_data,done)=>callbacks.push(done));
+  const frame=(id:string)=>({size:{rows:24,cols:80},data:new Uint8Array([65]),reset:true,applied:()=>ready.push(id)});
+  queue.push(frame('old'));
+  if(action==='clear') queue.clear();
+  queue.push(frame('current'));
+  callbacks.shift()!(); assert.deepEqual(ready,[]);
+  callbacks.shift()!(); assert.deepEqual(ready,['current']); queue.dispose();
+});

@@ -11,6 +11,10 @@ export const LANGS: { id: Lang; name: string }[] = [
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  "hold.input_retained": "Cancelled. The typed line remains in this program; inspect or clear it before continuing.",
+  "terminal.syncing": "Restoring this terminal… Input is paused.",
+  "terminal.restore": "Restore screen",
+  "terminal.resize_failed": "The terminal size could not be applied. Resize the window to retry.",
   "connection.uncertain": "The connection was interrupted, and the last request may have completed. Reconnect, then check the terminal and request state before trying again.",
   "host.connect": "Connect to Conn",
   "host.occupied": "Open in another view",
@@ -635,6 +639,10 @@ const en: Dict = {
 };
 
 const ko: Dict = {
+  "hold.input_retained": "요청을 취소했습니다. 입력한 줄은 남아 있으니 확인하거나 지운 뒤 계속하세요.",
+  "terminal.syncing": "터미널 화면을 복원하고 있습니다. 입력은 잠시 대기합니다.",
+  "terminal.restore": "화면 다시 복원",
+  "terminal.resize_failed": "터미널 크기를 적용하지 못했습니다. 창 크기를 바꾸면 다시 시도합니다.",
   "connection.uncertain": "연결이 끊겨 마지막 요청이 이미 처리됐을 수 있습니다. 다시 연결한 뒤 터미널과 요청 상태를 확인하고 재시도하세요.",
   "host.connect": "Conn에 연결",
   "host.occupied": "다른 화면에서 열려 있습니다",

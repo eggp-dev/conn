@@ -85,7 +85,7 @@ impl Shell {
         }
     }
     fn send(&self, command: &str) {
-        self.engine.write_input(format!("{command}\r").as_bytes());
+        self.engine.write_input(format!("{command}\r").as_bytes()).unwrap();
     }
     fn starts(&self) -> Vec<Event> {
         self.events
@@ -257,7 +257,7 @@ fn long_input_does_not_block_output(agent: bool) {
     let writer = std::thread::spawn(move || {
         let mut s = session.lock();
         if agent { s.agent_type(7, &command).unwrap(); }
-        else { s.human_input(command.as_bytes()); }
+        else { s.human_input(command.as_bytes()).unwrap(); }
         drop(s);
         let _ = done.send(());
     });
@@ -270,7 +270,7 @@ fn long_input_does_not_block_output(agent: bool) {
     assert!(completed, "long PTY input blocked the output reader");
     writer.join().unwrap();
     if agent { h.engine.session().lock().agent_send_key(7, "ENTER").unwrap(); }
-    else { h.engine.write_input(b"\r"); }
+    else { h.engine.write_input(b"\r").unwrap(); }
     let expected = format!("LONG_OUTPUT<{payload}>\r\n");
     h.until(|| String::from_utf8_lossy(&h.output.lock().unwrap()).contains(&expected));
     if agent { h.engine.session().lock().agent_release_control(7).unwrap(); }
@@ -345,7 +345,7 @@ fn completion_prompt_confirmation_clears_before_async_execution_hooks() {
         let mut s=session.lock();
         // Long enough that a slow runner still observes the command running below;
         // 0.15s let it finish between the start hook and the assertion on macOS CI.
-        s.human_input(b"sleep 1\r");
+        s.human_input(b"sleep 1\r").unwrap();
         // Holding Session prevents the reader from processing the queued start
         // hook. Enter itself must close the automatic completion window.
         assert!(!s.completion_prompt_ready());
@@ -394,6 +394,8 @@ fn nested_foreground_commands_require_review_across_a_sharing_boundary() {
         assert!(s.resolve_approval(&approval_id,Approval::AllowSession,"test").is_err());
         s.resolve_approval(&approval_id,Approval::Deny,"test").unwrap();
     }
+    h.engine.write_input(b"\x03").unwrap();
+    std::thread::sleep(Duration::from_millis(100));
     h.send("exit");h.until(||session.lock().completion_prompt_ready());
     assert!(!session.lock().review_required(),"only the matching outer-shell end restores local trust");
     h.engine.terminate().unwrap();
@@ -405,7 +407,7 @@ fn delayed_private_hook_payloads_are_discarded_after_sharing() {
     let proof=h._dir.path().join("private-hook-proof");
     {
         let mut s=session.lock();s.set_shared(false).unwrap();
-        s.human_input(b"printf PRIVATE_HOOK_PAYLOAD > private-hook-proof\r");
+        s.human_input(b"printf PRIVATE_HOOK_PAYLOAD > private-hook-proof\r").unwrap();
         // The child completes while Session is locked, so its start/end mailbox
         // records cannot be consumed until after the sharing flag has changed.
         let until=Instant::now()+Duration::from_secs(3);
@@ -429,7 +431,7 @@ fn idle_cancel_empty_enter_and_ignored_history_restore_prompt_policy() {
     let session = h.engine.session();
     for input in [b"\x03".as_slice(), b"\r", b"\r\r"] {
         assert!(session.lock().completion_prompt_ready());
-        h.engine.write_input(input);
+        h.engine.write_input(input).unwrap();
         h.until(|| session.lock().completion_prompt_ready());
         assert!(!session.lock().review_required());
         assert!(matches!(session.lock().analyse_line("python3 --version").decision, Decision::Allow));
@@ -459,19 +461,19 @@ fn actual_readline_empty_edits_and_midline_kill_preserve_command_boundary() {
     let session = h.engine.session();
     h.until(|| session.lock().screen().cursor_line().ends_with("conn-test$"));
     for edit in [b"\x1b[D".as_slice(), b"\x0c", b"\x7f"] {
-        h.engine.write_input(edit);
+        h.engine.write_input(edit).unwrap();
         assert!(!session.lock().status().input_pending);
     }
     for (text, erase) in [("abc", b"\x7f\x7f\x7f".as_slice()), ("oneword", b"\x17"), ("word", b"\x15"), ("word", b"\x01\x1b[3~\x1b[3~\x1b[3~\x1b[3~")] {
-        h.engine.write_input(text.as_bytes());
+        h.engine.write_input(text.as_bytes()).unwrap();
         h.until(|| session.lock().screen().cursor_line().ends_with(text));
         assert!(session.lock().status().input_pending);
-        h.engine.write_input(erase);
+        h.engine.write_input(erase).unwrap();
         h.until(|| !session.lock().status().input_pending);
     }
-    h.engine.write_input(b"printf HUMAN_SUFFIX");
+    h.engine.write_input(b"printf HUMAN_SUFFIX").unwrap();
     h.until(|| session.lock().screen().cursor_line().contains("HUMAN_SUFFIX"));
-    h.engine.write_input(b"\x01\x15");
+    h.engine.write_input(b"\x01\x15").unwrap();
     h.until(|| session.lock().screen().cursor().col == 11);
     {
         let mut s = session.lock();
@@ -480,7 +482,7 @@ fn actual_readline_empty_edits_and_midline_kill_preserve_command_boundary() {
         assert!(matches!(s.agent_type(1, "printf AGENT"), Err(conn_core::session::SessionError::InputPending)));
         assert!(matches!(s.agent_send_key(1, "ENTER"), Err(conn_core::session::SessionError::InputPending)));
     }
-    h.engine.write_input(b"\x0b");
+    h.engine.write_input(b"\x0b").unwrap();
     h.until(|| !session.lock().status().input_pending);
     h.run("printf BOUNDARY_OK", 1);
     assert!(!format!("{:?}", h.starts()).contains("HUMAN_SUFFIX"));

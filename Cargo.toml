@@ -6,14 +6,14 @@ members = ["crates/core", "crates/cli", "crates/frontend", "crates/web", "fronte
 default-members = ["crates/core", "crates/cli", "crates/frontend", "crates/web"]
 
 [workspace.package]
-version = "0.8.7"
+version = "0.8.8"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/eggp-dev/conn"
 
 [workspace.dependencies]
-conn-core = { path = "crates/core", version = "0.8.7" }
-conn-frontend = { path = "crates/frontend", version = "0.8.7" }
+conn-core = { path = "crates/core", version = "0.8.8" }
+conn-frontend = { path = "crates/frontend", version = "0.8.8" }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "time", "macros", "signal"] }
 portable-pty = "0.8"
 vt100 = { path = "vendor/vt100", version = "0.15.2" }

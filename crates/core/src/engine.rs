@@ -309,8 +309,8 @@ impl Engine {
     }
 
     /// Human keyboard input. Revokes any agent lease first.
-    pub fn write_input(&self, bytes: &[u8]) {
-        self.session.lock().human_input(bytes);
+    pub fn write_input(&self, bytes: &[u8]) -> Result<(), crate::session::SessionError> {
+        self.session.lock().human_input(bytes)
     }
 
     /// Deliver one bounded native external-input chunk. No command tracking.

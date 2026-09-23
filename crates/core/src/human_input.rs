@@ -14,6 +14,11 @@ impl HumanInput {
     pub fn remember_empty(&mut self, screen: &ScreenModel) {
         self.boundary = screen.input_boundary(); self.observed = false;
     }
+    pub fn begin_cleanup(&mut self, screen: &ScreenModel) {
+        self.pending = true;
+        self.reconcile = true;
+        self.observed |= self.boundary.is_some() && self.boundary != screen.input_boundary();
+    }
     pub fn reset(&mut self) { *self = Self::default(); }
 
     pub fn note(&mut self, bytes: &[u8], screen: &ScreenModel, agent_pending: bool) {

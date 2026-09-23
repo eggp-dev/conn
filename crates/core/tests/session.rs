@@ -31,7 +31,7 @@ fn preemptive_takeover_order() {
     let trace = Arc::new(Mutex::new(Vec::new()));
     h.session.set_trace(trace.clone());
 
-    h.session.human_input(b"x");
+    h.session.human_input(b"x").unwrap();
 
     let t = trace.lock().unwrap().clone();
     assert_eq!(t, vec!["revoke", "pty_write", "event", "audit"], "revoke must precede the PTY write");
@@ -70,7 +70,7 @@ fn concurrent_agent_writes_never_land_after_human_byte() {
         ok
     });
     std::thread::sleep(Duration::from_millis(5));
-    session.lock().human_input(b"H");
+    session.lock().human_input(b"H").unwrap();
     let _ = writer.join().unwrap();
     let bytes = pty.lock().unwrap().clone();
     let pos = bytes.iter().position(|b| *b == b'H').unwrap();
@@ -138,14 +138,14 @@ fn allow_executes_and_audits() {
 }
 
 #[test]
-fn deny_blocks_and_clears_line_without_approval() {
+fn deny_blocks_and_retains_unknown_foreground_input() {
     let mut h = Harness::new();
     h.agent(1, "copilot");
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "rm -rf /").unwrap();
     let r = h.session.agent_send_key(1, "ENTER").unwrap();
     assert!(matches!(r, KeyResult::Denied { .. }));
-    assert_eq!(h.pty_str(), "rm -rf /\x15");
+    assert_eq!(h.pty_str(), "rm -rf /");
     assert!(h.session.status().pending.is_empty());
     assert!(h.session.resolve_first_pending(Decision::Grant, "cli").is_err());
 }
@@ -172,7 +172,7 @@ fn confirm_then_deny_keeps_the_lease() {
     h.session.resolve_approval(&id, Decision::Deny, "cli").unwrap();
     assert!(h.session.controller().lease().is_some(), "deciding an approval is not a takeover");
     assert_eq!(h.session.check_approval(&id).unwrap().state, ApprovalState::Denied);
-    assert_eq!(h.pty_str(), "rm -rf ./tmp\x15");
+    assert_eq!(h.pty_str(), "rm -rf ./tmp");
     let exec = h.audit_events().into_iter().find(|e| e.action == "exec").unwrap();
     assert_eq!(exec.fields["policy"], "confirm");
     assert_eq!(exec.fields["approval"], "denied");
@@ -219,7 +219,7 @@ fn approval_expires_via_tick() {
     let KeyResult::Pending { approval_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
     h.session.tick(Instant::now() + Duration::from_secs(1));
     assert_eq!(h.session.check_approval(&approval_id).unwrap().state, ApprovalState::Expired);
-    assert_eq!(h.pty_str(), "sudo ls\x15");
+    assert_eq!(h.pty_str(), "sudo ls");
 }
 
 #[test]
@@ -232,7 +232,7 @@ fn interrupt_cancels_pending_approval() {
     common::present(&mut h.session, vec!["Approval: sudo ls".into()]);
     h.session.agent_interrupt(1).unwrap();
     assert_eq!(h.session.check_approval(&approval_id).unwrap().state, ApprovalState::Denied);
-    assert_eq!(h.pty_str(), "sudo ls\x15\x03");
+    assert_eq!(h.pty_str(), "sudo ls\x03");
 }
 
 #[test]
@@ -262,9 +262,9 @@ fn human_takeover_discards_command_tracking_without_recording_input() {
     h.agent(1, "copilot");
     h.session.agent_request_control(1).unwrap();
     h.session.agent_type(1, "echo ").unwrap();
-    h.session.human_input(b"hi"); // takeover, line continues
+    h.session.human_input(b"hi").unwrap(); // takeover, line continues
     assert_eq!(h.session.input_line(), "");
-    h.session.human_input(b"\r");
+    h.session.human_input(b"\r").unwrap();
     let ev = h.audit_events();
     assert!(!ev.iter().any(|e| e.actor == "human" && e.action == "exec"));
 }
@@ -273,12 +273,12 @@ fn human_takeover_discards_command_tracking_without_recording_input() {
 fn human_enter_inside_alternate_screen_is_not_audited() {
     let mut h = Harness::new();
     h.session.pty_output(b"\x1b[?1049h");
-    h.session.human_input(b"jjj\r");
+    h.session.human_input(b"jjj\r").unwrap();
     assert!(!h.audit_actions().iter().any(|(a, act)| a == "human" && act == "exec"));
 }
 
 #[test]
-fn tab_completion_falls_back_to_vt_model() {
+fn tab_completion_does_not_execute_an_unverified_screen_fragment() {
     let mut h = Harness::new();
     h.agent(1, "copilot");
     h.session.agent_request_control(1).unwrap();
@@ -290,8 +290,8 @@ fn tab_completion_falls_back_to_vt_model() {
     h.session.agent_send_key(1, "TAB").unwrap();
     h.session.pty_output(b"c/"); // shell completed to "ls src/"
     common::present(&mut h.session, vec!["dev$ ls src/".into()]);
-    let r = h.session.agent_send_key(1, "ENTER").unwrap();
-    assert!(matches!(r, KeyResult::Executed { ref cmd } if cmd == "ls src/"), "{r:?}");
+    assert!(matches!(h.session.agent_send_key(1, "ENTER"), Err(SessionError::InputUnverified)));
+    assert!(!h.pty_bytes().contains(&b'\r'));
 }
 
 #[test]

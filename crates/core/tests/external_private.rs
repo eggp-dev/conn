@@ -38,7 +38,7 @@ fn private_input_is_untracked_and_human_takeover_permanently_revokes_external_wr
     s.set_trace(trace.clone());
     s.write_external(b"external-fixture").unwrap();
     assert!(s.write_external(&[b'x'; 1025]).is_err());
-    s.human_input(b"human-fixture\r");
+    s.human_input(b"human-fixture\r").unwrap();
     assert!(!s.external_writer_active());
     assert!(s.write_external(b"must-not-arrive").is_err());
     assert_eq!(&*bytes.lock().unwrap(), b"external-fixturehuman-fixture\r");
@@ -71,7 +71,7 @@ fn terminal_protocol_responses_do_not_impersonate_human_takeover_or_restore_acce
     s.write_terminal_response(b"\x1b[1;1R").unwrap();
     assert!(s.external_writer_active());
     assert!(s.input_line().is_empty());
-    s.human_input(b"x");
+    s.human_input(b"x").unwrap();
     assert!(!s.external_writer_active());
     s.write_terminal_response(b"\x1b[0n").unwrap();
     assert!(!s.external_writer_active());
@@ -192,7 +192,7 @@ fn direct_startup_preserves_argv_cwd_and_env_without_logging_hidden_input_or_sta
     }
     let events = Arc::new(Mutex::new(Vec::new()));
     engine.subscribe("native", Box::new(VecSink(events.clone())));
-    engine.write_input(b"synthetic-hidden-value\r");
+    engine.write_input(b"synthetic-hidden-value\r").unwrap();
     let until = Instant::now() + Duration::from_secs(5);
     while !engine.has_exited() {
         assert!(Instant::now() < until, "startup did not exit");

@@ -51,7 +51,7 @@ impl Session {
         {
             return Ok(());
         }
-        if shared && (self.input.has_pending() || self.human_input.pending) {
+        if shared && (self.cancelled_input || self.input.has_pending() || self.human_input.pending) {
             return Err(SessionError::InputPending);
         }
         Ok(())

@@ -24,7 +24,7 @@ fn frontend_receives_lifecycle_events() {
     h.session.agent_type(1, "kubectl delete pod x").unwrap();
     let KeyResult::Pending { approval_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
     h.session.resolve_approval(&approval_id, Decision::Grant, "frontend").unwrap();
-    h.session.human_input(b"x");
+    h.session.human_input(b"x").unwrap();
     h.session.pty_output(b"out");
     common::present(&mut h.session, vec!["out".into()]);
     h.session.tick(Instant::now());
@@ -40,7 +40,7 @@ fn frontend_receives_lifecycle_events() {
 }
 
 #[test]
-fn human_input_denies_a_pending_approval_and_clears_the_typed_line() {
+fn human_input_denies_review_and_takes_over_the_visible_line() {
     let mut h = Harness::new();
     h.agent(1, "copilot");
     h.session.agent_request_control(1).unwrap();
@@ -49,10 +49,10 @@ fn human_input_denies_a_pending_approval_and_clears_the_typed_line() {
     // Human keystrokes are a takeover, never a prompt answer: "y" must not approve.
     // The pending command is already typed on the line, so the approval cannot stay
     // alive either, or a later approve would submit that line plus the human's bytes.
-    h.session.human_input(b"y");
+    h.session.human_input(b"y").unwrap();
     assert!(h.session.controller().is_human());
     assert!(h.session.status().pending.is_empty(), "the approval is denied, not answered and not left pending");
-    assert_eq!(h.pty_str(), "sudo ls\x15y", "the reviewed line is cleared before the human's byte; nothing is submitted");
+    assert_eq!(h.pty_str(), "sudo lsy", "human editing takes over the visible line; no guessed clear key or submission");
     assert!(h.session.resolve_first_pending(Decision::Grant, "frontend").is_err());
 }
 
@@ -88,7 +88,7 @@ fn human_input_cancels_grace_window() {
     h.session.agent_type(1, "echo hi").unwrap();
     let KeyResult::Scheduled { exec_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
     h.session.pty_output(b"echo hi");
-    h.session.human_input(b"\x15");
+    h.session.human_input(b"\x15").unwrap();
     h.session.pty_output(b"\r\x1b[K");
     let (state, reason) = h.session.exec_state(&exec_id).unwrap();
     assert_eq!(state, ExecState::Cancelled);

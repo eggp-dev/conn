@@ -10,7 +10,7 @@ fn human_secrets_never_become_commands_titles_or_trace_payloads() {
     let trace = Arc::new(Mutex::new(Vec::new()));
     h.session.set_trace(trace.clone());
     for input in [b"SYNTHETIC_PASSWORD\r".as_slice(), "한글_SYNTHETIC_KEY\r".as_bytes(), b"\x1b[200~SYNTHETIC_PASTE\x1b[201~\r"] {
-        h.session.human_input(input);
+        h.session.human_input(input).unwrap();
         assert!(h.session.input_line().is_empty());
     }
     assert!(!format!("{:?}", h.audit_events()).contains("SYNTHETIC"));
@@ -22,7 +22,7 @@ fn human_secrets_never_become_commands_titles_or_trace_payloads() {
 #[test]
 fn untracked_partial_input_cannot_be_appended_to_or_reconstructed_by_an_agent() {
     let mut h = Harness::new(); h.agent(1, "agent");
-    h.session.human_input(b"SYNTHETIC_PARTIAL");
+    h.session.human_input(b"SYNTHETIC_PARTIAL").unwrap();
     h.session.agent_request_control(1).unwrap();
     assert!(matches!(h.session.agent_type(1, "echo unsafe"), Err(SessionError::InputPending)));
     assert!(matches!(h.session.agent_send_key(1, "ENTER"), Err(SessionError::InputPending)));
@@ -78,7 +78,7 @@ fn real_hidden_password_input_in_an_ordinary_tab_is_not_audited() {
     while !String::from_utf8_lossy(&output.lock().unwrap()).contains("READY") {
         assert!(Instant::now()<deadline);std::thread::sleep(Duration::from_millis(10));
     }
-    engine.write_input(b"SYNTHETIC_HIDDEN_PASSWORD\r");
+    engine.write_input(b"SYNTHETIC_HIDDEN_PASSWORD\r").unwrap();
     while !engine.has_exited() {
         assert!(Instant::now()<deadline);std::thread::sleep(Duration::from_millis(10));
     }
@@ -93,12 +93,12 @@ fn empty_cursor_motion_is_not_pending_and_erasure_requires_visible_evidence() {
     let mut h = Harness::new();
     h.session.pty_output(b"prompt$ ");
     for key in [b"\x1b[D".as_slice(), b"\x0c", b"\x7f", b"\x17"] {
-        h.session.human_input(key);
+        h.session.human_input(key).unwrap();
         assert!(!h.session.status().input_pending);
     }
-    h.session.human_input(b"abc");
+    h.session.human_input(b"abc").unwrap();
     h.session.pty_output(b"abc");
-    h.session.human_input(b"\x7f\x7f\x7f");
+    h.session.human_input(b"\x7f\x7f\x7f").unwrap();
     assert!(h.session.status().input_pending, "keys alone never certify erasure");
     h.session.pty_output(b"\x08\x08\x08\x1b[K");
     assert!(!h.session.status().input_pending, "the shared grid returned to its empty boundary");
@@ -109,15 +109,15 @@ fn empty_cursor_motion_is_not_pending_and_erasure_requires_visible_evidence() {
 fn home_then_ctrl_u_keeps_suffix_blocked_and_redraw_does_not_clear_it() {
     let mut h = Harness::new(); h.agent(1, "agent");
     h.session.pty_output(b"prompt$ ");
-    h.session.human_input(b"printf human"); h.session.pty_output(b"printf human");
-    h.session.human_input(b"\x01\x15"); h.session.pty_output(b"\x1b[9G");
+    h.session.human_input(b"printf human").unwrap(); h.session.pty_output(b"printf human");
+    h.session.human_input(b"\x01\x15").unwrap(); h.session.pty_output(b"\x1b[9G");
     assert!(h.session.status().input_pending);
-    h.session.human_input(b"\x0c"); h.session.pty_output(b"\x1b[2J\x1b[Hprompt$ printf human\x1b[9G");
+    h.session.human_input(b"\x0c").unwrap(); h.session.pty_output(b"\x1b[2J\x1b[Hprompt$ printf human\x1b[9G");
     h.session.agent_request_control(1).unwrap();
     assert!(matches!(h.session.agent_type(1, "echo agent"), Err(SessionError::InputPending)));
     assert!(matches!(h.session.agent_send_key(1, "ENTER"), Err(SessionError::InputPending)));
     // Delete the suffix at Home; only its actual echo can reopen input.
-    h.session.human_input(b"\x0b"); h.session.pty_output(b"\x1b[K");
+    h.session.human_input(b"\x0b").unwrap(); h.session.pty_output(b"\x1b[K");
     assert!(!h.session.status().input_pending);
     assert!(!format!("{:?}", h.audit_events()).contains("printf human"));
 }
@@ -126,13 +126,13 @@ fn home_then_ctrl_u_keeps_suffix_blocked_and_redraw_does_not_clear_it() {
 fn hidden_or_unechoed_input_is_not_inferred_from_empty_screen() {
     let mut h = Harness::new();
     h.session.pty_output(b"Password: ");
-    h.session.human_input(b"SYNTHETIC_SECRET");
-    h.session.human_input(b"\x15");
+    h.session.human_input(b"SYNTHETIC_SECRET").unwrap();
+    h.session.human_input(b"\x15").unwrap();
     h.session.pty_output(b"\x07");
     assert!(h.session.status().input_pending, "no visible edit was observed");
     assert!(h.session.input_line().is_empty());
     assert!(!format!("{:?}", h.audit_events()).contains("SYNTHETIC_SECRET"));
-    h.session.human_input(b"\x03");
+    h.session.human_input(b"\x03").unwrap();
     assert!(!h.session.status().input_pending);
 }
 
@@ -140,8 +140,8 @@ fn hidden_or_unechoed_input_is_not_inferred_from_empty_screen() {
 fn typing_and_erasing_echoed_in_one_chunk_recovers_without_a_cancel() {
     let mut h = Harness::new();
     h.session.pty_output(b"prompt$ ");
-    h.session.human_input(b"x");
-    h.session.human_input(b"\x7f");
+    h.session.human_input(b"x").unwrap();
+    h.session.human_input(b"\x7f").unwrap();
     h.session.pty_output(b"x\x08 \x08");
     assert!(!h.session.status().input_pending);
 }

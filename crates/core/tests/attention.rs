@@ -24,7 +24,7 @@ fn switching_tabs_preserves_shared_session_and_human_input_preempts() {
     assert!(h.session.current_lease().is_some());
     assert!(names(&fe.lock().unwrap()).contains(&"attention_changed".to_string()));
     h.session.agent_request_attention(1,Some("check result".into())).unwrap();
-    h.session.human_input(b"\x03");
+    h.session.human_input(b"\x03").unwrap();
     assert!(h.session.current_lease().is_none());assert!(h.session.agent_type(1,"late").is_err());
     assert_eq!(h.pty_str(),"ls -l\x03");
     h.session.set_attended(true);assert!(h.session.status().attention_request.is_none());
@@ -56,7 +56,7 @@ fn unattended_default_is_safe_even_for_the_human_cli_path() {
     let mut h = Harness::with(&Harness::test_policy(), Duration::from_secs(60), Duration::from_secs(300));
     h.session.set_attended(false);
     // human actions are never blocked by attention
-    h.session.human_input(b"echo human\r");
+    h.session.human_input(b"echo human\r").unwrap();
     assert_eq!(h.pty_str(), "echo human\r");
     assert!(h.session.affordances(Actor::Human).contains(&Affordance::Snapshot));
 }
@@ -74,6 +74,8 @@ fn grace_in_a_tab_nobody_watches_knocks_for_attention() {
     let KeyResult::Scheduled { exec_id, .. } = h.session.agent_send_key(1, "ENTER").unwrap() else { panic!() };
     assert!(!names(&events.lock().unwrap()).contains(&"attention_requested".to_string()));
     h.session.cancel_exec(&exec_id).unwrap();
+    assert!(matches!(h.session.agent_type(1, "echo background"), Err(conn_core::session::SessionError::InputUnverified)));
+    h.session.human_input(b"\x03").unwrap();
     // Unwatched tab: grace is the human's chance to object, so the tab must knock.
     h.session.set_attended(false);
     h.session.pty_output(b"\r\x1b[2K$ ");

@@ -193,6 +193,12 @@ pub enum SessionError {
     ProcessExited,
     #[error("shell input is pending; ask the human to finish or explicitly cancel their input before continuing")]
     InputPending,
+    #[error("input_unverified: the complete edited command is unknown; inspect the shared screen, explicitly cancel this input with interrupt, then type the complete command again")]
+    InputUnverified,
+    #[error("input_outcome_unknown: PTY input delivery failed; inspect and recover the shared shell before retrying")]
+    InputDeliveryUnknown,
+    #[error("PTY resize failed; the previous screen size is retained")]
+    ResizeFailed,
     #[error("invalid input: {0}")]
     InvalidInput(String),
     #[error("not found: {0}")]
@@ -302,6 +308,8 @@ pub struct ScheduledExec {
 pub struct ApprovalInfo {
     #[serde(rename = "approvalId")]
     pub approval_id: String,
+    #[serde(rename = "inputRetained")]
+    pub input_retained: bool,
     pub state: ApprovalState,
     pub cmd: String,
     pub label: String,
@@ -443,6 +451,7 @@ pub struct Session {
     approvals: ApprovalQueue,
     screen: ScreenModel,
     input: InputTracker,
+    cancelled_input: bool,
     human_input: crate::human_input::HumanInput,
     shell_integration: crate::shell_integration::IntegrationStatus,
     shell_command: Option<crate::shell_integration::RunningCommand>,
@@ -541,6 +550,7 @@ impl Session {
             approvals: ApprovalQueue::new(Duration::from_secs(cfg.pacing.approval_ttl_secs)),
             screen: ScreenModel::new(cfg.rows, cfg.cols),
             input: InputTracker::new(),
+            cancelled_input: false,
             human_input: Default::default(),
             shell_integration: crate::shell_integration::IntegrationStatus::unavailable(if external_private { "private_session" } else { "unsupported_shell" }),
             shell_command: None,
@@ -722,6 +732,7 @@ impl Session {
                 self.shell_submission_inflight = false;
                 self.shell_idle_recovery = false;
                 self.shell_prompt_confirmed = true;
+                if self.cancelled_input && !self.input.has_pending() { self.human_input.reset(); self.cancelled_input = false; }
                 self.shell_recording_ready = self.participation.shared && self.shell_integration.state == "active";
             }
             "start" => {
@@ -894,7 +905,7 @@ impl Session {
 
     // ----- plumbing -------------------------------------------------------
 
-    fn write_pty(&mut self, bytes: &[u8]) {
+    fn write_pty(&mut self, bytes: &[u8]) -> Result<(), SessionError> {
         if bytes.iter().any(|byte| matches!(byte, b'\r' | b'\n' | 3 | 4)) {
             // A late prompt event must not certify a command that has just been
             // submitted. Only cancellation/empty Enter at a confirmed idle
@@ -908,8 +919,13 @@ impl Session {
             self.shell_submission_inflight = true;
         }
         if !self.is_private() { self.trace("pty_write"); }
-        let _ = self.pty.write_all(bytes);
-        let _ = self.pty.flush();
+        if self.pty.write_all(bytes).and_then(|_| self.pty.flush()).is_err() {
+            self.input.mark_uncertain();
+            self.cancelled_input = true;
+            self.audit.record("system", "input_delivery_unknown", json!({}));
+            return Err(SessionError::InputDeliveryUnknown);
+        }
+        Ok(())
     }
 
     fn write_output(&mut self, bytes: &[u8]) {
@@ -1017,15 +1033,15 @@ impl Session {
     // ----- human path -----------------------------------------------------
 
     /// Bytes from the human. This is the preemptive takeover path.
-    pub fn human_input(&mut self, bytes: &[u8]) {
+    pub fn human_input(&mut self, bytes: &[u8]) -> Result<(), SessionError> {
         if !bytes.is_empty() { self.shell_human_input = true; }
         if self.is_private() {
             if !bytes.is_empty() {
                 self.revoke_external();
                 self.human_input.note(bytes, &self.screen, self.input.has_pending());
             }
-            if self.process_alive { self.write_pty(bytes); }
-            return;
+            if self.process_alive { self.write_pty(bytes)?; }
+            return Ok(());
         }
         self.shell_recording_armed |= !bytes.is_empty() && self.shell_recording_ready && self.shell_prompt_confirmed;
         // 1. revoke lease  2. controller = Human   (both inside `revoke`)
@@ -1039,14 +1055,15 @@ impl Session {
         self.reject_proposal_if(|_| true, "human_input");
         // Nor does a pending approval. Its command is already typed on the line, so the
         // human's bytes would be appended to it and a later "approve" would run a line
-        // nobody reviewed. Denying clears that line before the human's input arrives.
+        // nobody reviewed. Cancel approval before forwarding the human's edits;
+        // unknown foreground programs must not receive guessed clearing keys.
         if !bytes.is_empty() {
             for id in self.approvals.pending().into_iter().map(|a| a.id.clone()).collect::<Vec<_>>() {
                 self.finish_approval(&id, ApprovalState::Denied, "human_input");
             }
         }
         // 3. forward the bytes
-        self.write_pty(bytes);
+        let delivered = self.write_pty(bytes);
         if let Some(lease) = revoked {
             // 4. tell the agent  5. audit
             let ev = ServerEvent::ControlRevoked { lease: lease.label(), agent_id: lease.agent_id.clone(), reason: RevokeReason::HumanInput };
@@ -1063,7 +1080,9 @@ impl Session {
         if !bytes.is_empty() {
             self.human_input.note(bytes, &self.screen, self.input.has_pending());
             self.input.reset();
+            if delivered.is_ok() { self.cancelled_input = false; }
         }
+        delivered
     }
 
     /// Revoke the agent lease without typing anything (`conn take`, frontend button).
@@ -1086,18 +1105,24 @@ impl Session {
         let (changed, moved) = self.screen.process_observing(bytes, self.human_input.watch_column());
         if changed { self.screen_dirty = true; }
         self.human_input.output(&self.screen, moved);
+        if self.cancelled_input && !self.input.has_pending() && !self.human_input.pending { self.cancelled_input = false; }
         self.write_output(bytes);
     }
 
-    pub fn resize(&mut self, rows: u16, cols: u16) {
+    pub fn resize(&mut self, rows: u16, cols: u16) -> Result<(), SessionError> {
+        let (rows, cols) = (rows.max(1), cols.max(1));
+        // Do not publish dimensions that the PTY rejected. Output is applied
+        // under this same session lock, after the successful size marker.
+        if let Some(m) = &self.master {
+            m.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })
+                .map_err(|_| SessionError::ResizeFailed)?;
+            let applied = m.get_size().map_err(|_| SessionError::ResizeFailed)?;
+            if applied.rows != rows || applied.cols != cols { return Err(SessionError::ResizeFailed); }
+        }
         self.screen.resize(rows, cols);
         self.screen_dirty = true;
-        // Order renderer dimensions with PTY bytes under the same session lock.
-        // An IPC acknowledgement alone can overtake output event delivery.
         self.emit_output_frame(&[]);
-        if let Some(m) = &self.master {
-            let _ = m.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 });
-        }
+        Ok(())
     }
 
     pub fn process_exited(&mut self, exit_code: Option<u32>) {
@@ -1451,7 +1476,7 @@ impl Session {
         if self.mode == mode { return Ok(()); }
         // A mode switch must not leave physical shell input behind a ghost proposal.
         // Refuse rather than assume Ctrl-U has the same meaning in every shell/TUI.
-        if self.human_input.pending || self.input.has_pending() { return Err(SessionError::InputPending); }
+        if self.cancelled_input || self.human_input.pending || self.input.has_pending() { return Err(SessionError::InputPending); }
         self.mode = mode;
         match mode {
             AgentMode::Observe => {
@@ -1562,25 +1587,27 @@ impl Session {
         }
         // Attention changes can impose a Co-pilot cap without an explicit mode
         // switch. Never append a proposal to pre-existing physical shell input.
-        if self.human_input.pending || self.input.has_pending() { return Err(SessionError::InputPending); }
+        if self.cancelled_input || self.human_input.pending || self.input.has_pending() { return Err(SessionError::InputPending); }
         let cmd = p.text.trim().to_string();
-        let col = self.screen.cursor().col;
-        self.input.feed(p.text.as_bytes(), col);
-        self.write_pty(p.text.as_bytes());
         let decision = self.analyse(&cmd).decision;
+        if !matches!(decision, PolicyDecision::Deny { .. }) {
+            let col = self.screen.cursor().col;
+            self.human_input.remember_empty(&self.screen);
+            self.input.feed(p.text.as_bytes(), col);
+            self.write_pty(p.text.as_bytes())?;
+        }
         let (state, result, policy) = match decision {
             PolicyDecision::Deny { label } => {
-                self.write_pty(b"\x15");
-                self.input.reset();
+                self.cancel_typed_input(true);
                 (ProposalState::Denied, KeyResult::Denied { cmd: cmd.clone(), label: label.clone() }, format!("deny:{label}"))
             }
             PolicyDecision::Allow => {
-                self.write_pty(b"\r");
+                self.write_pty(b"\r")?;
                 self.input.reset();
                 (ProposalState::Executed, KeyResult::Executed { cmd: cmd.clone() }, "allow".into())
             }
             PolicyDecision::Confirm { label } => {
-                self.write_pty(b"\r");
+                self.write_pty(b"\r")?;
                 self.input.reset();
                 (ProposalState::Executed, KeyResult::Executed { cmd: cmd.clone() }, format!("confirm:{label}"))
             }
@@ -1686,6 +1713,7 @@ impl Session {
             return Err(SessionError::InvalidInput("text must not contain control characters".into()));
         }
         self.check_writer(conn, Affordance::Type)?;
+        if self.cancelled_input { return Err(SessionError::InputUnverified); }
         if self.human_input.pending { return Err(SessionError::InputPending); }
         if self.effective_mode() == AgentMode::Copilot {
             self.proposal_mut(conn).text.push_str(text);
@@ -1697,7 +1725,7 @@ impl Session {
         let col = self.screen.cursor().col;
         if !self.input.has_pending() { self.human_input.remember_empty(&self.screen); }
         self.input.feed(text.as_bytes(), col);
-        self.write_pty(text.as_bytes());
+        self.write_pty(text.as_bytes())?;
         self.note_agent_write(conn, text.len());
         Ok(())
     }
@@ -1714,6 +1742,7 @@ impl Session {
             return self.agent_interrupt(conn).map(|_| KeyResult::Sent);
         }
         self.check_writer(conn, Affordance::SendKey)?;
+        if self.cancelled_input { return Err(SessionError::InputUnverified); }
         if self.human_input.pending { return Err(SessionError::InputPending); }
         if self.effective_mode() == AgentMode::Observe {
             return Err(SessionError::WrongMode(AgentMode::Observe));
@@ -1747,7 +1776,7 @@ impl Session {
         if !key.eq_ignore_ascii_case("ENTER") {
             let col = self.screen.cursor().col;
             self.input.feed(bytes, col);
-            self.write_pty(bytes);
+            self.write_pty(bytes)?;
             self.note_agent_write(conn, bytes.len());
             return Ok(KeyResult::Sent);
         }
@@ -1760,15 +1789,8 @@ impl Session {
             return Err(SessionError::InvalidInput("the cursor line contains concealed text; only the human can submit it".into()));
         }
         let agent_id = self.agent_name(conn);
-        // The cursor row is only a visual fragment when a command wraps (or
-        // scrolls beyond the screen). Keep the full tracked input authoritative
-        // unless completion/history/cursor editing made it unreliable.
-        let cmd = input::resolve_command(
-            &self.input.line(),
-            self.input.is_dirty(),
-            &self.screen.cursor_line(),
-            self.input.prompt_col(),
-        );
+        let cmd = input::resolve_command(&self.input.line(), self.input.is_dirty())
+            .ok_or(SessionError::InputUnverified)?;
         self.last_agent_write = Some(Instant::now());
         let analysis = self.analyse(&cmd);
         match analysis.decision.clone() {
@@ -1797,12 +1819,11 @@ impl Session {
                     }
                     return Ok(KeyResult::Scheduled { exec_id, cmd, grace_ms });
                 }
-                self.execute_with_source(&agent_id, &cmd, intent, None);
+                self.execute_with_source(&agent_id, &cmd, intent, None)?;
                 Ok(KeyResult::Executed { cmd })
             }
             PolicyDecision::Deny { label } => {
-                self.write_pty(b"\x15");
-                self.input.reset();
+                self.cancel_typed_input(true);
                 self.last_agent_cmd = Some(cmd.clone());
                 self.audit.record(&agent_id, "exec", json!({ "cmd": cmd, "policy": "deny", "label": label, "intent": intent, "isolation": analysis.isolation_violation }));
                 self.broadcast(ServerEvent::AgentExec { agent_id, cmd: cmd.clone(), policy: format!("deny:{label}"), intent, submission_id: None });
@@ -1830,13 +1851,14 @@ impl Session {
         }
     }
 
-    fn execute_with_source(&mut self, agent_id: &str, cmd: &str, intent: Option<String>, by: Option<&str>) {
+    fn execute_with_source(&mut self, agent_id: &str, cmd: &str, intent: Option<String>, by: Option<&str>) -> Result<(), SessionError> {
+        self.write_pty(b"\r")?;
         let submission_id = self.shell_submission(agent_id, cmd);
         self.last_agent_cmd = Some(cmd.to_string());
-        self.write_pty(b"\r");
         self.input.reset();
         self.audit.record(agent_id, "exec", json!({ "cmd": cmd, "policy": "allow", "intent": intent, "by": by, "submissionId": submission_id }));
         self.broadcast(ServerEvent::AgentExec { agent_id: agent_id.to_string(), cmd: cmd.to_string(), policy: "allow".into(), intent, submission_id });
+        Ok(())
     }
 
     fn cancel_scheduled_if(&mut self, pred: impl Fn(&ScheduledExec) -> bool, reason: &str) {
@@ -1846,6 +1868,7 @@ impl Session {
                 s.cancel_reason = Some(reason.to_string());
                 let (id, agent, cmd) = (s.exec_id.clone(), s.agent_id.clone(), s.cmd.clone());
                 // Cancellation leaves bytes in the shell, so retain their tracking.
+                self.cancelled_input = self.input.has_pending();
                 self.audit.record(&agent, "exec_cancelled", json!({ "exec": id, "cmd": cmd, "reason": reason }));
                 self.broadcast(ServerEvent::ExecCancelled { exec_id: id, reason: reason.into() });
             }
@@ -1861,7 +1884,11 @@ impl Session {
                 let (agent, cmd, intent) = (s.agent_id.clone(), s.cmd.clone(), s.intent.clone());
                 self.audit.record("human", "exec_cosigned", json!({ "exec": exec_id, "cmd": cmd, "agentId": agent }));
                 self.broadcast(ServerEvent::ExecCosigned { exec_id: exec_id.into(), agent_id: agent.clone() });
-                self.execute_with_source(&agent, &cmd, intent, Some("human_cosign"));
+                if let Err(error) = self.execute_with_source(&agent, &cmd, intent, Some("human_cosign")) {
+                    if let Some(s) = &mut self.scheduled { s.state = ExecState::Cancelled; s.cancel_reason = Some("input_outcome_unknown".into()); }
+                    self.broadcast(ServerEvent::ExecCancelled { exec_id: exec_id.into(), reason: "input_outcome_unknown".into() });
+                    return Err(error);
+                }
                 Ok(())
             }
             Some(s) if s.exec_id == exec_id => Err(SessionError::InvalidInput(format!("{exec_id} is not scheduled"))),
@@ -1870,7 +1897,8 @@ impl Session {
     }
 
     /// Frontend/human: cancel a scheduled execution during its grace window.
-    /// The typed line is left for the human to inspect; Ctrl-U it if unwanted.
+    /// The typed line remains visible; require explicit recovery before an agent
+    /// appends again, without guessing clearing keys for a foreground program.
     pub fn cancel_exec(&mut self, exec_id: &str) -> Result<(), SessionError> {
         match &self.scheduled {
             Some(s) if s.exec_id == exec_id && s.state == ExecState::Scheduled => {
@@ -1890,6 +1918,16 @@ impl Session {
         self.scheduled.as_ref().filter(|s| s.state == ExecState::Scheduled)
     }
 
+    fn cancel_typed_input(&mut self, automatic: bool) {
+        if !self.input.has_pending() { return; }
+        self.cancelled_input = true;
+        if automatic && self.shell_prompt_confirmed && !self.shell_submission_inflight
+            && self.shell_foreground_sequence.is_none() && !self.screen.alternate_screen() {
+            self.human_input.begin_cleanup(&self.screen);
+            if self.write_pty(b"\x03").is_ok() { self.input.reset(); }
+        }
+    }
+
     /// Ctrl-C. Cancels any pending approval / scheduled execution from this agent.
     pub fn agent_interrupt(&mut self, conn: ConnId) -> Result<(), SessionError> {
         self.require_participant(conn)?;
@@ -1904,9 +1942,12 @@ impl Session {
             self.finish_approval(&id, ApprovalState::Denied, "interrupted");
         }
         self.reject_proposal_if(|p| p.conn == conn, "interrupted");
-        self.write_pty(b"\x03");
+        let clearing = self.input.has_pending() || self.cancelled_input;
+        if clearing { self.human_input.begin_cleanup(&self.screen); }
+        self.write_pty(b"\x03")?;
         self.input.reset();
-        self.human_input.reset();
+        self.cancelled_input = clearing;
+        if !clearing { self.human_input.reset(); }
         let name = self.agent_name(conn);
         self.audit.record(&name, "interrupt", json!({}));
         self.note_agent_write(conn, 1);
@@ -1930,7 +1971,7 @@ impl Session {
             // polling for a decision counts as activity
             self.authority.renew(a.conn, Instant::now());
         }
-        Ok(ApprovalInfo { approval_id: a.id.clone(), state: a.state, cmd: a.cmd.clone(), label: a.label.clone() })
+        Ok(ApprovalInfo { input_retained: self.cancelled_input && self.input.has_pending(), approval_id: a.id.clone(), state: a.state, cmd: a.cmd.clone(), label: a.label.clone() })
     }
 
     // ----- approval -------------------------------------------------------
@@ -1944,6 +1985,7 @@ impl Session {
             return Err(SessionError::InvalidInput("review_scope_unavailable: this request cannot allow a command category for the session".into()));
         }
         if decision != ApprovalDecision::Deny {
+            if self.cancelled_input { return Err(SessionError::InputUnverified); }
             self.require_shared()?;
             if request.review.remote != self.remote_policy()
                 || request.review.profile_revision != self.profile_revision
@@ -1963,13 +2005,13 @@ impl Session {
         };
         let req = self
             .finish_approval(id, state, by)
-            .ok_or_else(|| SessionError::InvalidInput(format!("{id} is not pending")))?;
+            .ok_or_else(|| if self.cancelled_input { SessionError::InputDeliveryUnknown } else { SessionError::InvalidInput(format!("{id} is not pending")) })?;
         if decision == ApprovalDecision::AllowSession {
             self.policy.allow_for_session(&req.label);
             self.audit.record("human", "session_allow", json!({ "label": req.label }));
             self.broadcast(ServerEvent::SessionAllowsChanged { allows: self.policy.session_allows() });
         }
-        Ok(ApprovalInfo { approval_id: req.id, state: req.state, cmd: req.cmd, label: req.label })
+        Ok(ApprovalInfo { input_retained: self.cancelled_input && self.input.has_pending(), approval_id: req.id, state: req.state, cmd: req.cmd, label: req.label })
     }
 
     /// Resolve the oldest pending approval.
@@ -1983,23 +2025,20 @@ impl Session {
     }
 
     fn finish_approval(&mut self, id: &str, state: ApprovalState, by: &str) -> Option<ApprovalRequest> {
-        let req = self.approvals.resolve(id, state)?;
+        if self.approvals.get(id)?.state != ApprovalState::Pending { return None; }
         let outcome = match state {
             ApprovalState::Granted => {
-                self.write_pty(b"\r");
+                if self.write_pty(b"\r").is_err() { return None; }
+                self.input.reset();
                 "granted"
             }
-            ApprovalState::Denied => {
-                self.write_pty(b"\x15");
-                "denied"
-            }
-            ApprovalState::Expired => {
-                self.write_pty(b"\x15");
-                "expired"
+            ApprovalState::Denied | ApprovalState::Expired => {
+                self.cancel_typed_input(by != "interrupted" && by != "human_input");
+                if state == ApprovalState::Denied { "denied" } else { "expired" }
             }
             ApprovalState::Pending => unreachable!(),
         };
-        self.input.reset();
+        let req = self.approvals.resolve(id, state)?;
         let submission_id = if state == ApprovalState::Granted { self.shell_submission(&req.agent_id, &req.cmd) } else { None };
         self.audit.record(
             &req.agent_id,
@@ -2051,8 +2090,11 @@ impl Session {
         if let Some(s) = &mut self.scheduled {
             if surface_ready && s.state == ExecState::Scheduled && s.due <= now {
                 s.state = ExecState::Executed;
-                let (agent, cmd, intent) = (s.agent_id.clone(), s.cmd.clone(), s.intent.clone());
-                self.execute_with_source(&agent, &cmd, intent, None);
+                let (agent, cmd, intent, exec_id) = (s.agent_id.clone(), s.cmd.clone(), s.intent.clone(), s.exec_id.clone());
+                if self.execute_with_source(&agent, &cmd, intent, None).is_err() {
+                    if let Some(s) = &mut self.scheduled { s.state = ExecState::Cancelled; s.cancel_reason = Some("input_outcome_unknown".into()); }
+                    self.broadcast(ServerEvent::ExecCancelled { exec_id, reason: "input_outcome_unknown".into() });
+                }
             }
         }
         if self.screen_dirty {
@@ -2084,7 +2126,7 @@ impl Session {
             output_seq: self.output_seq,
             surface_available: self.participation.shared,
             completion_prompt_ready: self.completion_prompt_ready(),
-            input_pending: self.human_input.pending || self.input.has_pending(),
+            input_pending: self.cancelled_input || self.human_input.pending || self.input.has_pending(),
             external_input_available: self.external_writer_active(),
             profile_id: self.execution_profile.as_ref().map(|p|p.id.clone()),
             profile_name: self.execution_profile.as_ref().map(|p|p.name.clone()),
@@ -2209,12 +2251,12 @@ mod ssh_policy_tests {
     #[test]
     fn delayed_prompt_cannot_certify_a_new_submission_or_foreground() {
         let mut s = session();
-        s.human_input(b"\r");
-        s.human_input(b"sleep 10\r");
+        s.human_input(b"\r").unwrap();
+        s.human_input(b"sleep 10\r").unwrap();
         s.shell_event(2, "prompt", "", "", "");
         assert!(s.review_required(), "old empty-enter prompt does not certify a new command");
         s.shell_event(3, "start", "sleep 10", "", "");
-        s.human_input(b"\x03");
+        s.human_input(b"\x03").unwrap();
         s.shell_event(4, "prompt", "", "", "");
         assert!(s.review_required(), "foreground cancellation still needs its matching end");
         s.shell_event(5, "end", "99", "", "130");
@@ -2227,7 +2269,7 @@ mod ssh_policy_tests {
     fn idle_prompt_recovery_does_not_end_remote_ssh() {
         let mut s = session();
         s.shell_event(2, "start", "ssh host", "", "");
-        s.human_input(b"\x03");
+        s.human_input(b"\x03").unwrap();
         s.shell_event(3, "prompt", "", "", "");
         assert!(s.remote_policy());
         s.shell_event(4, "end", "2", "", "0");
