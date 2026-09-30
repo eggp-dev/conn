@@ -178,6 +178,7 @@ jobs:
       - run: npm run test:app-lifetime -w @conn/ui
       - run: npm run test:collaboration
       - run: npm run test:input -w @conn/collaboration-tests
+      - run: npm run test:regressions -w @conn/collaboration-tests
       - run: npm run package:web -- --debug
   required:
     name: Required checks

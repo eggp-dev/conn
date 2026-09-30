@@ -33,6 +33,8 @@ impl Shell {
             vec!["-i".into()]
         };
         profile.env.insert("PS1".into(), "conn-test$ ".into());
+        // Exercise Readline terminal keys independently of the test runner's TERM.
+        profile.env.insert("TERM".into(), "xterm-256color".into());
         profile.env.insert("HISTFILE".into(), "/dev/null".into());
         profile.env.insert("PROMPT_COMMAND".into(), prompt.into());
         profile.env.insert("HISTCONTROL".into(), "".into());

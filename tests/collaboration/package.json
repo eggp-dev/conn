@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node scripts/web-mcp.mjs",
     "test:input": "node scripts/input-rendering.mjs",
-    "test:editor": "node scripts/editor-input.mjs"
+    "test:editor": "node scripts/editor-input.mjs",
+    "test:regressions": "node scripts/header-input-regressions.mjs"
   },
   "dependencies": {
     "@conn/ui": "*"

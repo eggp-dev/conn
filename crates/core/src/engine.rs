@@ -24,6 +24,7 @@ use crate::policy::PolicyStore;
 use crate::session::{EventSink, Session, SessionConfig, SharedSession};
 
 mod child_killer;
+mod child_environment;
 use child_killer::ChildKiller;
 
 /// Move-owned startup specification for trusted native callers. Never serialized.
@@ -149,6 +150,7 @@ impl Engine {
         let shell = profile.program.clone();
         let mut cmd = CommandBuilder::new(&plan.program);
         cmd.args(&plan.args);
+        child_environment::restore_host_environment(&mut cmd);
         cmd.env("CONN", "1");
         cmd.env("TERM", std::env::var("TERM").unwrap_or_else(|_| "xterm-256color".into()));
         for (k, v) in &cfg.env { cmd.env(k, v); }
