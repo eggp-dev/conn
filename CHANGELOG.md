@@ -2,11 +2,17 @@
 
 ## Unreleased
 
+## 0.8.9 — Preview · 2026-09-30
+
 - Keep agent connections accessible through a compact session-header summary and a keyboard-accessible list. Preserve distinct connections with repeated names, show full long names, and keep the close control visible.
 - Remove inherited AppImage runtime paths from host-side terminal children while preserving host paths and explicit profile overrides. Host commands such as Flatpak no longer load the desktop bundle's libraries.
 - Add production UI/PTY/MCP regressions for empty Readline edits, retained human input, connection overflow, resizing, disconnects and session controls. Make the Readline fixture independent of the test runner's terminal type.
 
 한국어: 세션 헤더의 에이전트 연결을 대표 이름과 추가 연결 수로 요약하고, 키보드로 열 수 있는 목록에서 긴 이름과 같은 이름의 개별 연결을 확인할 수 있게 했습니다. 닫기 버튼을 보존하고, AppImage 실행 경로가 공유 셸에 유출되지 않도록 사용자 경로·프로필 재정의를 유지하며 복원합니다. 빈 입력·남은 인간 입력·배지 overflow·창 크기·연결 해제·세션 조작의 실제 UI/PTY/MCP 회귀 검증을 추가했습니다.
+
+Validation and limits: 292 Rust tests, 68 UI tests, 15 production UI/PTY/MCP regressions and 10 existing collaboration scenarios passed. Ubuntu 26.04.1 x86_64 native GTK/WebKit checks used a locally built 0.8.8 debug AppImage containing these fixes, real PTYs and bundled MCP connections on a virtual X11 display. Seven connections with repeated/long names stayed accessible at 720/1120/1280/1920px; keyboard focus, disconnects, Flatpak startup and retained human input were checked. Release asset signing/checksums are verified separately. macOS interactive behavior, Wayland/fractional scaling and installed-app upgrades were not tested in this run. The original human-input defect was fixed in 0.8.7; this patch adds regression coverage.
+
+한국어: Rust 292개·UI 68개·실제 UI/PTY/MCP 회귀 15개·기존 협업 10개를 통과했습니다. Ubuntu 26.04.1 x86_64에서 이번 수정이 포함된 로컬 0.8.8 debug AppImage를 가상 X11 환경의 네이티브 GTK/WebKit·실제 PTY·번들 MCP로 검증했습니다. 중복·긴 이름의 연결 7개, 720~1920px 창, 키보드·연결 해제·Flatpak·남은 인간 입력 보호를 확인했습니다. 정식 산출물 서명·체크섬은 별도로 검증합니다. Mac 대화형 동작·Wayland·소수 배율·설치 앱 업그레이드는 이번 실기 검증 범위에 포함하지 않았습니다. 기존 인간 입력 결함은 0.8.7에서 수정됐고 이번 패치는 회귀 검증을 추가합니다.
 
 ## 0.8.8 — Preview · 2026-09-23
 
