@@ -264,6 +264,10 @@ const en: Dict = {
   "on": "On",
   "human": "you",
   "tab.n": "tab {n}",
+  "tab.close": "Close {tab}",
+  "tab.agents.open": "Show {n} agent connections for {tab}",
+  "tab.agents.title": "Agent connections ({n})",
+  "tab.agents.connection": "Connection #{n}",
   "copied": "Copied",
   "copy.failed": "Copy failed",
 
@@ -891,6 +895,10 @@ const ko: Dict = {
   "on": "켬",
   "human": "사람",
   "tab.n": "{n}번 탭",
+  "tab.close": "{tab} 닫기",
+  "tab.agents.open": "{tab}의 에이전트 연결 {n}개 보기",
+  "tab.agents.title": "에이전트 연결 ({n}개)",
+  "tab.agents.connection": "연결 #{n}",
   "copied": "복사됨",
   "copy.failed": "복사 실패",
 
