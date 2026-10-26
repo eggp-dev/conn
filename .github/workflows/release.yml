@@ -8,6 +8,14 @@ on:
         description: Existing version tag (for example v0.8.2)
         required: true
         type: string
+      macos_runner:
+        description: Standard macOS image (14 is a temporary ticket-service recovery option)
+        type: choice
+        required: false
+        default: macos-15
+        options:
+          - macos-15
+          - macos-14
 permissions:
   contents: read
 concurrency:
@@ -19,6 +27,7 @@ jobs:
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       sha: ${{ steps.version.outputs.sha }}
+      macos_runner: ${{ steps.version.outputs.macos_runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -31,8 +40,13 @@ jobs:
         id: version
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          MACOS_RUNNER: ${{ inputs.macos_runner || 'macos-15' }}
         shell: bash
         run: |
+          case "$MACOS_RUNNER" in
+            macos-15|macos-14) ;;
+            *) echo 'Unsupported standard macOS image'; exit 1 ;;
+          esac
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]
           release_sha=$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")
           git merge-base --is-ancestor "$release_sha" origin/main
@@ -40,6 +54,7 @@ jobs:
           python scripts/release.py check --tag "$RELEASE_TAG"
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "sha=$release_sha" >> "$GITHUB_OUTPUT"
+          echo "macos_runner=$MACOS_RUNNER" >> "$GITHUB_OUTPUT"
   checks:
     needs: validate
     uses: ./.github/workflows/ci.yml
@@ -57,7 +72,9 @@ jobs:
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             bundles: deb,appimage
-          - os: macos-15
+          # Manual standard-image recovery for temporary ticket-service transport failures.
+          # macOS 14 retires 2026-11-02; the default stays macOS 15.
+          - os: ${{ needs.validate.outputs.macos_runner }}
             target: aarch64-apple-darwin
             bundles: app,dmg
           - os: windows-2022
