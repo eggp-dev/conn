@@ -27,3 +27,40 @@ jobs:
       - name: Remove temporary signing credentials
         if: always()
         run: python scripts/macos_sign.py cleanup --state "${{ runner.temp }}/conn-macos-signing"
+  public-ticket-diagnostic:
+    # Read a published artifact without importing certificates or notarization credentials.
+    if: github.repository == 'eggp-dev/conn' && github.ref == 'refs/heads/codex/macos-ticket-diagnostics'
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+      - name: Validate a previously published app ticket without signing credentials
+        env:
+          PYTHONPATH: scripts
+        run: |
+          python - <<'PY'
+          import hashlib, pathlib, platform, tarfile, tempfile, urllib.request
+          import macos_sign
+          asset = 'conn-v0.8.9-aarch64-apple-darwin-desktop.app.tar.gz'
+          base = 'https://github.com/eggp-dev/conn/releases/download/v0.8.9/'
+          with tempfile.TemporaryDirectory(prefix='conn-public-ticket-') as directory:
+              root = pathlib.Path(directory)
+              checksums = urllib.request.urlopen(base + 'SHA256SUMS', timeout=60).read().decode()
+              expected = dict(line.split('  ', 1)[::-1] for line in checksums.splitlines())
+              archive = urllib.request.urlopen(base + asset, timeout=120).read()
+              assert hashlib.sha256(archive).hexdigest() == expected[asset], 'Published checksum mismatch'
+              path = root / asset
+              path.write_bytes(archive)
+              with tarfile.open(path) as packed:
+                  packed.extractall(root, filter='data')
+              apps = list(root.glob('*.app'))
+              assert len(apps) == 1, 'Expected one published app'
+              print('macOS ' + platform.mac_ver()[0] + '; published v0.8.9 checksum verified', flush=True)
+              macos_sign.validate_ticket(apps[0], 'Validate published app ticket')
+              print('Published app ticket validated')
+          PY

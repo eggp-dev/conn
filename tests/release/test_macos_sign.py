@@ -129,6 +129,27 @@ class SigningTests(unittest.TestCase):
             with self.assertRaises(release.ReleaseError):
                 signing.accepted_submission(invalid)
 
+    def test_stapler_diagnostics_classify_without_exposing_private_output(self):
+        cases = {
+            "Certificate authority pinning mismatch": "stapler-service-tls",
+            "Certificate trust evaluation did not return expected result": "stapler-service-tls",
+            "Conn.app does not have a ticket stapled to it": "stapler-ticket-missing",
+            "CloudKit query failed due to record not found": "stapler-ticket-unavailable",
+            "Error Domain=NSURLErrorDomain Code=-999": "stapler-service-connection",
+            "Could not validate ticket": "stapler-ticket-validation",
+            "unrecognized response": "stapler-unclassified",
+        }
+        for output, category in cases.items():
+            with self.subTest(category=category):
+                result = subprocess.CompletedProcess([], 68, "private path and identity " + output, "private stderr")
+                with patch.object(signing.subprocess, "run", return_value=result):
+                    with self.assertRaises(signing.NativeCommandError) as failure:
+                        signing.command(["xcrun", "stapler", "validate", "-v", "/private/Conn.app"], "Validate app ticket")
+                self.assertEqual(failure.exception.returncode, 68)
+                self.assertIn("category: " + category, str(failure.exception))
+                for private in ("private path", "identity", "private stderr", "/private/Conn.app"):
+                    self.assertNotIn(private, str(failure.exception))
+
     def test_ticket_service_retry_never_skips_validation(self):
         failure = signing.NativeCommandError("ticket service unavailable", 68)
         with patch.object(signing, "command", side_effect=[failure, SimpleNamespace()]) as run, patch.object(signing.time, "sleep") as sleep:

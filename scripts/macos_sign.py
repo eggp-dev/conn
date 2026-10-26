@@ -72,6 +72,23 @@ def import_failure_category(stderr: str) -> str:
     return "unclassified-import-error"
 
 
+def stapler_failure_category(output: str) -> str:
+    # Never expose captured tool output: verbose stapler can include paths and identities.
+    text = output.lower()
+    if "pinning mismatch" in text or "certificate trust evaluation" in text:
+        return "stapler-service-tls"
+    if "does not have a ticket stapled" in text or "no ticket was found" in text:
+        return "stapler-ticket-missing"
+    if "record not found" in text or "could not find base64 encoded ticket" in text:
+        return "stapler-ticket-unavailable"
+    if any(message in text for message in ("nsurlerrordomain", "could not establish secure connection",
+                                          "cloudkit's response is inconsistent", "could not resolve", "failed to connect")):
+        return "stapler-service-connection"
+    if "could not validate ticket" in text:
+        return "stapler-ticket-validation"
+    return "stapler-unclassified"
+
+
 class NativeCommandError(release.ReleaseError):
     def __init__(self, message, returncode):
         super().__init__(message)
@@ -88,7 +105,11 @@ def command(args, label, timeout=120, *, input_text=None):
     except (OSError, subprocess.TimeoutExpired):
         raise release.ReleaseError(f"{label} could not complete") from None
     if result.returncode != 0:
-        category = f"; category: {import_failure_category(result.stderr)}" if args[:2] == ["security", "import"] else ""
+        category = ""
+        if args[:2] == ["security", "import"]:
+            category = f"; category: {import_failure_category(result.stderr)}"
+        elif args[:2] == ["xcrun", "stapler"]:
+            category = f"; category: {stapler_failure_category(result.stdout + result.stderr)}"
         raise NativeCommandError(f"{label} failed (exit {result.returncode}){category}; no release artifacts will be uploaded", result.returncode)
     return result
 
@@ -216,7 +237,7 @@ def validate_ticket(path: Path, label: str):
     # successful stapling. Retry that status only; never skip ticket validation.
     for attempt in range(3):
         try:
-            command(["xcrun", "stapler", "validate", path], label)
+            command(["xcrun", "stapler", "validate", "-v", path], label)
             return
         except NativeCommandError as error:
             if error.returncode != 68 or attempt == 2:
