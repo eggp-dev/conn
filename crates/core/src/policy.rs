@@ -534,8 +534,9 @@ impl PolicyStore {
         }
         let isolation_violation = self.policy.isolate_dangerous && segments.len()>1;
         if isolation_violation { worst=Decision::Deny {label:"Run commands separately in this shell/remote environment".into()}; }
-        let blanket_confirm = matches!(worst, Decision::Allow);
-        if blanket_confirm && (!reduce || !analysable) {
+        let command_allowed = matches!(worst, Decision::Allow);
+        let blanket_confirm = command_allowed && analysable;
+        if command_allowed && (!reduce || !analysable) {
             worst = Decision::Confirm { label: "Review command in this shell/remote environment".into() };
         }
         LineAnalysis {cwd:None,segments:verdicts,decision:worst,isolation_violation,blanket_confirm}

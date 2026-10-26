@@ -314,3 +314,34 @@ fn queued_profile_change_and_participant_removal_retain_input_without_execution(
         assert!(!h.pty_str().contains('\r'));
     }
 }
+
+#[test]
+fn environment_overlay_metadata_excludes_unanalysable_and_risk_reviews() {
+    let store = PolicyStore::from_policy(Policy::parse(&Harness::test_policy()).unwrap());
+    assert!(
+        store
+            .analyse_external_with_environment("printf hello", ShellKind::Posix, false)
+            .blanket_confirm
+    );
+    assert!(
+        store
+            .analyse_external_with_environment("printf hello", ShellKind::Posix, true)
+            .blanket_confirm
+    );
+    for (cmd, shell) in [
+        ("sudo id", ShellKind::Posix),
+        ("env -u UNUSED rm file", ShellKind::Posix),
+        ("node --eval 'process.exit(0)'", ShellKind::Posix),
+        ("printf hello", ShellKind::Custom),
+    ] {
+        let analysis = store.analyse_external_with_environment(cmd, shell, true);
+        assert!(!analysis.blanket_confirm, "{cmd}");
+        assert!(
+            matches!(
+                analysis.decision,
+                conn_core::policy::Decision::Confirm { .. }
+            ),
+            "{cmd}"
+        );
+    }
+}
