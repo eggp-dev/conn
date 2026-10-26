@@ -50,7 +50,10 @@ impl Session {
         if !self.process_alive {
             return Err(SessionError::ProcessExited);
         }
-        if self.conn_kind(conn) != Some(ConnKind::Agent) || !self.review_required() {
+        if self.conn_kind(conn) != Some(ConnKind::Agent)
+            || !self.review_required()
+            || !self.policy.source_valid()
+        {
             return Err(SessionError::InvalidInput(
                 "environment_review_unavailable".into(),
             ));
@@ -120,7 +123,8 @@ impl Session {
         now: Instant,
     ) -> Option<&EnvironmentReviewGrant> {
         self.environment_grants.get(&conn).filter(|g| {
-            g.conn == conn
+            self.policy.source_valid()
+                && g.conn == conn
                 && now < g.expires
                 && g.revision == self.environment_revision
                 && g.profile_revision == self.profile_revision

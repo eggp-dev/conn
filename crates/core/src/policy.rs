@@ -5,7 +5,6 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -368,7 +367,8 @@ fn inspect_target(path: &std::path::Path, protected: bool) -> TargetInfo {
 pub struct PolicyStore {
     policy: Policy,
     path: Option<PathBuf>,
-    mtime: Option<SystemTime>,
+    source: Option<Vec<u8>>,
+    source_valid: bool,
     session_allow: HashSet<String>,
 }
 
@@ -381,7 +381,7 @@ pub enum Reload {
 
 impl PolicyStore {
     pub fn from_policy(policy: Policy) -> Self {
-        Self { policy, path: None, mtime: None, session_allow: HashSet::new() }
+        Self { policy, path: None, source: None, source_valid: true, session_allow: HashSet::new() }
     }
 
     /// Load from `path`, writing the example policy first if the file does not exist.
@@ -392,9 +392,9 @@ impl PolicyStore {
             }
             std::fs::write(path, EXAMPLE_POLICY)?;
         }
-        let policy = Policy::load(path)?;
-        let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
-        Ok(Self { policy, path: Some(path.to_path_buf()), mtime, session_allow: HashSet::new() })
+        let source = std::fs::read(path)?;
+        let policy = Self::parse_source(&source)?;
+        Ok(Self { policy, path: Some(path.to_path_buf()), source: Some(source), source_valid: true, session_allow: HashSet::new() })
     }
 
     pub fn policy(&self) -> &Policy {
@@ -405,20 +405,40 @@ impl PolicyStore {
         self.path.as_deref()
     }
 
-    /// Re-read the file if its mtime changed. Keeps the old policy on failure.
+    pub fn source_valid(&self) -> bool {
+        self.source_valid
+    }
+
+    fn parse_source(source: &[u8]) -> Result<Policy, PolicyError> {
+        let text = std::str::from_utf8(source)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        Policy::parse(text)
+    }
+
+    /// Compare contents: timestamps can coalesce across consecutive policy edits.
+    /// Keep the last valid policy on failure, but prohibit environment grants.
     pub fn maybe_reload(&mut self) -> Reload {
         let Some(path) = &self.path else { return Reload::Unchanged };
-        let mtime = std::fs::metadata(path).and_then(|m| m.modified()).ok();
-        if mtime == self.mtime {
+        let source = match std::fs::read(path) {
+            Ok(source) => source,
+            Err(error) => {
+                let changed = self.source.take().is_some() || self.source_valid;
+                self.source_valid = false;
+                return if changed { Reload::Failed(error.into()) } else { Reload::Unchanged };
+            }
+        };
+        if self.source.as_ref() == Some(&source) {
             return Reload::Unchanged;
         }
-        self.mtime = mtime;
-        match Policy::load(path) {
-            Ok(p) => {
-                self.policy = p;
+        let parsed = Self::parse_source(&source);
+        self.source = Some(source);
+        self.source_valid = parsed.is_ok();
+        match parsed {
+            Ok(policy) => {
+                self.policy = policy;
                 Reload::Reloaded
             }
-            Err(e) => Reload::Failed(e),
+            Err(error) => Reload::Failed(error),
         }
     }
 

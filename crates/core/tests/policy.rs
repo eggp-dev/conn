@@ -65,3 +65,32 @@ fn session_allow_lifts_confirm_but_never_deny() {
     assert!(matches!(store.evaluate("rm -rf /"), Decision::Deny { .. }));
     assert_eq!(store.session_allows(), vec!["delete root".to_string(), "recursive delete".to_string()]);
 }
+
+#[test]
+fn reload_detects_same_timestamp_and_length_and_tracks_invalid_source() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("policy.yaml");
+    std::fs::write(&path, "default: allow\n").unwrap();
+    let mut store = PolicyStore::open(&path).unwrap();
+    let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+    for source in ["default: deny \n", "confirm: [\n", "default: allow\n"] {
+        std::fs::write(&path, source).unwrap();
+        std::fs::File::options().write(true).open(&path).unwrap().set_modified(modified).unwrap();
+        let result = store.maybe_reload();
+        if source.starts_with("confirm") {
+            assert!(matches!(result, Reload::Failed(_)));
+            assert!(!store.source_valid());
+            assert!(matches!(store.evaluate("echo x"), Decision::Deny { .. }));
+        } else {
+            assert!(matches!(result, Reload::Reloaded));
+            assert!(store.source_valid());
+        }
+    }
+    std::fs::remove_file(&path).unwrap();
+    assert!(matches!(store.maybe_reload(), Reload::Failed(_)));
+    assert!(!store.source_valid());
+    assert!(matches!(store.maybe_reload(), Reload::Unchanged));
+    std::fs::write(&path, "default: allow\n").unwrap();
+    assert!(matches!(store.maybe_reload(), Reload::Reloaded));
+    assert!(store.source_valid());
+}

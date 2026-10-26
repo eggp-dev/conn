@@ -23,3 +23,13 @@ Implementation base: `744fa22f4396a3d4e762a29d6156ba4e12fcdb8b`, independently c
 Linux Chromium evidence does not establish native macOS/Windows interaction, Wayland, installed-app upgrades or all nested remote transitions. Unknown final host changes remain undetectable. No live user grant was enabled. Audit additions contain only decision identifiers, duration/revision and end reason.
 
 Release workflow, signing, checksums, exact-release package runtime and website publication are verified after the tagged pipeline; final status is recorded in the delivery report rather than inferred from local builds.
+
+## Tagged-run corrections
+
+The first tagged run `40354039491` failed and created no public release. Windows exposed that mtime-only policy reload could miss a fast policy edit before queued Enter. Policy reload now compares source bytes, including equal-length edits with unchanged timestamps, and refuses environment grants while the source is invalid or unreadable. The queue regression preserves the timestamp deliberately. Last-good policy fallback otherwise remains intact.
+
+The header regression failed only on extra trailing empty viewport rows during dock layout. The assertion now checks identical non-padding contents, cursor and column count, retaining both rejected-input checks. This does not waive input or cursor changes.
+
+macOS received notarization Accepted and completed stapling, but validation exited 68. An Apple service connection failure is a possible cause, not a confirmed diagnosis from the sanitized log. Ticket validation retries exit 68 at most twice; other failures and exhausted retries still block packaging. No signature, ticket, Gatekeeper or contained-DMG check is removed. Native success must still be established by the corrected release pipeline.
+
+Local correction checks: portable `cargo test` passed; 82 release-tool tests passed; all 15 header/input browser regressions passed. A full workspace native attempt remains blocked by missing local GTK development libraries. The original unpublished v0.9.0 tag is retained pending an explicit retag decision; no public artifacts were replaced.

@@ -108,10 +108,14 @@ try {
   await human('',['Control+c']);await human(text,keys);await control(agent);await run(agent,'REGRESSION_'+name.replaceAll('-','_'));await capture('input-'+name);
  }
  await human('',['Control+c']);await human("printf '%s\\n' HUMAN_SUFFIX",['Home','Control+u']);await control(agent);
- const before=(await agent.tool('snapshot')).screen;
+ const before=await agent.tool('snapshot');
  assert.match((await agent.tool('type',{text:"printf '%s\\n' AGENT_PREFIX; "})).error,/input_pending/);
  assert.match((await agent.tool('send_key',{key:'ENTER',intent:'Check retained input protection.'})).error,/input_pending/);
- assert.deepEqual((await agent.tool('snapshot')).screen,before);await capture('retained-input-blocked');await human('',['Control+c']);
+ const after=await agent.tool('snapshot');
+ // Dock layout may resize viewport padding while rejected input must leave content and cursor intact.
+ const content=screen=>{const rows=[...screen];while(rows.at(-1)==='')rows.pop();return rows;};
+ assert.equal(after.size.cols,before.size.cols);assert.deepEqual(after.cursor,before.cursor);
+ assert.deepEqual(content(after.screen),content(before.screen));await capture('retained-input-blocked');await human('',['Control+c']);
  for(let count=2;count<=5;count++){await attach('same-agent');await layout(count);}
  await capture('repeated-five-summary');
  for(let count=6;count<=7;count++)await attach('long-agent-name-repeated-for-overflow-abcdefghijklmnopqrst');

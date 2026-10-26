@@ -129,6 +129,19 @@ class SigningTests(unittest.TestCase):
             with self.assertRaises(release.ReleaseError):
                 signing.accepted_submission(invalid)
 
+    def test_ticket_service_retry_never_skips_validation(self):
+        failure = signing.NativeCommandError("ticket service unavailable", 68)
+        with patch.object(signing, "command", side_effect=[failure, SimpleNamespace()]) as run, patch.object(signing.time, "sleep") as sleep:
+            signing.validate_ticket(Path("Conn.app"), "Validate app ticket")
+        self.assertEqual(run.call_count, 2)
+        self.assertTrue(all(call.args[0][2] == "validate" for call in run.call_args_list))
+        sleep.assert_called_once_with(5)
+        for status, attempts in [(68, 3), (65, 1)]:
+            with patch.object(signing, "command", side_effect=signing.NativeCommandError("ticket invalid", status)) as run, patch.object(signing.time, "sleep"):
+                with self.assertRaisesRegex(release.ReleaseError, "ticket invalid"):
+                    signing.validate_ticket(Path("Conn.app"), "Validate app ticket")
+            self.assertEqual(run.call_count, attempts)
+
     def test_dmg_mounts_without_accepting_a_license_and_is_detached(self):
         dmg = Path(self.temporary.name) / "Conn.dmg"
         dmg.write_bytes(b"signed-dmg-fixture")
