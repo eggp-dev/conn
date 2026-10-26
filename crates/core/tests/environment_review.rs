@@ -320,11 +320,24 @@ fn policy_reload_cancels_queued_command_before_any_enter() {
     let KeyResult::Scheduled { exec_id, .. } = submit(&mut h, "echo queued") else {
         panic!()
     };
+    let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
     std::fs::write(&path, "deny:\n  - command: echo\n    label: changed policy\ndefault: allow\nrequire_intent: false\n").unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_modified(modified)
+        .unwrap();
     h.session.tick(Instant::now() + Duration::from_secs(11));
     assert!(h.session.execute_now_scheduled(&exec_id).is_err());
     assert!(!h.pty_str().contains('\r'));
     assert!(h.session.status().environment_review.is_empty());
+    std::fs::write(&path, "confirm: [\n").unwrap();
+    assert!(h.session.start_environment_review(1).is_err());
+    std::fs::remove_file(&path).unwrap();
+    assert!(h.session.start_environment_review(1).is_err());
+    std::fs::write(&path, Harness::test_policy()).unwrap();
+    assert!(h.session.start_environment_review(1).is_ok());
 }
 #[test]
 fn queued_profile_change_and_participant_removal_retain_input_without_execution() {

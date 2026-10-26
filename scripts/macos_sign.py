@@ -22,6 +22,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 import tempfile
 import uuid
 
@@ -71,6 +72,12 @@ def import_failure_category(stderr: str) -> str:
     return "unclassified-import-error"
 
 
+class NativeCommandError(release.ReleaseError):
+    def __init__(self, message, returncode):
+        super().__init__(message)
+        self.returncode = returncode
+
+
 def command(args, label, timeout=120, *, input_text=None):
     # Do not echo args or captured output: security/notarytool arguments can carry
     # secrets. All errors name only the fixed stage and numeric exit status.
@@ -82,7 +89,7 @@ def command(args, label, timeout=120, *, input_text=None):
         raise release.ReleaseError(f"{label} could not complete") from None
     if result.returncode != 0:
         category = f"; category: {import_failure_category(result.stderr)}" if args[:2] == ["security", "import"] else ""
-        raise release.ReleaseError(f"{label} failed (exit {result.returncode}){category}; no release artifacts will be uploaded")
+        raise NativeCommandError(f"{label} failed (exit {result.returncode}){category}; no release artifacts will be uploaded", result.returncode)
     return result
 
 
@@ -204,6 +211,19 @@ def verify_signature(path: Path, team: str, runtime=True, deep=False):
     return parse_signature(shown.stdout + shown.stderr, team, runtime)
 
 
+def validate_ticket(path: Path, label: str):
+    # stapler exit 68 can report an Apple service connection failure even after
+    # successful stapling. Retry that status only; never skip ticket validation.
+    for attempt in range(3):
+        try:
+            command(["xcrun", "stapler", "validate", path], label)
+            return
+        except NativeCommandError as error:
+            if error.returncode != 68 or attempt == 2:
+                raise
+            time.sleep(5)
+
+
 def app_evidence(app: Path, team: str):
     if app.is_symlink() or not app.is_dir():
         raise release.ReleaseError("Expected a regular Conn app bundle")
@@ -217,7 +237,7 @@ def app_evidence(app: Path, team: str):
         raise release.ReleaseError("Expected distinct desktop executable and Conn sidecar")
     result = {"bundle": verify_signature(app, team, deep=True),
               "desktop": verify_signature(executable, team), "sidecar": verify_signature(sidecar, team)}
-    command(["xcrun", "stapler", "validate", app], "Validate app notarization ticket")
+    validate_ticket(app, "Validate app notarization ticket")
     command(["spctl", "--assess", "--type", "execute", app], "Assess app with Gatekeeper")
     result.update({"stapled": True, "gatekeeperAccepted": True})
     return result
@@ -307,7 +327,7 @@ def finish(target: str, path: Path, out: Path, root=release.ROOT, env=os.environ
     dmg_signature = verify_signature(dmg, team, runtime=False)
     dmg_notary = notarize(dmg, state)
     command(["xcrun", "stapler", "staple", dmg], "Staple DMG notarization ticket")
-    command(["xcrun", "stapler", "validate", dmg], "Validate DMG notarization ticket")
+    validate_ticket(dmg, "Validate DMG notarization ticket")
     command(["spctl", "--assess", "--type", "open", "--context", "context:primary-signature", dmg], "Assess DMG with Gatekeeper")
     verify_signature(dmg, team, runtime=False)
     inspect_dmg(dmg, team, app)
