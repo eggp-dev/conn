@@ -13,7 +13,7 @@ type Dict = Record<string, string>;
 const en: Dict = {
   "environment.title": "Reduce environment checks",
   "environment.warning": "Conn cannot verify the final execution target or internal transitions. I will check the execution target myself. Risky commands still require confirmation.",
-  "environment.limit": "Only this session and exact connection, for 15 minutes. Pending approval cards still need your decision. Nested remote connections may change the final host without detection. This does not verify target identity. Unsupported syntax still requires review.",
+  "environment.limit": "Supported simple POSIX query commands only; all other commands still require review. Only this session and exact connection, for 15 minutes. Pending approval cards still need your decision. Nested remote connections may change the final host without detection. This does not verify target identity. Unsupported syntax still requires review.",
   "environment.ack": "I will check the execution target myself.",
   "environment.start": "Reduce checks for 15 minutes",
   "environment.stop": "Stop",
@@ -656,7 +656,7 @@ const en: Dict = {
 const ko: Dict = {
   "environment.title": "환경 확인 줄이기",
   "environment.warning": "최종 실행 대상과 내부 전환을 확인할 수 없습니다. 실행 대상을 직접 확인하며 사용합니다. 위험 명령은 계속 확인합니다.",
-  "environment.limit": "현재 세션과 정확한 연결에만 15분 동안 적용합니다. 대기 승인 카드는 별도로 결정해야 합니다. 중첩 원격 연결의 최종 호스트 전환은 감지하지 못할 수 있으며, 대상 신원 검증을 보장하지 않습니다. 해석할 수 없는 문법은 계속 확인합니다.",
+  "environment.limit": "지원되는 단순 POSIX 조회 명령에만 적용하며, 다른 명령은 계속 확인합니다. 현재 세션과 정확한 연결에만 15분 동안 적용합니다. 대기 승인 카드는 별도로 결정해야 합니다. 중첩 원격 연결의 최종 호스트 전환은 감지하지 못할 수 있으며, 대상 신원 검증을 보장하지 않습니다. 해석할 수 없는 문법은 계속 확인합니다.",
   "environment.ack": "실행 대상을 직접 확인하며 사용합니다.",
   "environment.start": "15분 동안 확인 줄이기",
   "environment.stop": "종료",

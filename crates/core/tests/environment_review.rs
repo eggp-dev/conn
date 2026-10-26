@@ -42,6 +42,16 @@ fn only_ordinary_known_dialect_commands_skip_environment_review() {
         submit(&mut h, "printf 'hello world'"),
         KeyResult::Executed { .. }
     ));
+    for cmd in [
+        r#"printf '%s' '[!*?~^]'"#,
+        r#"printf "%s" "glob*""#,
+        r#"printf '%s' '!!'"#,
+    ] {
+        assert!(
+            matches!(submit(&mut h, cmd), KeyResult::Executed { .. }),
+            "{cmd}"
+        );
+    }
     assert!(h.session.status().session_allows.is_empty());
 }
 #[test]
@@ -65,6 +75,28 @@ fn risks_deny_and_unsupported_grammar_keep_review() {
         "perl -pe 'print' file",
         "awk 'BEGIN {print 1}'",
         "sed -i 's/a/b/' file",
+        "/bin/r[m] file",
+        "/bin/r? file",
+        "ls *",
+        "!!",
+        "!rm",
+        "printf \"!!\"",
+        "^ls^rm file",
+        "coproc rm file",
+        "repeat 1 rm file",
+        "noglob rm file",
+        "=rm file",
+        "%1",
+        "fc -s",
+        "hash -p /bin/rm other",
+        "alias other='rm file'",
+        "trap 'rm file' EXIT",
+        "prlimit --core=0 rm file",
+        "chrt 0 rm file",
+        "truncate -s 0 /srv/protected/data",
+        "touch /srv/protected/data",
+        "PATH=/tmp ls",
+        "printf -v PROMPT_COMMAND 'rm file'",
     ] {
         let mut h = harness();
         h.session.start_environment_review(1).unwrap();
@@ -330,6 +362,9 @@ fn environment_overlay_metadata_excludes_unanalysable_and_risk_reviews() {
     );
     for (cmd, shell) in [
         ("sudo id", ShellKind::Posix),
+        ("/bin/r[m] file", ShellKind::Posix),
+        ("!!", ShellKind::Posix),
+        ("coproc rm file", ShellKind::Posix),
         ("env -u UNUSED rm file", ShellKind::Posix),
         ("node --eval 'process.exit(0)'", ShellKind::Posix),
         ("printf hello", ShellKind::Custom),
@@ -344,4 +379,52 @@ fn environment_overlay_metadata_excludes_unanalysable_and_risk_reviews() {
             "{cmd}"
         );
     }
+}
+
+#[test]
+fn unknown_commands_and_unchecked_protected_targets_never_reduce() {
+    let policy =
+        Harness::test_policy().replace("protected:\n", "protected:\n  - '/srv/protected/**'\n");
+    let store = PolicyStore::from_policy(Policy::parse(&policy).unwrap());
+    for cmd in [
+        "truncate -s 0 /srv/protected/data",
+        "prlimit --core=0 rm file",
+        "unknown-command harmless",
+    ] {
+        let analysis = store.analyse_external_with_environment(cmd, ShellKind::Posix, true);
+        assert!(
+            matches!(
+                analysis.decision,
+                conn_core::policy::Decision::Confirm { .. }
+            ),
+            "{cmd}"
+        );
+        assert!(!analysis.blanket_confirm, "{cmd}");
+        assert!(analysis.cwd.is_none());
+        assert!(analysis.segments.iter().all(|s| s.targets.is_empty()));
+    }
+}
+
+#[test]
+fn eligible_queries_still_obey_risk_deny_and_independent_category_allows() {
+    let policy = Policy::parse("deny:\n  - command: ls\n    args: '--blocked'\n    label: blocked query\nconfirm:\n  - command: cat\n    label: review read\ndefault: allow\n").unwrap();
+    let mut store = PolicyStore::from_policy(policy);
+    store.allow_for_session("review read");
+    let risk = store.analyse_external_with_environment("cat file", ShellKind::Posix, true);
+    assert!(
+        matches!(risk.decision, conn_core::policy::Decision::Confirm {ref label} if label == "review read")
+    );
+    assert!(!risk.blanket_confirm);
+    assert!(matches!(
+        store
+            .analyse_external_with_environment("ls --blocked", ShellKind::Posix, true)
+            .decision,
+        conn_core::policy::Decision::Deny { .. }
+    ));
+    assert!(matches!(
+        store
+            .analyse_external_with_environment("ls -l", ShellKind::Posix, true)
+            .decision,
+        conn_core::policy::Decision::Allow
+    ));
 }

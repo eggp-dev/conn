@@ -17,7 +17,7 @@ Conn is a terminal you share with the AI agent you already use. The agent picks 
 
 *You log in to your server. Your agent asks to delete the whole cache. You say no, type the fix yourself, and it finishes the job.* [Watch the full film](https://conn.eggp.dev/#film) ([file](docs/assets/conn-remote-en.mp4)) · [한국어 영상](https://conn.eggp.dev/ko/#film) · [One continuous take: how it was recorded](media/demo/RECORDING-REMOTE.md)
 
-The default per-command review in unverified environments is unchanged. The local owner can opt into **Reduce environment checks** for one exact session/connection for 15 minutes; risky commands and unsupported syntax still require review. [Scope and limits](docs/policy.md#reduce-environment-checks).
+The default per-command review in unverified environments is unchanged. The local owner can opt into **Reduce environment checks** for supported simple queries on one exact session/connection for 15 minutes; other commands, risks and unsupported syntax still require review. [Scope and limits](docs/policy.md#reduce-environment-checks).
 
 ## Install
 

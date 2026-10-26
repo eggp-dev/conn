@@ -4,7 +4,7 @@ Implementation base: `744fa22f4396a3d4e762a29d6156ba4e12fcdb8b`, independently c
 
 ## Local evidence
 
-- `cargo test --locked --offline`: 313 passed, one existing ignored test. Includes 16 new integration regressions and five monotonic/transport/queue unit regressions.
+- `cargo test --locked --offline`: 315 passed, one existing ignored test. Includes 18 new integration regressions and five monotonic/transport/queue unit regressions.
 - New coverage: default per-command review; explicit POSIX-only ordinary-command reduction; risk/deny/unsupported syntax; unknown dialects; distinct same-name connections; no retroactive approval or category promotion; expiry/stop/profile/policy/sharing queue cancellation; retained-input recovery; natural lease expiry versus human takeover; nonrenewing reads/duplicate clicks; owner-only mutation and connection-scoped public state.
 - `npm run test:ui`: all nine test files passed.
 - `npm run build -w conn-desktop`, `npm run build:web`, `npm run build -w conn-site`, `npm run check -w conn-demo`: passed. Svelte check: zero errors; existing warnings remain.

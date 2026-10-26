@@ -511,7 +511,7 @@ impl PolicyStore {
         let analysable = shell == ShellKind::Posix && !segments.is_empty()
             && simple_external_line(line)
             && segments.iter().all(|s| s.command.is_some() && s.opaque.is_none()
-                && s.wrappers.is_empty() && !requires_script_review(s.command.as_deref().unwrap_or_default()));
+                && reducible_query(s));
         for segment in &segments {
             let mut decision = self.policy.evaluate_segment(segment);
             // PowerShell and cmd executable names are case insensitive.
@@ -544,14 +544,38 @@ impl PolicyStore {
 
 }
 
-// Wrapper options and interpreter option grammars are not fully parsed here.
-// Their absence from a configured risk rule must never certify them for reduction.
-fn requires_script_review(command: &str) -> bool {
-    const UNPARSED: &[&str] = &["sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh",
-        "python", "perl", "ruby", "node", "nodejs", "php", "lua", "awk", "gawk", "mawk", "sed",
-        "pwsh", "powershell", "cmd", "busybox", "toybox", "timeout", "setsid", "chroot", "flock", "watch", "parallel"];
-    UNPARSED.iter().any(|name| command == *name || command.strip_prefix(name).is_some_and(|suffix|
-        !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit() || c == '.')))
+/// Fail closed on unknown executables and option grammars. Remote protected
+/// targets cannot be checked against the host, so mutating/path-sensitive commands
+/// and arbitrary launchers never qualify merely because a risk rule missed them.
+fn reducible_query(segment: &crate::analysis::Segment) -> bool {
+    const QUERIES: &[&str] = &[
+        ":", "true", "false", "pwd", "echo", "printf", "ls", "cat", "head", "tail", "wc", "grep",
+        "fgrep", "egrep", "cut", "tr", "cmp", "readlink", "realpath", "basename", "dirname",
+        "uname", "id", "whoami", "uptime", "df", "du", "free", "ps",
+    ];
+    let Some(command) = segment.command.as_deref() else {
+        return false;
+    };
+    if !segment.wrappers.is_empty() || !QUERIES.contains(&command) {
+        return false;
+    }
+    // Leading assignments can replace command lookup or install shell hooks.
+    if segment
+        .argv
+        .first()
+        .and_then(|word| word.split_once('='))
+        .is_some_and(|(key, _)| {
+            !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        })
+    {
+        return false;
+    }
+    // Bash printf -v writes shell variables, including executable prompt hooks.
+    command != "printf"
+        || !segment
+            .args
+            .first()
+            .is_some_and(|arg| arg.starts_with("-v"))
 }
 
 /// Deliberately smaller than a shell grammar: incomplete quoting, expansion,
@@ -560,18 +584,62 @@ fn simple_external_line(line: &str) -> bool {
     let mut quote = None;
     let mut escaped = false;
     for c in line.chars() {
-        if escaped { escaped = false; continue; }
-        if quote == Some('\'') { if c == '\'' { quote = None; } continue; }
-        if c == '\\' { escaped = true; continue; }
-        if quote == Some('"') {
-            if c == '"' { quote = None; }
-            else if matches!(c, '$' | '`' | '\n' | '\r') { return false; }
+        if escaped {
+            escaped = false;
             continue;
         }
-        if matches!(c, '\'' | '"') { quote = Some(c); }
-        else if ";|&(){}<>`$#\n\r".contains(c) { return false; }
+        if quote == Some('\'') {
+            if c == '\'' {
+                quote = None;
+            }
+            continue;
+        }
+        if c == '\\' {
+            escaped = true;
+            continue;
+        }
+        if quote == Some('"') {
+            if c == '"' {
+                quote = None;
+            } else if matches!(c, '$' | '`' | '!' | '\n' | '\r') {
+                return false;
+            }
+            continue;
+        }
+        if matches!(c, '\'' | '"') {
+            quote = Some(c);
+        } else if ";|&(){}<>`$#*?[]!~^%\n\r".contains(c) {
+            return false;
+        }
     }
-    let reserved = ["if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done", "case", "esac", "function", "select", "!", "[[", "]]"];
+    let reserved = [
+        "if",
+        "then",
+        "else",
+        "elif",
+        "fi",
+        "for",
+        "while",
+        "until",
+        "do",
+        "done",
+        "case",
+        "esac",
+        "function",
+        "select",
+        "in",
+        "coproc",
+        "repeat",
+        "foreach",
+        "end",
+        "switch",
+        "endsw",
+        "nocorrect",
+        "noglob",
+        "!",
+        "[[",
+        "]]",
+    ];
     quote.is_none() && !escaped && !line.split_whitespace().any(|word| reserved.contains(&word))
 }
 
