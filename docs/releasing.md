@@ -102,12 +102,13 @@ If the repository ever moves again, change `REPOSITORY` and `REPOSITORY_SLUG` in
 ## Temporary ticket-service transport recovery
 
 The default macOS release image remains `macos-15`. A manual run on `main` can select
-`macos_runner=macos-14` while that standard ARM64 image is still available (retirement:
-2026-11-02). Only those two standard labels are accepted before build jobs start;
+`macos_runner=macos-26` to test the current GA standard ARM64 image.
+Only those two standard labels are accepted before build jobs start;
 paid larger images and arbitrary runner names are not accepted.
 
 This is a temporary recovery path for the hosted ticket-service transport problem
 tracked in [runner-images issue 14924](https://github.com/actions/runner-images/issues/14924).
+The alternate image must pass the complete native packaging checks before publication.
 It does not modify packet-filter rules, signing trust, certificates, credentials,
 notarization, Gatekeeper or updater verification. Keep all release checks enabled.
 The existing tag still selects the product source; the manual workflow revision and

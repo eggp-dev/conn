@@ -9,13 +9,13 @@ on:
         required: true
         type: string
       macos_runner:
-        description: Standard macOS image (14 is a temporary ticket-service recovery option)
+        description: Standard ARM64 macOS image for this build
         type: choice
         required: false
         default: macos-15
         options:
           - macos-15
-          - macos-14
+          - macos-26
 permissions:
   contents: read
 concurrency:
@@ -44,7 +44,7 @@ jobs:
         shell: bash
         run: |
           case "$MACOS_RUNNER" in
-            macos-15|macos-14) ;;
+            macos-15|macos-26) ;;
             *) echo 'Unsupported standard macOS image'; exit 1 ;;
           esac
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]
@@ -73,7 +73,7 @@ jobs:
             target: x86_64-unknown-linux-gnu
             bundles: deb,appimage
           # Manual standard-image recovery for temporary ticket-service transport failures.
-          # macOS 14 retires 2026-11-02; the default stays macOS 15.
+          # Both choices are standard ARM64 images; the default stays macOS 15.
           - os: ${{ needs.validate.outputs.macos_runner }}
             target: aarch64-apple-darwin
             bundles: app,dmg
