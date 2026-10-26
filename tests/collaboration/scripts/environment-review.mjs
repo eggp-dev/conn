@@ -127,6 +127,10 @@ try {
   assert.equal((await agent.tool('terminal_check_approval',{approvalId:pending.approvalId})).state,'pending');
   await page.locator('[data-request-key*="review:"]').getByRole('button',{name:'Run once',exact:true}).click();
   await decided(agent,pending.approvalId,['granted']);
+  await page.locator('.environment-review').waitFor({state:'hidden'});
+  await agent.tool('terminal_type',{text:'printf UI_REVIEW_AGAIN'});
+  const second=await agent.tool('terminal_send_key',{key:'ENTER',intent:'Print a second disposable marker.'});
+  assert.equal(second.status,'pending');
   await page.locator('.environment-review summary').click();
   await page.locator('.environment-review').getByRole('button',{name:/Session:/}).click();
   await page.locator('.environment-review input[type=checkbox]').check();

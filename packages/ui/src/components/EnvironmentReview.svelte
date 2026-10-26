@@ -9,6 +9,7 @@
   let error = $state('');
   let now = $state(performance.now());
   const connection = $derived(cur().agentConnections.find(c => c.connId === selected));
+  const available = $derived(cur().reviewRequired && !!cur().approval);
   const active = $derived(cur().environmentReview.filter(g => g.until > now));
   onMount(() => { const timer = setInterval(() => now = performance.now(), 250); return () => clearInterval(timer); });
   function close() { selected = null; acknowledged = false; error = ''; }
@@ -31,7 +32,7 @@
   }
 </script>
 
-{#if active.length || (cur().reviewRequired && cur().agentConnections.length)}
+{#if active.length || (available && cur().agentConnections.length)}
   <section class="environment-review" aria-label={t('environment.title')}>
     {#each active as grant (grant.grantId)}
       <div class="active">
@@ -40,7 +41,7 @@
         <button class="btn" disabled={busy} onclick={() => change(grant.connId, false)}>{t('environment.stop')}</button>
       </div>
     {/each}
-    {#if cur().reviewRequired}
+    {#if available}
       <details>
         <summary>{t('environment.title')}</summary>
         {#each cur().agentConnections.filter(c => !active.some(g => g.connId === c.connId)) as c (c.connId)}

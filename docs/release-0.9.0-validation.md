@@ -11,6 +11,7 @@ Implementation base: `744fa22f4396a3d4e762a29d6156ba4e12fcdb8b`, independently c
 - `npm run test:screen -w @conn/ui`: 85 grid/cursor comparisons passed.
 - `npm run test:checkpoint -w @conn/ui`: 984/984 checkpoint/xterm cases passed.
 - `npm run test:app-lifetime -w @conn/ui`: passed app/language/request/host-link/disposal isolation.
+- Retained-input/header/connection production regressions: all 15 cases passed twice after keeping inactive environment controls inside a pending-review flow. This prevents a transient shell-status update from changing idle terminal geometry.
 - Production browser/MCP: ten existing collaboration scenarios passed. Five new environment-controls scenarios passed using actual local owner UI, server, PTY and persistent MCP: acknowledgement/close/re-entry, pending-card nonapproval, countdown/reload, stop/disconnect/same-name reconnect, and unknown-dialect review. The unknown-dialect fixture deliberately keeps per-command review; known explicit POSIX behavior is covered in core tests.
 - `node scripts/check-ui-boundaries.mjs`, `node scripts/generate-owner-contract.mjs --check`: passed.
 - `python3 scripts/release.py check --tag v0.9.0`, repository hygiene/relative links, and 81 release-tooling tests: passed.
