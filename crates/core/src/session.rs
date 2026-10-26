@@ -308,6 +308,8 @@ pub struct ScheduledExec {
     pub cancel_reason: Option<String>,
     #[serde(skip)]
     environment_grant: Option<String>,
+    #[serde(skip)]
+    environment_context: environment_review::QueuedEnvironmentContext,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1810,6 +1812,8 @@ impl Session {
             .ok_or(SessionError::InputUnverified)?;
         self.last_agent_write = Some(Instant::now());
         self.refresh_environment_review(Instant::now());
+        let admission_context = self.queued_environment_context();
+        let admission_grant = self.valid_environment_grant(conn, Instant::now()).map(|g| g.id.clone());
         let analysis = self.analyse_for_connection(&cmd, conn, Instant::now());
         match analysis.decision.clone() {
             PolicyDecision::Allow => {
@@ -1826,7 +1830,8 @@ impl Session {
                         due: Instant::now() + Duration::from_millis(grace_ms),
                         state: ExecState::Scheduled,
                         cancel_reason: None,
-                        environment_grant: self.valid_environment_grant(conn, Instant::now()).map(|g| g.id.clone()),
+                        environment_grant: admission_grant,
+                        environment_context: admission_context,
                     });
                     self.audit.record(&agent_id, "exec_scheduled", json!({ "cmd": cmd, "exec": exec_id, "graceMs": grace_ms, "intent": intent }));
                     self.broadcast(ServerEvent::ExecScheduled { exec_id: exec_id.clone(), agent_id: agent_id.clone(), cmd: cmd.clone(), intent, grace_ms });
@@ -1837,6 +1842,11 @@ impl Session {
                         self.broadcast(ServerEvent::AttentionRequested { agent_id, reason });
                     }
                     return Ok(KeyResult::Scheduled { exec_id, cmd, grace_ms });
+                }
+                self.refresh_environment_review(Instant::now());
+                if !self.execution_admission_valid(conn, admission_grant.as_deref(), &admission_context, Instant::now()) {
+                    self.cancelled_input = self.input.has_pending();
+                    return Ok(KeyResult::Cancelled { cmd, reason: "execution_context_changed".into() });
                 }
                 self.execute_with_source(&agent_id, &cmd, intent, None)?;
                 Ok(KeyResult::Executed { cmd })
@@ -1896,25 +1906,36 @@ impl Session {
 
     /// Frontend/human: run a scheduled execution right now (co-sign during the grace window).
     pub fn execute_now_scheduled(&mut self, exec_id: &str) -> Result<(), SessionError> {
+        self.execute_now_scheduled_with_clock(exec_id, Instant::now)
+    }
+
+    fn execute_now_scheduled_with_clock(&mut self, exec_id: &str, clock: impl Fn() -> Instant) -> Result<(), SessionError> {
         self.require_shared()?;
-        self.refresh_environment_review(Instant::now());
-        self.validate_scheduled_environment(Instant::now());
-        match &mut self.scheduled {
-            Some(s) if s.exec_id == exec_id && s.state == ExecState::Scheduled => {
-                s.state = ExecState::Executed;
-                let (agent, cmd, intent) = (s.agent_id.clone(), s.cmd.clone(), s.intent.clone());
-                self.audit.record("human", "exec_cosigned", json!({ "exec": exec_id, "cmd": cmd, "agentId": agent }));
-                self.broadcast(ServerEvent::ExecCosigned { exec_id: exec_id.into(), agent_id: agent.clone() });
-                if let Err(error) = self.execute_with_source(&agent, &cmd, intent, Some("human_cosign")) {
-                    if let Some(s) = &mut self.scheduled { s.state = ExecState::Cancelled; s.cancel_reason = Some("input_outcome_unknown".into()); }
-                    self.broadcast(ServerEvent::ExecCancelled { exec_id: exec_id.into(), reason: "input_outcome_unknown".into() });
-                    return Err(error);
-                }
-                Ok(())
-            }
-            Some(s) if s.exec_id == exec_id => Err(SessionError::InvalidInput(format!("{exec_id} is not scheduled"))),
-            _ => Err(SessionError::NotFound(exec_id.to_string())),
+        let now = clock();
+        self.refresh_environment_review(now);
+        self.validate_scheduled_environment(now);
+        let (agent, cmd, intent) = match &self.scheduled {
+            Some(s) if s.exec_id == exec_id && s.state == ExecState::Scheduled =>
+                (s.agent_id.clone(), s.cmd.clone(), s.intent.clone()),
+            Some(s) if s.exec_id == exec_id => return Err(SessionError::InvalidInput(format!("{exec_id} is not scheduled"))),
+            _ => return Err(SessionError::NotFound(exec_id.to_string())),
+        };
+        self.audit.record("human", "exec_cosigned", json!({ "exec": exec_id, "cmd": cmd, "agentId": agent }));
+        self.broadcast(ServerEvent::ExecCosigned { exec_id: exec_id.into(), agent_id: agent.clone() });
+        // Owner event delivery and audit I/O can take time. They are consent,
+        // not execution evidence; recheck after them and immediately before ENTER.
+        let now = clock();
+        self.refresh_environment_review(now);
+        self.validate_scheduled_environment(now);
+        let scheduled = self.scheduled.as_mut().filter(|s| s.exec_id == exec_id && s.state == ExecState::Scheduled)
+            .ok_or_else(|| SessionError::InvalidInput("execution_context_changed: submit the command for a new review".into()))?;
+        scheduled.state = ExecState::Executed;
+        if let Err(error) = self.execute_with_source(&agent, &cmd, intent, Some("human_cosign")) {
+            if let Some(s) = &mut self.scheduled { s.state = ExecState::Cancelled; s.cancel_reason = Some("input_outcome_unknown".into()); }
+            self.broadcast(ServerEvent::ExecCancelled { exec_id: exec_id.into(), reason: "input_outcome_unknown".into() });
+            return Err(error);
         }
+        Ok(())
     }
 
     /// Frontend/human: cancel a scheduled execution during its grace window.
@@ -2111,6 +2132,11 @@ impl Session {
             self.finish_control_request(&id, ControlRequestState::Expired);
         }
         let surface_ready = self.participation.shared;
+        if self.scheduled.as_ref().is_some_and(|s| surface_ready && s.state == ExecState::Scheduled && s.due <= now) {
+            let input_now = Instant::now();
+            self.refresh_environment_review(input_now);
+            self.validate_scheduled_environment(input_now);
+        }
         if let Some(s) = &mut self.scheduled {
             if surface_ready && s.state == ExecState::Scheduled && s.due <= now {
                 s.state = ExecState::Executed;
