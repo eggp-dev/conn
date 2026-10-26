@@ -326,6 +326,9 @@ pub struct LineAnalysis {
     /// Set when the line was denied for mixing a dangerous segment with others.
     #[serde(rename = "isolationViolation")]
     pub isolation_violation: bool,
+    /// Environment uncertainty alone would require confirmation for this line.
+    #[serde(rename = "blanketConfirm")]
+    pub blanket_confirm: bool,
 }
 
 fn inspect_target(path: &std::path::Path, protected: bool) -> TargetInfo {
@@ -483,7 +486,7 @@ impl PolicyStore {
             isolation_violation = true;
             worst = Decision::Deny { label: "run dangerous commands alone".into() };
         }
-        LineAnalysis { cwd: cwd.map(|c| c.display().to_string()), segments: verdicts, decision: worst, isolation_violation }
+        LineAnalysis { cwd: cwd.map(|c| c.display().to_string()), segments: verdicts, decision: worst, isolation_violation, blanket_confirm: false }
     }
 
     pub fn require_intent(&self) -> bool {
@@ -494,11 +497,20 @@ impl PolicyStore {
     /// Preserve deny rules, but never claim these contexts are automatically verified.
     /// This review is per command and cannot be lifted by a session-wide allowance.
     pub fn analyse_external(&self, line: &str, shell: crate::backend::ShellKind) -> LineAnalysis {
+        self.analyse_external_with_environment(line, shell, false)
+    }
+
+    /// Session grants may remove only the environment overlay. Risk rules and
+    /// unsupported grammar never use category allowances here.
+    pub fn analyse_external_with_environment(&self, line: &str, shell: crate::backend::ShellKind, reduce: bool) -> LineAnalysis {
         use crate::backend::ShellKind;
         let segments = if shell == ShellKind::Posix { crate::analysis::analyse_line(line) }
         else { external_segments(line, shell) };
         let mut verdicts = Vec::new();
-        let mut worst = Decision::Confirm { label: "Review command in this shell/remote environment".into() };
+        let mut worst = Decision::Allow;
+        let analysable = shell == ShellKind::Posix && !segments.is_empty()
+            && simple_external_line(line)
+            && segments.iter().all(|s| s.command.is_some() && s.opaque.is_none());
         for segment in &segments {
             let mut decision = self.policy.evaluate_segment(segment);
             // PowerShell and cmd executable names are case insensitive.
@@ -514,16 +526,41 @@ impl PolicyStore {
             match &decision {
                 Decision::Deny { .. } => worst = decision.clone(),
                 Decision::Confirm { .. } if !matches!(worst, Decision::Deny { .. }) => worst = decision.clone(),
-                Decision::Allow => decision = Decision::Confirm { label: "Review command in this shell/remote environment".into() },
+                Decision::Allow => {},
                 _ => {}
             }
             verdicts.push(SegmentVerdict {text:segment.text.clone(),command:segment.command.clone(),opaque:Some("Target syntax or filesystem requires human review".into()),decision,targets:vec![]});
         }
         let isolation_violation = self.policy.isolate_dangerous && segments.len()>1;
         if isolation_violation { worst=Decision::Deny {label:"Run commands separately in this shell/remote environment".into()}; }
-        LineAnalysis {cwd:None,segments:verdicts,decision:worst,isolation_violation}
+        let blanket_confirm = matches!(worst, Decision::Allow);
+        if blanket_confirm && (!reduce || !analysable) {
+            worst = Decision::Confirm { label: "Review command in this shell/remote environment".into() };
+        }
+        LineAnalysis {cwd:None,segments:verdicts,decision:worst,isolation_violation,blanket_confirm}
     }
 
+}
+
+/// Deliberately smaller than a shell grammar: incomplete quoting, expansion,
+/// compound syntax and reserved words always keep their command review.
+fn simple_external_line(line: &str) -> bool {
+    let mut quote = None;
+    let mut escaped = false;
+    for c in line.chars() {
+        if escaped { escaped = false; continue; }
+        if quote == Some('\'') { if c == '\'' { quote = None; } continue; }
+        if c == '\\' { escaped = true; continue; }
+        if quote == Some('"') {
+            if c == '"' { quote = None; }
+            else if matches!(c, '$' | '`' | '\n' | '\r') { return false; }
+            continue;
+        }
+        if matches!(c, '\'' | '"') { quote = Some(c); }
+        else if ";|&(){}<>`$#\n\r".contains(c) { return false; }
+    }
+    let reserved = ["if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done", "case", "esac", "function", "select", "!", "[[", "]]"];
+    quote.is_none() && !escaped && !line.split_whitespace().any(|word| reserved.contains(&word))
 }
 
 /// Small dialect-aware lexer for explicit command rules. It does not certify scripts.

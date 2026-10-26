@@ -5,6 +5,8 @@ export type SessionSnapshot = {
   shared: boolean; externalOrigin: boolean; surfaceAvailable: boolean; inputPending: boolean;
   externalStarting?: boolean; externalInputAvailable: boolean; processAlive: boolean; attended: boolean;
   profileId: string | null; profileName: string | null; reviewRequired: boolean;
+  environmentReview?: Omit<TabState["environmentReview"][number], "until">[];
+  agentConnections?: TabState["agentConnections"];
   mode: Mode; effectiveMode: Mode; controlGate: boolean; pacing: Pacing;
   sessionAllows: string[]; affordanceMask: string[] | null; connectedAgents: string[];
   controller: TabState['controller'] & {expiresInSecs?:number}; attentionRequest: {agentId: string; reason?: string | null} | null; openedBy: string | null;
@@ -30,12 +32,12 @@ export function applyController(t: TabState, controller: TabState['controller'])
 export function applySessionEvent(t: TabState, ev: SessionEvent) {
   if (ev.session !== t.id) return;
   if (ev.event === 'sharing_changed') {
-    t.shared = ev.shared; t.surfaceAvailable = false; clearDecisions(t);
+    t.shared = ev.shared; t.environmentReview = []; t.surfaceAvailable = false; clearDecisions(t);
     t.timeline.recording = ev.shared; t.agents = []; t.lastAgent = null; t.attention = null; t.typing = false;
     applyController(t, { type: 'human' });
     return;
   }
-  if (ev.event === 'process_exited') { t.processAlive = false; clearDecisions(t); applyController(t, { type: 'human' }); }
+  if (ev.event === 'process_exited') { t.processAlive = false; t.environmentReview = []; clearDecisions(t); applyController(t, { type: 'human' }); }
   if (ev.event === 'attention_changed') { t.attended = ev.attended; if (ev.attended) t.attention = null; }
   if (!t.shared) return;
   switch (ev.event) {
@@ -56,6 +58,7 @@ export function applySessionEvent(t: TabState, ev: SessionEvent) {
       break;
     case 'approval_requested': t.approval = approvalState(ev.request, t.approval?.id === ev.request.id ? t.approval.at : undefined); break;
     case 'approval_resolved': if (t.approval?.id === ev.approvalId) t.approval = null; break;
+    case 'environment_review_changed': t.environmentReview = ev.grants.map(g => ({...g, until: performance.now() + g.remainingMs})); break;
     case 'session_allows_changed': t.allows = ev.allows; break;
     case 'exec_scheduled': t.grace = { execId: ev.execId, cmd: ev.cmd, ms: ev.graceMs, start: performance.now(), intent: ev.intent ?? undefined }; break;
     case 'exec_cancelled': if (t.grace?.execId === ev.execId) t.grace = null; break;
@@ -67,6 +70,8 @@ export function applySessionEvent(t: TabState, ev: SessionEvent) {
   }
 }
 export function applySessionSnapshot(t: TabState, s: SessionSnapshot, privateTitle: string) {
+    t.environmentReview = (s.environmentReview ?? []).map(g => ({...g, until: performance.now() + g.remainingMs}));
+    t.agentConnections = s.agentConnections ?? [];
     t.shared = s.shared === true;
     t.externalOrigin = s.externalOrigin === true;
     t.surfaceAvailable = s.surfaceAvailable === true;

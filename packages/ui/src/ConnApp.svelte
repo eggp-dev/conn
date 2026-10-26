@@ -27,6 +27,7 @@
   import Center from "./components/Center.svelte";
   import SettingsSheet from "./components/SettingsSheet.svelte";
   import Ghost from "./components/Ghost.svelte";
+  import EnvironmentReview from "./components/EnvironmentReview.svelte";
   import Hold from "./components/Hold.svelte";
   import GraceBar from "./components/GraceBar.svelte";
   let island = $state<Island>();
@@ -451,7 +452,7 @@
   <TabStrip onselect={select} onclose={closeTab} onnew={openTab} onsettings={() => openSettings(st.settingsTab)} onpalette={() => { st.settingsOpen = false; st.centerOpen = false; st.paletteOpen = true; }} ontimeline={() => { st.timelineOpen = !st.timelineOpen; }} />
   {#if st.active}<Island bind:this={island} onnotice={navigateNotice} onopen={() => { st.paletteOpen = false; st.centerOpen = !st.centerOpen; }} />{/if}
   <div class="connection-dock" bind:clientHeight={connectionHeight}>{#if !st.settingsOpen}<AdmissionRequest focused={focusedConnection} />{/if}</div>
-  <div class="interaction-dock" bind:clientHeight={dockHeight}><CollaborationActivity onselect={(session)=>void navigateNotice({session})} /><TerminalPreparation focused={focusedConnection} onchoose={choosePreparation} onnew={newPreparation} />{#if cur().shared}<Hold /><Ghost /><GraceBar /><HandbackChip bind:this={chip} />{/if}</div>
+  <div class="interaction-dock" bind:clientHeight={dockHeight}><CollaborationActivity onselect={(session)=>void navigateNotice({session})} /><TerminalPreparation focused={focusedConnection} onchoose={choosePreparation} onnew={newPreparation} />{#if cur().shared}{#key st.active}<EnvironmentReview />{/key}<Hold /><Ghost /><GraceBar /><HandbackChip bind:this={chip} />{/if}</div>
   {#if !!cur().shared}
   <Timeline bind:height={timelineHeight} />
   {/if}

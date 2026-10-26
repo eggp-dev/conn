@@ -35,6 +35,7 @@ export type SessionEvent = { session: string } & (
   | { event: 'attention_requested' | 'tab_opened'; agentId: string; reason?: string | null }
   | { event: 'agent_switched_tab'; agentId: string; from: string; to: string }
   | { event: 'session_allows_changed'; allows: string[] }
+  | { event: 'environment_review_changed'; grants: Omit<import('../store.svelte').TabState['environmentReview'][number], 'until'>[] }
   | { event: 'shell_integration_changed'; status: { state: string; shell?: string | null; reason?: string | null } }
   | { event: 'shell_command_started'; commandId: string; submissionId: string | null; actor: string; cmd: string; cwd: string }
   | { event: 'shell_command_finished'; commandId: string; exitCode: number | null; durationMs: number }
