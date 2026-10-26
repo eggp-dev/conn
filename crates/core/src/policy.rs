@@ -510,7 +510,8 @@ impl PolicyStore {
         let mut worst = Decision::Allow;
         let analysable = shell == ShellKind::Posix && !segments.is_empty()
             && simple_external_line(line)
-            && segments.iter().all(|s| s.command.is_some() && s.opaque.is_none());
+            && segments.iter().all(|s| s.command.is_some() && s.opaque.is_none()
+                && s.wrappers.is_empty() && !requires_script_review(s.command.as_deref().unwrap_or_default()));
         for segment in &segments {
             let mut decision = self.policy.evaluate_segment(segment);
             // PowerShell and cmd executable names are case insensitive.
@@ -540,6 +541,16 @@ impl PolicyStore {
         LineAnalysis {cwd:None,segments:verdicts,decision:worst,isolation_violation,blanket_confirm}
     }
 
+}
+
+// Wrapper options and interpreter option grammars are not fully parsed here.
+// Their absence from a configured risk rule must never certify them for reduction.
+fn requires_script_review(command: &str) -> bool {
+    const UNPARSED: &[&str] = &["sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh",
+        "python", "perl", "ruby", "node", "nodejs", "php", "lua", "awk", "gawk", "mawk", "sed",
+        "pwsh", "powershell", "cmd", "busybox", "toybox", "timeout", "setsid", "chroot", "flock", "watch", "parallel"];
+    UNPARSED.iter().any(|name| command == *name || command.strip_prefix(name).is_some_and(|suffix|
+        !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit() || c == '.')))
 }
 
 /// Deliberately smaller than a shell grammar: incomplete quoting, expansion,

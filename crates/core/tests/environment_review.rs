@@ -55,6 +55,16 @@ fn risks_deny_and_unsupported_grammar_keep_review() {
         "if true",
         "echo ok > file",
         "echo $(id)",
+        "env -u UNUSED rm file",
+        "env -S 'rm file'",
+        "timeout 5 rm file",
+        "busybox rm file",
+        "python3.12 -c 'print(1)'",
+        "command printf hello",
+        "node --eval 'process.exit(0)'",
+        "perl -pe 'print' file",
+        "awk 'BEGIN {print 1}'",
+        "sed -i 's/a/b/' file",
     ] {
         let mut h = harness();
         h.session.start_environment_review(1).unwrap();
