@@ -65,3 +65,7 @@ In-app installation supports Apple Silicon macOS, Windows x64 and Linux AppImage
 ## How can I help?
 
 Try the first collaboration and tell us where you got stuck or when you wanted to intervene. Include the Conn version, OS, shell and client, plus a small public example. Review screenshots and request details before sharing; a full terminal dump is rarely needed. [Report a problem](https://github.com/eggp-dev/conn/issues/new/choose) · [Contribute](../CONTRIBUTING.md)
+
+## Can I temporarily reduce environment checks?
+
+Yes. The local owner UI can reduce the environment-only review for one exact connection in the current session for 15 minutes. It is off by default, never auto-renews and does not approve pending cards. Risk reviews and unsupported syntax keep their confirmation. The target remains unverified, including undetectable changes inside nested remote connections. Use the visible Stop control to end it. See [Reduce environment checks](policy.md#reduce-environment-checks) for scope, invalidation and queued-command behavior.

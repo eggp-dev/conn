@@ -11,6 +11,17 @@ export const LANGS: { id: Lang; name: string }[] = [
 type Dict = Record<string, string>;
 
 const en: Dict = {
+  "environment.title": "Reduce environment checks",
+  "environment.warning": "Conn cannot verify the final execution target or internal transitions. I will check the execution target myself. Risky commands still require confirmation.",
+  "environment.limit": "Supported simple POSIX query commands only; all other commands still require review. Only this session and exact connection, for 15 minutes. Pending approval cards still need your decision. Nested remote connections may change the final host without detection. This does not verify target identity. Unsupported syntax still requires review.",
+  "environment.ack": "I will check the execution target myself.",
+  "environment.start": "Reduce checks for 15 minutes",
+  "environment.stop": "Stop",
+  "environment.close": "Close",
+  "environment.active": "Target unverified · Checks reduced · {time} remaining",
+  "environment.target": "Session: {session} · Connection: {agent} (ID {conn})",
+  "environment.failed": "Could not change environment checks. Refresh the session state before retrying.",
+
   "hold.input_retained": "Cancelled. The typed line remains in this program; inspect or clear it before continuing.",
   "terminal.syncing": "Restoring this terminal… Input is paused.",
   "terminal.restore": "Restore screen",
@@ -643,6 +654,17 @@ const en: Dict = {
 };
 
 const ko: Dict = {
+  "environment.title": "환경 확인 줄이기",
+  "environment.warning": "최종 실행 대상과 내부 전환을 확인할 수 없습니다. 실행 대상을 직접 확인하며 사용합니다. 위험 명령은 계속 확인합니다.",
+  "environment.limit": "지원되는 단순 POSIX 조회 명령에만 적용하며, 다른 명령은 계속 확인합니다. 현재 세션과 정확한 연결에만 15분 동안 적용합니다. 대기 승인 카드는 별도로 결정해야 합니다. 중첩 원격 연결의 최종 호스트 전환은 감지하지 못할 수 있으며, 대상 신원 검증을 보장하지 않습니다. 해석할 수 없는 문법은 계속 확인합니다.",
+  "environment.ack": "실행 대상을 직접 확인하며 사용합니다.",
+  "environment.start": "15분 동안 확인 줄이기",
+  "environment.stop": "종료",
+  "environment.close": "닫기",
+  "environment.active": "대상 미검증 · 확인 줄임 · 남은 시간 {time}",
+  "environment.target": "세션: {session} · 연결: {agent} (ID {conn})",
+  "environment.failed": "환경 확인을 변경하지 못했습니다. 세션 상태를 새로 확인한 후 다시 시도하세요.",
+
   "hold.input_retained": "요청을 취소했습니다. 입력한 줄은 남아 있으니 확인하거나 지운 뒤 계속하세요.",
   "terminal.syncing": "터미널 화면을 복원하고 있습니다. 입력은 잠시 대기합니다.",
   "terminal.restore": "화면 다시 복원",

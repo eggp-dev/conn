@@ -85,6 +85,7 @@ impl Session {
         // physical input for the owner instead of guessing a clear key in a TUI.
         let unfinished_agent_input = self.input.has_pending();
         self.revoke_external();
+        self.invalidate_environment_review("sharing_changed");
         self.cancel_agent_work("sharing_changed");
         self.human_input.pending |= unfinished_agent_input && self.input.has_pending();
         if !shared {

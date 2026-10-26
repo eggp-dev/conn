@@ -26,6 +26,8 @@ export type TabState = {
   profileId: string | null;
   profileName: string | null;
   reviewRequired: boolean;
+  environmentReview: { grantId: string; connId: number; agentId: string; remainingMs: number; contextRevision: number; until: number }[];
+  agentConnections: {connId: number; agentId: string}[];
   processAlive: boolean;
   policyBlockedUntil: number;
   attended: boolean;
@@ -55,7 +57,7 @@ export type TabState = {
 
 export function newTab(id: string, n: number): TabState {
   return {
-    id, title: `Terminal ${n}`, statusReady: false, shared: false, externalOrigin: false, surfaceAvailable: false, inputPending: false, externalStarting: false, externalInputAvailable: false, profileId: null, profileName: null, reviewRequired: false, processAlive: true, policyBlockedUntil: 0, attended: false, attention: null, openedBy: null,
+    id, title: `Terminal ${n}`, statusReady: false, shared: false, externalOrigin: false, surfaceAvailable: false, inputPending: false, externalStarting: false, externalInputAvailable: false, profileId: null, profileName: null, reviewRequired: false, environmentReview: [], agentConnections: [], processAlive: true, policyBlockedUntil: 0, attended: false, attention: null, openedBy: null,
     controller: { type: "human" }, mode: "autopilot", effectiveMode: "autopilot", gate: false,
     pacing: { minWriteIntervalMs: 0, enterGraceMs: 0, leaseTtlSecs: 60, approvalTtlSecs: 300 },
     mask: null, allows: [], agents: [], typing: false, proposal: null, approval: null, grace: null, ctlReq: null,

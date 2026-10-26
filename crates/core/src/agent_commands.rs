@@ -104,7 +104,7 @@ pub(crate) fn dispatch_locked(
     }
     if method == "status" {
         return Ok(
-            json!({"controller": s.status().controller, "mode": s.mode(), "effectiveMode": s.effective_mode(), "attended": s.attended(), "shared": !s.is_private(), "surfaceAvailable": s.status().surface_available }),
+            json!({"environmentReview": s.environment_review_status(Some(conn), std::time::Instant::now()), "controller": s.status().controller, "mode": s.mode(), "effectiveMode": s.effective_mode(), "attended": s.attended(), "shared": !s.is_private(), "surfaceAvailable": s.status().surface_available }),
         );
     }
     s.note_connection_activity(conn);

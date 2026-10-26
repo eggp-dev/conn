@@ -687,6 +687,8 @@ fn dispatch(app: &AppHandle, state: &AppState, name: &str, args: Value) -> Resul
         "accept_proposal" => out(accept_proposal(state, arg::<String>(&args, "session")?, arg::<String>(&args, "proposalId")?)?),
         "reject_proposal" => out(reject_proposal(state, arg::<String>(&args, "session")?, arg::<String>(&args, "proposalId")?)?),
         "hand_back" => out(hand_back(state, arg::<String>(&args, "session")?)?),
+        "start_environment_review" => { engine(state, &arg::<String>(&args, "session")?)?.session().lock().start_environment_review(arg::<u64>(&args, "connId")?).map_err(|e| e.to_string())?; Ok(Value::Null) },
+        "stop_environment_review" => Ok(json!(engine(state, &arg::<String>(&args, "session")?)?.session().lock().stop_environment_review(arg::<u64>(&args, "connId")?, "owner_stopped"))),
         "revoke_session_allow" => out(revoke_session_allow(state, arg::<String>(&args, "session")?, arg::<String>(&args, "label")?)?),
         "set_pacing" => out(set_pacing(state, arg::<String>(&args, "session")?, arg::<Value>(&args, "patch")?)?),
         "set_affordances" => out(set_affordances(state, arg::<String>(&args, "session")?, arg::<Option<Vec<Affordance>>>(&args, "allow")?)?),

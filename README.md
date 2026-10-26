@@ -17,6 +17,8 @@ Conn is a terminal you share with the AI agent you already use. The agent picks 
 
 *You log in to your server. Your agent asks to delete the whole cache. You say no, type the fix yourself, and it finishes the job.* [Watch the full film](https://conn.eggp.dev/#film) ([file](docs/assets/conn-remote-en.mp4)) · [한국어 영상](https://conn.eggp.dev/ko/#film) · [One continuous take: how it was recorded](media/demo/RECORDING-REMOTE.md)
 
+The default per-command review in unverified environments is unchanged. The local owner can opt into **Reduce environment checks** for supported simple queries on one exact session/connection for 15 minutes; other commands, risks and unsupported syntax still require review. [Scope and limits](docs/policy.md#reduce-environment-checks).
+
 ## Install
 
 ```sh
@@ -29,13 +31,13 @@ curl -fsSL https://conn.eggp.dev/install.sh | sh
 
 No Rust or Node.js required; the agent connector is included. Both install the same signed release files as the downloads below, and the app updates itself afterwards. Windows: use the installer.
 
-| Platform | v0.8.9 preview |
+| Platform | v0.9.0 preview |
 |---|---|
-| macOS · Apple Silicon | [Download for Mac](https://github.com/eggp-dev/conn/releases/download/v0.8.9/conn-v0.8.9-aarch64-apple-darwin-desktop.dmg) |
-| Windows · x64 | [Download installer](https://github.com/eggp-dev/conn/releases/download/v0.8.9/conn-v0.8.9-x86_64-pc-windows-msvc-setup.exe) |
-| Ubuntu · x64 | [Download .deb](https://github.com/eggp-dev/conn/releases/download/v0.8.9/conn-v0.8.9-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggp-dev/conn/releases/download/v0.8.9/conn-v0.8.9-x86_64-unknown-linux-gnu-desktop.AppImage) |
+| macOS · Apple Silicon | [Download for Mac](https://github.com/eggp-dev/conn/releases/download/v0.9.0/conn-v0.9.0-aarch64-apple-darwin-desktop.dmg) |
+| Windows · x64 | [Download installer](https://github.com/eggp-dev/conn/releases/download/v0.9.0/conn-v0.9.0-x86_64-pc-windows-msvc-setup.exe) |
+| Ubuntu · x64 | [Download .deb](https://github.com/eggp-dev/conn/releases/download/v0.9.0/conn-v0.9.0-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggp-dev/conn/releases/download/v0.9.0/conn-v0.9.0-x86_64-unknown-linux-gnu-desktop.AppImage) |
 
-Mac downloads are signed and notarized. Windows previews are unsigned. Linux builds use Ubuntu 24.04, and the AppImage updates in-app while the `.deb` updates by installing a new package; Intel Mac distribution is paused. [Installation and updates](docs/getting-started.md) · [All assets and checksums](https://github.com/eggp-dev/conn/releases/tag/v0.8.9)
+Mac downloads are signed and notarized. Windows previews are unsigned. Linux builds use Ubuntu 24.04, and the AppImage updates in-app while the `.deb` updates by installing a new package; Intel Mac distribution is paused. [Installation and updates](docs/getting-started.md) · [All assets and checksums](https://github.com/eggp-dev/conn/releases/tag/v0.9.0)
 
 ## First five minutes
 

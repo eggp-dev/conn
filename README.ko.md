@@ -17,6 +17,8 @@ Conn은 지금 쓰는 AI 에이전트와 함께 쓰는 터미널입니다. 에�
 
 *내 서버에는 내가 로그인합니다. 에이전트가 캐시를 통째로 지우겠다고 합니다. 안 된다고 하고 내가 직접 고치면, 에이전트가 나머지를 끝냅니다.* [전체 영상 보기](https://conn.eggp.dev/ko/#film) ([파일](docs/assets/conn-remote-ko.mp4)) · [English video](https://conn.eggp.dev/#film) · [한 번에 이어서 찍었습니다: 촬영 기록](media/demo/RECORDING-REMOTE.md)
 
+판별할 수 없는 실행 환경의 기본 매명령 확인은 유지됩니다. 로컬 소유자가 **환경 확인 줄이기**를 명시적으로 켜면 현재 세션·정확한 연결의 지원 조회 명령에만 15분 동안 적용하며, 다른 명령과 해석 불가 문법은 계속 확인합니다. [범위와 한계](docs/faq.ko.md#환경-확인-줄이기는-무엇인가요).
+
 ## 설치
 
 ```sh
@@ -29,13 +31,13 @@ curl -fsSL https://conn.eggp.dev/install.sh | sh
 
 Rust나 Node.js는 필요 없습니다. 에이전트 연결 도구가 함께 들어 있습니다. 두 방법 모두 아래 다운로드와 같은 서명된 릴리스 파일을 설치하며, 이후에는 앱 안에서 업데이트됩니다. Windows는 설치 파일을 사용하세요.
 
-| 운영체제 | v0.8.9 프리뷰 |
+| 운영체제 | v0.9.0 프리뷰 |
 |---|---|
-| macOS · Apple Silicon | [Mac용 다운로드](https://github.com/eggp-dev/conn/releases/download/v0.8.9/conn-v0.8.9-aarch64-apple-darwin-desktop.dmg) |
-| Windows · x64 | [설치 파일 다운로드](https://github.com/eggp-dev/conn/releases/download/v0.8.9/conn-v0.8.9-x86_64-pc-windows-msvc-setup.exe) |
-| Ubuntu · x64 | [.deb 다운로드](https://github.com/eggp-dev/conn/releases/download/v0.8.9/conn-v0.8.9-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggp-dev/conn/releases/download/v0.8.9/conn-v0.8.9-x86_64-unknown-linux-gnu-desktop.AppImage) |
+| macOS · Apple Silicon | [Mac용 다운로드](https://github.com/eggp-dev/conn/releases/download/v0.9.0/conn-v0.9.0-aarch64-apple-darwin-desktop.dmg) |
+| Windows · x64 | [설치 파일 다운로드](https://github.com/eggp-dev/conn/releases/download/v0.9.0/conn-v0.9.0-x86_64-pc-windows-msvc-setup.exe) |
+| Ubuntu · x64 | [.deb 다운로드](https://github.com/eggp-dev/conn/releases/download/v0.9.0/conn-v0.9.0-x86_64-unknown-linux-gnu-desktop.deb) · [AppImage](https://github.com/eggp-dev/conn/releases/download/v0.9.0/conn-v0.9.0-x86_64-unknown-linux-gnu-desktop.AppImage) |
 
-Mac 배포 파일은 서명·공증되어 있습니다. Windows 프리뷰는 무서명이며, Linux는 Ubuntu 24.04에서 빌드하며, AppImage는 앱 안에서 업데이트되고 `.deb`는 새 패키지를 설치해 업데이트합니다. Intel Mac 배포는 잠시 중단했습니다. [설치·업데이트 안내](docs/getting-started.ko.md) · [전체 파일·체크섬](https://github.com/eggp-dev/conn/releases/tag/v0.8.9)
+Mac 배포 파일은 서명·공증되어 있습니다. Windows 프리뷰는 무서명이며, Linux는 Ubuntu 24.04에서 빌드하며, AppImage는 앱 안에서 업데이트되고 `.deb`는 새 패키지를 설치해 업데이트합니다. Intel Mac 배포는 잠시 중단했습니다. [설치·업데이트 안내](docs/getting-started.ko.md) · [전체 파일·체크섬](https://github.com/eggp-dev/conn/releases/tag/v0.9.0)
 
 ## 처음 5분
 

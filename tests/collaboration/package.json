@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node scripts/web-mcp.mjs",
+    "test": "node scripts/web-mcp.mjs && node scripts/environment-review.mjs",
     "test:input": "node scripts/input-rendering.mjs",
     "test:editor": "node scripts/editor-input.mjs",
     "test:regressions": "node scripts/header-input-regressions.mjs"

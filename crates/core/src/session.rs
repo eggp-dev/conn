@@ -9,6 +9,7 @@
 //! `EventSink`s registered per connection.
 
 mod participation;
+mod environment_review;
 mod pending_work;
 use participation::Participation;
 
@@ -88,6 +89,7 @@ pub enum ServerEvent {
     /// The human explicitly returned control to the previous agent.
     ControlHandedBack { lease: String, #[serde(rename = "agentId")] agent_id: String, #[serde(rename = "lastCmd")] last_cmd: Option<String> },
     SessionAllowsChanged { allows: Vec<String> },
+    EnvironmentReviewChanged { grants: Vec<environment_review::EnvironmentReviewInfo> },
 }
 
 /// How much an agent may do. Set by the frontend; narrows the state-derived table.
@@ -239,6 +241,8 @@ pub enum ControllerInfo {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Snapshot {
+    #[serde(rename = "environmentReview")]
+    pub environment_review: Vec<environment_review::EnvironmentReviewInfo>,
     pub mode: AgentMode,
     #[serde(rename = "effectiveMode")]
     pub effective_mode: AgentMode,
@@ -302,6 +306,10 @@ pub struct ScheduledExec {
     pub state: ExecState,
     #[serde(skip)]
     pub cancel_reason: Option<String>,
+    #[serde(skip)]
+    environment_grant: Option<String>,
+    #[serde(skip)]
+    environment_context: environment_review::QueuedEnvironmentContext,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -348,6 +356,8 @@ pub struct Status {
     pub profile_name: Option<String>,
     #[serde(rename = "reviewRequired")]
     pub review_required: bool,
+    #[serde(rename = "environmentReview")]
+    pub environment_review: Vec<environment_review::EnvironmentReviewInfo>,
     pub controller: ControllerInfo,
     #[serde(rename = "processAlive")]
     pub process_alive: bool,
@@ -444,6 +454,8 @@ pub struct Session {
     external_writer_active: bool,
     execution_profile: Option<crate::backend::Profile>,
     profile_revision: u64,
+    environment_grants: HashMap<ConnId, environment_review::EnvironmentReviewGrant>,
+    environment_revision: u64,
     ssh_transport: bool,
     ssh_foreground_sequence: Option<u64>,
     authority: Authority,
@@ -586,6 +598,8 @@ impl Session {
             last_agent_cmd: None,
             execution_profile: None,
             profile_revision: 0,
+            environment_grants: HashMap::new(),
+            environment_revision: 0,
             shell_pid: cfg.shell_pid,
             cwd_override: None,
             attended: true,
@@ -663,7 +677,7 @@ impl Session {
         None
     }
 
-    pub(crate) fn set_ssh_transport(&mut self, ssh: bool) { self.ssh_transport = ssh; }
+    pub(crate) fn set_ssh_transport(&mut self, ssh: bool) { if self.ssh_transport != ssh { self.invalidate_environment_review("transport_changed"); } self.ssh_transport = ssh; }
 
     pub fn completion_prompt_ready(&self) -> bool {
         self.participation.shared && self.process_alive && self.shell_integration.state == "active" && self.shell_command.is_none()
@@ -764,6 +778,7 @@ impl Session {
             }
             _ => {}
         }
+        self.refresh_environment_review(Instant::now());
         if self.is_private() { return; }
         match kind {
             "ready" => self.broadcast(ServerEvent::ShellIntegrationChanged { status: self.shell_integration.clone() }),
@@ -866,7 +881,7 @@ impl Session {
 
     /// The shell's current directory, read from the process (`lsof -d cwd`) so
     /// `cd` history does not have to be tracked. None when unknown.
-    pub fn set_execution_profile(&mut self, profile: crate::backend::Profile) { self.profile_revision = self.profile_revision.wrapping_add(1); self.execution_profile = Some(profile); }
+    pub fn set_execution_profile(&mut self, profile: crate::backend::Profile) { self.invalidate_environment_review("profile_changed"); self.profile_revision = self.profile_revision.wrapping_add(1); self.execution_profile = Some(profile); }
 
     pub fn shell_cwd(&self) -> Option<std::path::PathBuf> {
         if self.execution_profile.as_ref().is_some_and(|p|p.backend != crate::backend::BackendKind::Local) { return None; }
@@ -1016,6 +1031,7 @@ impl Session {
     }
 
     pub fn connection_closed(&mut self, conn: ConnId) {
+        self.stop_environment_review(conn, "disconnected");
         let name = self.agent_name(conn);
         if let Some(lease) = self.authority.revoke_if_held_by(conn) {
             self.audit.record(&name, "disconnect", json!({ "revoked": lease.label() }));
@@ -1034,7 +1050,7 @@ impl Session {
 
     /// Bytes from the human. This is the preemptive takeover path.
     pub fn human_input(&mut self, bytes: &[u8]) -> Result<(), SessionError> {
-        if !bytes.is_empty() { self.shell_human_input = true; }
+        if !bytes.is_empty() { self.invalidate_environment_review("human_input"); self.shell_human_input = true; }
         if self.is_private() {
             if !bytes.is_empty() {
                 self.revoke_external();
@@ -1087,6 +1103,7 @@ impl Session {
 
     /// Revoke the agent lease without typing anything (`conn take`, frontend button).
     pub fn human_take(&mut self) -> Option<String> {
+        self.invalidate_environment_review("human_takeover");
         self.revoke_external();
         self.cancel_pending_work(None, "taken");
         let lease = self.authority.revoke()?;
@@ -1126,6 +1143,7 @@ impl Session {
     }
 
     pub fn process_exited(&mut self, exit_code: Option<u32>) {
+        self.invalidate_environment_review("session_closed");
         self.finish_shell_command(None);
         self.revoke_external();
         self.process_alive = false;
@@ -1356,7 +1374,7 @@ impl Session {
         if let Actor::Agent { conn } = actor {
             self.audit.record(&self.agent_name(conn), "observe", json!({ "rev": projection.revision }));
         }
-        Ok(Snapshot { mode: self.mode, effective_mode: self.effective_mode(), projection, controller: self.controller_info(), process_alive: self.process_alive })
+        Ok(Snapshot { environment_review: self.environment_review_status(match actor { Actor::Agent {conn} => Some(conn), Actor::Human => None }, Instant::now()), mode: self.mode, effective_mode: self.effective_mode(), projection, controller: self.controller_info(), process_alive: self.process_alive })
     }
 
     /// `request_control`. With the control gate on, the request is held for the human
@@ -1527,6 +1545,7 @@ impl Session {
     }
 
     pub fn revoke_session_allow(&mut self, label: &str) -> bool {
+        self.invalidate_environment_review("policy_changed");
         let removed = self.policy.disallow_for_session(label);
         if removed {
             self.audit.record("human", "session_allow_revoked", json!({ "label": label }));
@@ -1792,7 +1811,10 @@ impl Session {
         let cmd = input::resolve_command(&self.input.line(), self.input.is_dirty())
             .ok_or(SessionError::InputUnverified)?;
         self.last_agent_write = Some(Instant::now());
-        let analysis = self.analyse(&cmd);
+        self.refresh_environment_review(Instant::now());
+        let admission_context = self.queued_environment_context();
+        let admission_grant = self.valid_environment_grant(conn, Instant::now()).map(|g| g.id.clone());
+        let analysis = self.analyse_for_connection(&cmd, conn, Instant::now());
         match analysis.decision.clone() {
             PolicyDecision::Allow => {
                 if self.pacing.enter_grace_ms > 0 {
@@ -1808,6 +1830,8 @@ impl Session {
                         due: Instant::now() + Duration::from_millis(grace_ms),
                         state: ExecState::Scheduled,
                         cancel_reason: None,
+                        environment_grant: admission_grant,
+                        environment_context: admission_context,
                     });
                     self.audit.record(&agent_id, "exec_scheduled", json!({ "cmd": cmd, "exec": exec_id, "graceMs": grace_ms, "intent": intent }));
                     self.broadcast(ServerEvent::ExecScheduled { exec_id: exec_id.clone(), agent_id: agent_id.clone(), cmd: cmd.clone(), intent, grace_ms });
@@ -1818,6 +1842,11 @@ impl Session {
                         self.broadcast(ServerEvent::AttentionRequested { agent_id, reason });
                     }
                     return Ok(KeyResult::Scheduled { exec_id, cmd, grace_ms });
+                }
+                self.refresh_environment_review(Instant::now());
+                if !self.execution_admission_valid(conn, admission_grant.as_deref(), &admission_context, Instant::now()) {
+                    self.cancelled_input = self.input.has_pending();
+                    return Ok(KeyResult::Cancelled { cmd, reason: "execution_context_changed".into() });
                 }
                 self.execute_with_source(&agent_id, &cmd, intent, None)?;
                 Ok(KeyResult::Executed { cmd })
@@ -1877,23 +1906,36 @@ impl Session {
 
     /// Frontend/human: run a scheduled execution right now (co-sign during the grace window).
     pub fn execute_now_scheduled(&mut self, exec_id: &str) -> Result<(), SessionError> {
+        self.execute_now_scheduled_with_clock(exec_id, Instant::now)
+    }
+
+    fn execute_now_scheduled_with_clock(&mut self, exec_id: &str, clock: impl Fn() -> Instant) -> Result<(), SessionError> {
         self.require_shared()?;
-        match &mut self.scheduled {
-            Some(s) if s.exec_id == exec_id && s.state == ExecState::Scheduled => {
-                s.state = ExecState::Executed;
-                let (agent, cmd, intent) = (s.agent_id.clone(), s.cmd.clone(), s.intent.clone());
-                self.audit.record("human", "exec_cosigned", json!({ "exec": exec_id, "cmd": cmd, "agentId": agent }));
-                self.broadcast(ServerEvent::ExecCosigned { exec_id: exec_id.into(), agent_id: agent.clone() });
-                if let Err(error) = self.execute_with_source(&agent, &cmd, intent, Some("human_cosign")) {
-                    if let Some(s) = &mut self.scheduled { s.state = ExecState::Cancelled; s.cancel_reason = Some("input_outcome_unknown".into()); }
-                    self.broadcast(ServerEvent::ExecCancelled { exec_id: exec_id.into(), reason: "input_outcome_unknown".into() });
-                    return Err(error);
-                }
-                Ok(())
-            }
-            Some(s) if s.exec_id == exec_id => Err(SessionError::InvalidInput(format!("{exec_id} is not scheduled"))),
-            _ => Err(SessionError::NotFound(exec_id.to_string())),
+        let now = clock();
+        self.refresh_environment_review(now);
+        self.validate_scheduled_environment(now);
+        let (agent, cmd, intent) = match &self.scheduled {
+            Some(s) if s.exec_id == exec_id && s.state == ExecState::Scheduled =>
+                (s.agent_id.clone(), s.cmd.clone(), s.intent.clone()),
+            Some(s) if s.exec_id == exec_id => return Err(SessionError::InvalidInput(format!("{exec_id} is not scheduled"))),
+            _ => return Err(SessionError::NotFound(exec_id.to_string())),
+        };
+        self.audit.record("human", "exec_cosigned", json!({ "exec": exec_id, "cmd": cmd, "agentId": agent }));
+        self.broadcast(ServerEvent::ExecCosigned { exec_id: exec_id.into(), agent_id: agent.clone() });
+        // Owner event delivery and audit I/O can take time. They are consent,
+        // not execution evidence; recheck after them and immediately before ENTER.
+        let now = clock();
+        self.refresh_environment_review(now);
+        self.validate_scheduled_environment(now);
+        let scheduled = self.scheduled.as_mut().filter(|s| s.exec_id == exec_id && s.state == ExecState::Scheduled)
+            .ok_or_else(|| SessionError::InvalidInput("execution_context_changed: submit the command for a new review".into()))?;
+        scheduled.state = ExecState::Executed;
+        if let Err(error) = self.execute_with_source(&agent, &cmd, intent, Some("human_cosign")) {
+            if let Some(s) = &mut self.scheduled { s.state = ExecState::Cancelled; s.cancel_reason = Some("input_outcome_unknown".into()); }
+            self.broadcast(ServerEvent::ExecCancelled { exec_id: exec_id.into(), reason: "input_outcome_unknown".into() });
+            return Err(error);
         }
+        Ok(())
     }
 
     /// Frontend/human: cancel a scheduled execution during its grace window.
@@ -2007,6 +2049,7 @@ impl Session {
             .finish_approval(id, state, by)
             .ok_or_else(|| if self.cancelled_input { SessionError::InputDeliveryUnknown } else { SessionError::InvalidInput(format!("{id} is not pending")) })?;
         if decision == ApprovalDecision::AllowSession {
+            self.invalidate_environment_review("policy_changed");
             self.policy.allow_for_session(&req.label);
             self.audit.record("human", "session_allow", json!({ "label": req.label }));
             self.broadcast(ServerEvent::SessionAllowsChanged { allows: self.policy.session_allows() });
@@ -2058,6 +2101,8 @@ impl Session {
     /// Periodic maintenance. Call often (the engine uses 50 ms): lease expiry, approval
     /// expiry, scheduled executions, screen-change coalescing, policy reload.
     pub fn tick(&mut self, now: Instant) {
+        self.refresh_environment_review(now);
+        self.validate_scheduled_environment(now);
         if self.is_private() {
             if self.screen_dirty {
                 self.screen_dirty = false;
@@ -2087,6 +2132,11 @@ impl Session {
             self.finish_control_request(&id, ControlRequestState::Expired);
         }
         let surface_ready = self.participation.shared;
+        if self.scheduled.as_ref().is_some_and(|s| surface_ready && s.state == ExecState::Scheduled && s.due <= now) {
+            let input_now = Instant::now();
+            self.refresh_environment_review(input_now);
+            self.validate_scheduled_environment(input_now);
+        }
         if let Some(s) = &mut self.scheduled {
             if surface_ready && s.state == ExecState::Scheduled && s.due <= now {
                 s.state = ExecState::Executed;
@@ -2101,15 +2151,7 @@ impl Session {
             self.screen_dirty = false;
             self.broadcast(ServerEvent::ScreenChanged { revision: self.screen.revision() });
         }
-        match self.policy.maybe_reload() {
-            Reload::Unchanged => {}
-            Reload::Reloaded => self.audit.record("system", "policy_reloaded", json!({})),
-            Reload::Failed(e) => {
-                self.audit.record("system", "policy_reload_failed", json!({ "error": e.to_string() }));
-                let msg = format!("\r\n\x1b[33mconn: policy reload failed ({e}); keeping previous policy\x1b[0m\r\n");
-                self.write_output(msg.as_bytes());
-            }
-        }
+
     }
 
     pub fn status(&self) -> Status {
@@ -2131,6 +2173,7 @@ impl Session {
             profile_id: self.execution_profile.as_ref().map(|p|p.id.clone()),
             profile_name: self.execution_profile.as_ref().map(|p|p.name.clone()),
             review_required: self.review_required(),
+            environment_review: self.environment_review_status(None, Instant::now()),
             controller: self.controller_info(),
             process_alive: self.process_alive,
             revision: self.screen.revision(),

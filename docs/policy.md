@@ -91,3 +91,19 @@ The structural analysis is deterministic and conservative. It catches or questio
 ## Command extraction
 
 The string that is checked is the input line at ENTER. conn tracks the line from the bytes written to the PTY, and after tab completion or history navigation it uses the VT model's cursor row with the prompt removed. The `cmd` in the audit log is this value.
+
+## Reduce environment checks
+
+The default remains one review per command in an unverified execution environment. When an environment review is pending in the local owner UI, **Reduce environment checks** lets you select one exact agent connection in the current session, read the warning, and acknowledge that you will check the execution target yourself. The decision lasts exactly 15 minutes in memory. It cannot be saved as a default, extended by polling, inherited by another connection with the same name, or created through agent IPC/MCP. Closing and reopening the controls does not grant anything. The visible banner shows the session, connection ID, remaining time and **Stop**.
+
+This first version reduces only the environment overlay for supported simple queries in an explicit POSIX target dialect: `:`, `true`, `false`, `pwd`, `echo`, `printf`, `ls`, `cat`, `head`, `tail`, `wc`, `grep`, `fgrep`, `egrep`, `cut`, `tr`, `cmp`, `readlink`, `realpath`, `basename`, `dirname`, `uname`, `id`, `whoami`, `uptime`, `df`, `du`, `free` and `ps`. Policy deny and risk-confirm rules still apply first, including any custom rules for these queries. Existing command-category allowances do not remove those risk reviews in an unverified environment.
+
+All other commands keep review, even when the policy default is allow. Leading assignments, wrappers, `printf -v`, incomplete quoting, parameter/pathname/history expansion, quick history substitution and unsupported compound grammar also keep review. Quoted literal text remains supported. `printf` supports literal text, `%s` and `%%`; variable assignments and other format conversions keep review. Remote protected file targets are never checked against the host filesystem, so arbitrary file-changing commands and launchers do not qualify for reduction. Conn keeps its existing structural policy model; aliases, functions and executable identity remain unverified.
+
+Deny rules, command separation, dangerous-command confirmation, Observe, Co-pilot's manual commit, participation, Privacy, control leases and operating-system authentication retain their requirements. Pending approval cards are never approved by enabling this option.
+
+Conn cannot verify the final execution target or internal transitions. Nested remote connections may change the final host without detection. This feature does not verify target identity. Conn does not infer the end of password entry from prompts or ECHO and never automatically shares private input.
+
+Stop, expiry, disconnect/reconnect, session exit, sharing changes, participant removal, profile/policy changes, an observed transport change and direct human takeover revoke the decision. Natural control-lease expiry does not revoke it, but actual input still requires a current lease. A queued command is checked again immediately before PTY submission; an expired, revoked or changed context cancels it and retains the existing explicit input-recovery requirement. A new decision cannot retroactively authorize it. Already running processes are not killed.
+
+Audit records for this decision contain only grant/session/connection IDs, context revision, duration, timestamps and end reason; no terminal content, raw human input, secrets or environment dump is added.
