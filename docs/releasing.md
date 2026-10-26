@@ -99,6 +99,21 @@ Conn moved from `github.com/eggplantiny/conn` to `github.com/eggp-dev/conn` on 2
 
 If the repository ever moves again, change `REPOSITORY` and `REPOSITORY_SLUG` in `scripts/release.py`, the `github.repository` conditions in the release and signing workflows (signing refuses to run anywhere else), `RELEASES` in the updater sources (add the previous address to the trusted list rather than replacing it), `REPO` in `scripts/install.sh`, the tap's cask and `CONN_REPO`, `media/demo/src/brand.ts` (then re-render the films), and the install lines in the READMEs.
 
+## Temporary ticket-service transport recovery
+
+The default macOS release image remains `macos-15`. A manual run on `main` can select
+`macos_runner=macos-26` to test the current GA standard ARM64 image.
+Only those two standard labels are accepted before build jobs start;
+paid larger images and arbitrary runner names are not accepted.
+
+This is a temporary recovery path for the hosted ticket-service transport problem
+tracked in [runner-images issue 14924](https://github.com/actions/runner-images/issues/14924).
+The alternate image must pass the complete native packaging checks before publication.
+It does not modify packet-filter rules, signing trust, certificates, credentials,
+notarization, Gatekeeper or updater verification. Keep all release checks enabled.
+The existing tag still selects the product source; the manual workflow revision and
+selected builder image must be recorded separately from that source commit.
+
 ## Failed release or rollback
 
 A build or signing failure leaves the release unpublished. Correct the cause and rerun the draft workflow. An unpublished retag decision must be explicit and documented. For a public release, preserve its tag and binaries, document the problem, and ship a patch version. Never silently replace public assets.
