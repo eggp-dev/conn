@@ -570,12 +570,34 @@ fn reducible_query(segment: &crate::analysis::Segment) -> bool {
     {
         return false;
     }
-    // Bash printf -v writes shell variables, including executable prompt hooks.
-    command != "printf"
-        || !segment
-            .args
-            .first()
-            .is_some_and(|arg| arg.starts_with("-v"))
+    if command != "printf" {
+        return true;
+    }
+    // printf can assign variables (-v/%n) and evaluate arithmetic conversions.
+    // Only literal text, %s and %% are supported query formats.
+    if segment
+        .args
+        .first()
+        .is_some_and(|arg| arg.starts_with("-v"))
+    {
+        return false;
+    }
+    let index = usize::from(segment.args.first().is_some_and(|arg| arg == "--"));
+    let Some(format) = segment.args.get(index) else {
+        return true;
+    };
+    let mut conversion = false;
+    for ch in format.chars() {
+        if conversion {
+            if !matches!(ch, 's' | '%') {
+                return false;
+            }
+            conversion = false;
+        } else if ch == '%' {
+            conversion = true;
+        }
+    }
+    !conversion
 }
 
 /// Deliberately smaller than a shell grammar: incomplete quoting, expansion,

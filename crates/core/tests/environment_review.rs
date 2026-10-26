@@ -97,6 +97,8 @@ fn risks_deny_and_unsupported_grammar_keep_review() {
         "touch /srv/protected/data",
         "PATH=/tmp ls",
         "printf -v PROMPT_COMMAND 'rm file'",
+        "printf '%n' PROMPT_COMMAND",
+        "printf '%d' 'array[$(rm file)]'",
     ] {
         let mut h = harness();
         h.session.start_environment_review(1).unwrap();
